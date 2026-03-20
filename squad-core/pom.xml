@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.squados</groupId>
+    <artifactId>squad-os</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>squad-core</artifactId>
+  <name>SquadOS Core</name>
+  <description>Phase 1+2+3 — annotations, config, context, LlmPort, Memory, MessageBus.</description>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.11.0</version>
+        <configuration>
+          <source>21</source><target>21</target><release>21</release>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.1.0</version>
+        <executions>
+          <execution>
+            <id>phase1-tests</id><phase>test</phase>
+            <goals><goal>java</goal></goals>
+            <configuration>
+              <mainClass>io.squados.tests.SquadOsPhase1Tests</mainClass>
+              <classpathScope>test</classpathScope>
+            </configuration>
+          </execution>
+          <execution>
+            <id>phase2-tests</id><phase>test</phase>
+            <goals><goal>java</goal></goals>
+            <configuration>
+              <mainClass>io.squados.tests.SquadOsPhase2Tests</mainClass>
+              <classpathScope>test</classpathScope>
+            </configuration>
+          </execution>
+          <execution>
+            <id>phase3-tests</id><phase>test</phase>
+            <goals><goal>java</goal></goals>
+            <configuration>
+              <mainClass>io.squados.tests.SquadOsPhase3Tests</mainClass>
+              <classpathScope>test</classpathScope>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
