@@ -14,6 +14,7 @@
   <modules>
     <module>squad-core</module>
     <module>squad-starter</module>
+    <module>squad-examples/daily-planner</module>
   </modules>
 
   <properties>

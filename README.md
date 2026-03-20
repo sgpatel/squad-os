@@ -1,141 +1,256 @@
-# SquadOS — Phase 1
+# SquadOS
 
-Role-based multi-agent AI framework for Java.  
-Built on top of Spring AI and LangChain4j.  
-Phase 1: annotations + config + context + LlmPort. Zero runtime dependencies.
+> Role-based multi-agent AI framework for Java.  
+> Spring Boot for AI agents — write one class, get a working AI squad.
+
+[![Tests](https://img.shields.io/badge/tests-102%20passing-brightgreen)]()
+[![Java](https://img.shields.io/badge/java-21-blue)]()
+[![Spring AI](https://img.shields.io/badge/spring--ai-1.0.0-green)]()
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
+
+---
+
+## What is SquadOS?
+
+SquadOS is a Java framework that lets you build teams of AI agents that work together.
+
+Each agent has a **role** (Strategist, Analyst, Support, etc.), its own **personality** (via a prompt), and can **talk to other agents** via a message bus. The framework handles everything else: discovery, wiring, memory, circuit breaking, health monitoring.
+
+Think of it like this:
+
+| Spring Boot | SquadOS |
+|---|---|
+| `@Service` | `@Agent(role = AgentRole.STRATEGIST)` |
+| `@Autowired` | `@OnMessage(from = AgentRole.TANK)` |
+| `ApplicationContext` | `SquadContext` |
+| `application.properties` | `squad.yml` |
+| `@SpringBootApplication` | `@SquadApplication` |
+
+---
+
+## Quickstart — Hello Squad in 3 files
+
+**1. Write an agent** (the only class you write):
+
+```java
+@Agent(
+    role        = AgentRole.STRATEGIST,
+    name        = "Oracle",
+    description = "You are a tactical planner. Be concise and decisive."
+)
+public class OracleAgent {
+    @PostConstruct
+    public void init() {
+        System.out.println("Oracle online.");
+    }
+}
+```
+
+**2. Configure** (`src/main/resources/squad.yml`):
+
+```yaml
+squad:
+  name: my-squad
+  llm:
+    provider: ollama      # or: anthropic, openai, azure-openai
+    model: llama3.2
+  agents:
+    - class: com.example.OracleAgent
+```
+
+**3. Run:**
+
+```java
+@SpringBootApplication
+@SquadApplication
+public class Main {
+    public static void main(String[] args) {
+        SquadConfigBridge.applyToSystemProperties();
+        SpringApplication.run(Main.class, args);
+    }
+
+    @Bean LlmPort llmPort(ChatClient.Builder b) { return new SpringAiLlmAdapter(b); }
+
+    @Bean SquadContext squadContext(LlmPort llm) { return SquadRunner.run(Main.class, llm); }
+
+    @Bean ApplicationRunner runner(SquadContext ctx) {
+        return args -> System.out.println(ctx.submit("Plan the mission").content());
+    }
+}
+```
+
+---
+
+## Real-world example — Daily Planner
+
+Paste your messy to-do brain dump. Three agents organise your day in ~10 seconds.
+
+```
+> reply to sarah's email, fix the auth bug, buy groceries, 
+> prepare slides for friday, learn kubernetes, call mum...
+
+📋 YOUR PLAN FOR TODAY
+──────────────────────
+DO TODAY:
+1. Fix the auth bug
+2. Reply to Sarah's email  
+3. Call mum
+
+DO LATER: Prepare Friday slides, review John's PR
+
+DROP IT: Learn Kubernetes (not today), Organise desk
+
+⏱  TIME REALITY CHECK
+──────────────────────
+Fix auth bug — 90 min | Reply Sarah — 15 min | Call mum — 30 min
+TOTAL: 135 minutes  VERDICT: Realistic ✓
+
+💪 YOUR COACH SAYS
+──────────────────────
+QUICK WIN: Reply to Sarah right now — 10 minutes, done.
+WATCH OUT: The auth bug. Set a 25-min timer and just start.
+START WITH: Open Sarah's email, reply, close inbox. Then the bug.
+```
+
+Run it:
+```bash
+ollama pull llama3.2
+cd squad-examples/daily-planner
+mvn spring-boot:run
+```
 
 ---
 
 ## Prerequisites
 
-| Tool | Version | Download |
-|------|---------|----------|
-| JDK  | 21+     | https://adoptium.net |
-| Maven | 3.8+  | https://maven.apache.org (optional — `run.sh` works without it) |
+| Tool | Version | Notes |
+|------|---------|-------|
+| JDK  | 21+     | [adoptium.net](https://adoptium.net) |
+| Maven | 3.8+  | [maven.apache.org](https://maven.apache.org) |
+| Ollama | latest | [ollama.ai](https://ollama.ai) — for local LLM (no API key) |
 
-Check your versions:
+---
+
+## Installation
+
 ```bash
-java -version    # must show 21+
-javac -version   # must show 21+
-mvn -version     # optional
+git clone https://github.com/your-org/squad-os
+cd squad-os
+mvn clean install -DskipTests
 ```
 
 ---
 
-## Option A — Plain javac (no Maven)
+## Switching LLM providers
 
-```bash
-git clone <this-repo>
-cd squad-os
-chmod +x run.sh
+Change two lines in `squad.yml` — **zero code changes**:
 
-# Run all 17 tests
-./run.sh
+```yaml
+# Local Ollama (no API key)
+llm:
+  provider: ollama
+  model: llama3.2
 
-# Run the Hello Squad demo
-./run.sh demo
+# Anthropic Claude
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-6
 
-# Run tests + demo
-./run.sh all
+# OpenAI
+llm:
+  provider: openai
+  model: gpt-4o
 ```
 
-Expected test output:
-```
-╔══════════════════════════════════════════════╗
-║     SquadOS Phase 1 — Test Suite             ║
-╚══════════════════════════════════════════════╝
+Add the matching Spring AI starter to `pom.xml`:
+```xml
+<!-- Ollama -->
+<dependency>
+  <groupId>org.springframework.ai</groupId>
+  <artifactId>spring-ai-starter-model-ollama</artifactId>
+</dependency>
 
-  ✓ T01_agentRoleDefaultOptions
-  ✓ T02_agentAnnotationReadableAtRuntime
-  ✓ T03_llmOptionsRejectsInvalidTemperature
-  ✓ T04_llmOptionsRejectsInvalidMaxTokens
-  ✓ T05_mockLlmPortRecordsCallsAndMatchesResponses
-  ✓ T06_configParserParsesFullYaml
-  ✓ T07_configParserRejectsInvalidTemperature
-  ✓ T08_configParserThrowsOnMissingFile
-  ✓ T09_agentWrapperBuildsCorrectSystemPrompt
-  ✓ T10_postConstructFiresExactlyOnce
-  ✓ T11_agentWrapperResolvesNameFromAnnotation
-  ✓ T12_agentRegistryRegisterAndRetrieve
-  ✓ T13_agentRegistryLeadPriority
-  ✓ T14_squadContextBootsAndRegistersAgent
-  ✓ T15_squadContextSubmitRoutesToLeadAgent
-  ✓ T16_squadContextSubmitToTargetsRole
-  ✓ T17_squadContextBootIsIdempotent
-
-  Results: 17 passed, 0 failed out of 17 tests
-
-  PHASE 1 GATE: ALL TESTS PASSED ✓
+<!-- Anthropic -->
+<dependency>
+  <groupId>org.springframework.ai</groupId>
+  <artifactId>spring-ai-anthropic-spring-boot-starter</artifactId>
+</dependency>
 ```
 
 ---
 
-## Option B — Maven
+## Framework features
+
+### @Agent — define an AI agent
+
+```java
+@Agent(role = AgentRole.SUPPORT, name = "NurseBot",
+       description = "You heal teammates. Be calm and fast.")
+public class NurseBotAgent {
+    @PostConstruct
+    public void init() { System.out.println("NurseBot ready."); }
+}
+```
+
+### @OnMessage — agents talk to each other
+
+```java
+// NurseBot automatically heals when Tank's HP drops
+@OnMessage(from = AgentRole.TANK, type = MessageType.HP_CRITICAL)
+public void emergencyHeal(AgentMessage msg) {
+    int hp = msg.getPayload(Integer.class);
+    System.out.println("Healing — HP was: " + hp);
+}
+```
+
+### @Memory — agents remember past sessions
+
+```java
+// Oracle stores and retrieves past battle plans automatically
+@Memory(type = MemoryType.EPISODIC, scope = MemoryScope.SQUAD,
+        op = MemoryOp.READ_WRITE, topK = 3, importance = Importance.HIGH)
+public SquadPlan buildPlan(TaskContext ctx) { ... }
+```
+
+### AgentCircuitBreaker — agents self-heal
+
+If an agent fails 3 times in a row, its circuit opens automatically.  
+The framework routes to the next healthy agent.  
+Recovery is automatic when the agent succeeds again.
+
+---
+
+## Agent roles
+
+| Role | Personality | Default temp | Use for |
+|------|-------------|-------------|---------|
+| STRATEGIST | Balanced, big-picture | 0.5 | Planning, coordination |
+| ANALYST | Data-driven, precise | 0.4 | Research, analysis |
+| EXECUTOR | Structured, low variance | 0.3 | Building, coding |
+| SUPPORT | Stable, consistent | 0.2 | Healing, assisting |
+| TANK | Deterministic, defensive | 0.3 | Gatekeeping, validation |
+| DPS | Creative, aggressive | 0.8 | Generation, ideation |
+| RESEARCHER | Factual, conservative | 0.2 | Fact-finding |
+| WRITER | Long-form, moderate | 0.6 | Content creation |
+| VISIONARY | Bold, high creativity | 0.9 | Concept generation |
+
+---
+
+## Test suite
 
 ```bash
-cd squad-os
-
-# Compile + test
 mvn clean test
-
-# Run the starter demo
-cd squad-starter
-mvn exec:java
 ```
 
----
-
-## Option C — IntelliJ IDEA (recommended)
-
-1. Open IntelliJ → **File → Open** → select the `squad-os` folder
-2. IntelliJ detects the multi-module Maven project automatically
-3. Right-click `SquadOsPhase1Tests` → **Run**
-4. Right-click `Main` in squad-starter → **Run**
-
-> **Tip for IntelliJ:** If it shows "Cannot run — no main method", right-click  
-> `squad-core/src/test/java` → **Mark Directory As → Test Sources Root**
-
----
-
-## Option D — VS Code
-
-1. Install the **Extension Pack for Java** (Microsoft)
-2. Open the `squad-os` folder
-3. VS Code auto-detects Maven modules
-4. Click **Run** above `main()` in `Main.java` or `SquadOsPhase1Tests.java`
-
----
-
-## Manual javac commands (if run.sh won't execute)
-
-```bash
-cd squad-os
-
-# 1. Create output dir
-mkdir -p out/core
-
-# 2. Collect all source files
-find squad-core/src/main/java -name "*.java" > sources.txt
-
-# 3. Compile
-javac --release 21 -d out/core @sources.txt
-
-# 4. Compile tests
-find squad-core/src/test/java -name "*.java" > test_sources.txt
-javac --release 21 -cp out/core -d out/core @test_sources.txt
-
-# 5. Run tests
-java --release 21 -cp out/core io.squados.tests.SquadOsPhase1Tests
-
-# 6. Compile and run the demo
-mkdir -p out/starter
-cp squad-starter/src/main/resources/squad.yml out/starter/
-find squad-starter/src/main/java -name "*.java" > starter_sources.txt
-javac --release 21 -cp out/core -d out/starter @starter_sources.txt
-java --release 21 -cp "out/core:out/starter" com.example.Main
-
-# On Windows replace : with ; in classpath:
-# java --release 21 -cp "out/core;out/starter" com.example.Main
+```
+Phase 1 — Core framework          17/17 ✓
+Phase 2 — Memory layer            17/17 ✓
+Phase 3 — Message bus             17/17 ✓
+Phase 4 — Circuit breaker         17/17 ✓
+Phase 5 — Concurrent hardening    17/17 ✓
+Phase 6 — Spring AI wiring        17/17 ✓
+─────────────────────────────────
+Total: 102 tests  0 failed
 ```
 
 ---
@@ -144,46 +259,49 @@ java --release 21 -cp "out/core:out/starter" com.example.Main
 
 ```
 squad-os/
-├── pom.xml                          Parent POM
-├── run.sh                           Build + test runner (no Maven needed)
-├── squad-core/                      The framework
-│   ├── pom.xml
-│   └── src/
-│       ├── main/java/io/squados/
-│       │   ├── annotation/          @Agent, @SquadApplication, @PostConstruct, AgentRole
-│       │   ├── llm/                 LlmPort, LlmOptions, LlmResponse, MockLlmPort
-│       │   ├── config/              SquadConfig, SquadConfigParser
-│       │   ├── context/             SquadContext, AgentWrapper, AgentRegistry, AgentScanner
-│       │   ├── agent/               TaskContext, AgentResponse
-│       │   └── exception/           Typed exceptions with actionable messages
-│       └── test/java/io/squados/
-│           └── tests/               SquadOsPhase1Tests (17 tests, no JUnit)
-└── squad-starter/                   Hello Squad — what a developer writes
-    ├── pom.xml
-    └── src/main/
-        ├── java/com/example/
-        │   ├── OracleAgent.java     @Agent(role=STRATEGIST) — 15 lines
-        │   └── Main.java            @SquadApplication entry point
-        └── resources/
-            └── squad.yml            8 lines of config
+├── squad-core/                  The framework (zero runtime dependencies)
+│   └── src/main/java/io/squados/
+│       ├── annotation/          @Agent, @OnMessage, @Memory, @MissionProfile
+│       ├── context/             SquadContext, AgentWrapper, MissionState, TokenBudget
+│       ├── bus/                 AgentMessageBus, AgentMessage, MessageType
+│       ├── memory/              MemoryManager, four-tier storage, EmbeddingPort
+│       ├── health/              AgentCircuitBreaker, AgentHealth
+│       ├── llm/                 LlmPort, LlmOptions, MockLlmPort
+│       └── config/              SquadConfigParser, SquadConfigBridge
+│
+├── squad-starter/               Hello Squad — Ollama quickstart
+│
+└── squad-examples/
+    └── daily-planner/           3-agent daily planning assistant
 ```
 
 ---
 
-## What this does NOT do (yet)
+## Architecture decisions
 
-- **No real LLM calls** — Phase 1 uses `MockLlmPort`. Wire `SpringAiLlmAdapter` in Phase 2.
-- **No multi-agent messaging** — `@OnMessage` bus ships in Phase 3.
-- **No memory** — `@Memory` with four-tier storage ships in Phase 2.
-- **No circuit breaker** — `AgentCircuitBreaker` ships in Phase 3.
+**Why not LangChain4j or Spring AI directly?**  
+Both are excellent libraries that SquadOS uses under the hood. SquadOS adds the **team layer** on top — role-typed agents, inter-agent messaging, memory that survives sessions, and circuit breaking. Spring AI handles the LLM calls; SquadOS handles the squad.
+
+**Why Spring Boot style?**  
+Developers already know `@Service`, `@Autowired`, and `application.properties`. The cognitive overhead of learning SquadOS is close to zero.
+
+**Why zero deps in squad-core?**  
+`squad-core` has no runtime dependencies. Spring AI and LangChain4j adapters live in consumer modules. This means you can use SquadOS with any LLM provider without pulling in providers you don't need.
 
 ---
 
-## Next: Phase 2 — Memory layer
+## Roadmap
 
-Phase 2 adds `@Memory` annotation, four-tier storage (Working/Semantic/Procedural/Episodic),
-`pgvector` integration via `spring-ai-pgvector-store`, and the Spring AI `LlmPort` adapter.
+- [ ] pgvector production backend for episodic memory  
+- [ ] Parallel multi-agent execution (`CompletableFuture.allOf`)  
+- [ ] `@SquadPlan` structured output annotation  
+- [ ] Maven Central publishing  
+- [ ] More examples: code review squad, research assistant, customer support  
 
-```
-./run.sh    →  17/17 tests pass  →  cut v0.0.1 tag  →  start Phase 2
-```
+---
+
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE)
+
+Built with SquadOS v1.0.0 · Java 21 · Spring AI 1.0.0 · Ollama llama3.2
