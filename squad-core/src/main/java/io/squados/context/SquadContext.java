@@ -9,6 +9,7 @@ import io.squados.exception.NoAgentFoundException;
 import io.squados.bus.AgentMessageBus;
 import io.squados.bus.MessageType;
 import io.squados.bus.AgentMessage;
+import io.squados.health.AgentCircuitBreaker;
 import io.squados.llm.LlmPort;
 
 import java.util.List;
@@ -34,7 +35,8 @@ public class SquadContext {
     private final SquadConfig    config;
     private final LlmPort        llm;
     private final AgentRegistry  registry = new AgentRegistry();
-    private final AgentMessageBus bus      = new AgentMessageBus();
+    private final AgentMessageBus    bus      = new AgentMessageBus();
+    private final AgentCircuitBreaker breaker  = new AgentCircuitBreaker(bus);
     private boolean booted = false;
 
     // ── Construction ──────────────────────────────────────────────────
@@ -75,6 +77,11 @@ public class SquadContext {
         // Step 3: call @PostConstruct on all registered agents
         for (AgentWrapper wrapper : registry.all()) {
             wrapper.callPostConstruct();
+        }
+
+        // Step 3a: register agents with circuit breaker
+        for (AgentWrapper wrapper : registry.all()) {
+            breaker.register(wrapper.getRole(), wrapper.getName());
         }
 
         // Step 3b: register @OnMessage listeners on the bus
@@ -139,6 +146,8 @@ public class SquadContext {
 
     // ── Accessors ─────────────────────────────────────────────────────
 
+    public AgentMessageBus      getBus()     { ensureBooted(); return bus; }
+    public AgentCircuitBreaker  getBreaker() { ensureBooted(); return breaker; }
     public AgentRegistry getRegistry() { ensureBooted(); return registry; }
     public SquadConfig   getConfig()   { return config; }
     public boolean       isBooted()    { return booted; }
