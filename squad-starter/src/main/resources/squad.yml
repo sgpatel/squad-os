@@ -2,7 +2,7 @@ squad:
   name: "my-first-squad"
   profile: gaming
   llm:
-    provider: anthropic
-    model: claude-sonnet-4-6
+    provider: ollama
+    model: llama3.2
   agents:
     - class: com.example.OracleAgent

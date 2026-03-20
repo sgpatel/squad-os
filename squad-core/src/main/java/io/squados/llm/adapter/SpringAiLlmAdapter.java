@@ -5,71 +5,90 @@ import io.squados.llm.LlmPort;
 import io.squados.llm.LlmResponse;
 
 /**
- * Spring AI implementation of LlmPort.
+ * Production LlmPort implementation backed by Spring AI ChatClient.
  *
  * This is the ONLY class in SquadOS that imports Spring AI classes.
- * All other agents and framework code use LlmPort only.
+ * Every other class in the framework uses LlmPort only.
+ * This is enforced architecturally — SquadOS core has spring-ai-core
+ * as an optional dependency; only this adapter activates it.
  *
- * Wiring (add to SquadContext when spring-ai-core is on the classpath):
- *   LlmPort llm = new SpringAiLlmAdapter(chatClientBuilder);
- *   SquadContext ctx = new SquadContext(config, llm);
+ * Wiring in your Spring Boot app:
+ * <pre>
+ * {@literal @}Configuration
+ * public class SquadOsConfig {
  *
- * Dependencies required in pom.xml:
- *   spring-ai-core
- *   spring-ai-anthropic-spring-boot-starter (or openai equivalent)
+ *     {@literal @}Bean
+ *     public LlmPort llmPort(ChatClient.Builder builder) {
+ *         return new SpringAiLlmAdapter(builder);
+ *     }
+ *
+ *     {@literal @}Bean
+ *     public SquadContext squadContext(SquadConfig config, LlmPort llmPort) {
+ *         SquadContext ctx = new SquadContext(config, llmPort);
+ *         ctx.boot();
+ *         return ctx;
+ *     }
+ * }
+ * </pre>
+ *
+ * Required pom.xml dependency:
+ * <pre>
+ * &lt;dependency&gt;
+ *   &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
+ *   &lt;artifactId&gt;spring-ai-anthropic-spring-boot-starter&lt;/artifactId&gt;
+ *   &lt;version&gt;1.0.0&lt;/version&gt;
+ * &lt;/dependency&gt;
+ * &lt;!-- or openai, ollama, etc. --&gt;
+ * </pre>
+ *
+ * squad.yml llm block maps to Spring AI auto-config:
+ *   llm.provider: anthropic  ->  spring.ai.anthropic.chat.enabled=true
+ *   llm.model: claude-sonnet-4-6  ->  spring.ai.anthropic.chat.options.model
  */
 public class SpringAiLlmAdapter implements LlmPort {
 
-    // Uses Object to avoid compile-time dependency on spring-ai-core
-    // when the adapter is not activated. Cast at runtime.
-    private final Object chatClientBuilder;
-    private Object chatClient;
+    // Typed as Object to avoid hard compile-time dependency on spring-ai-core
+    // when the adapter jar is present but Spring AI is not on the classpath.
+    // In practice, if you're using this class Spring AI IS on the classpath.
+    private final org.springframework.ai.chat.client.ChatClient chatClient;
 
-    public SpringAiLlmAdapter(Object chatClientBuilder) {
-        this.chatClientBuilder = chatClientBuilder;
-        initClient();
+    public SpringAiLlmAdapter(
+            org.springframework.ai.chat.client.ChatClient.Builder builder) {
+        this.chatClient = builder.build();
     }
 
-    private void initClient() {
-        try {
-            // Equivalent to: chatClient = ((ChatClient.Builder) chatClientBuilder).build()
-            Class<?> builderClass = chatClientBuilder.getClass();
-            java.lang.reflect.Method build = builderClass.getMethod("build");
-            this.chatClient = build.invoke(chatClientBuilder);
-        } catch (Exception e) {
-            throw new RuntimeException(
-                "[SquadOS] SpringAiLlmAdapter: failed to build ChatClient. "
-                + "Ensure spring-ai-core is on the classpath. Cause: " + e.getMessage(), e);
-        }
+    /**
+     * Direct constructor for testing with a pre-built ChatClient.
+     */
+    public SpringAiLlmAdapter(
+            org.springframework.ai.chat.client.ChatClient chatClient) {
+        this.chatClient = chatClient;
     }
 
     @Override
-    public LlmResponse chat(String systemPrompt, String userMessage, LlmOptions options) {
-        try {
-            // chatClient.prompt().system(sys).user(user).call().content()
-            Object prompt   = chatClient.getClass().getMethod("prompt").invoke(chatClient);
-            Object withSys  = prompt.getClass().getMethod("system", String.class).invoke(prompt, systemPrompt);
-            Object withUser = withSys.getClass().getMethod("user", String.class).invoke(withSys, userMessage);
-            Object callResult = withUser.getClass().getMethod("call").invoke(withUser);
-            String content    = (String) callResult.getClass().getMethod("content").invoke(callResult);
-            return new LlmResponse(content);
-        } catch (Exception e) {
-            throw new RuntimeException("[SquadOS] LLM call failed: " + e.getMessage(), e);
-        }
+    public LlmResponse chat(String systemPrompt, String userMessage,
+                            LlmOptions options) {
+        String content = chatClient.prompt()
+            .system(systemPrompt)
+            .user(userMessage)
+            .call()
+            .content();
+
+        return new LlmResponse(
+            content,
+            0, // Spring AI does not expose token counts at this call level
+            0, // Wire ChatResponse.getMetadata() in Phase 7 for cost tracking
+            options.model() != null ? options.model() : "spring-ai"
+        );
     }
 
     @Override
     public <T> T chatStructured(String systemPrompt, String userMessage,
                                 Class<T> responseType, LlmOptions options) {
-        try {
-            Object prompt   = chatClient.getClass().getMethod("prompt").invoke(chatClient);
-            Object withSys  = prompt.getClass().getMethod("system", String.class).invoke(prompt, systemPrompt);
-            Object withUser = withSys.getClass().getMethod("user", String.class).invoke(withSys, userMessage);
-            Object callResult = withUser.getClass().getMethod("call").invoke(withUser);
-            return responseType.cast(
-                callResult.getClass().getMethod("entity", Class.class).invoke(callResult, responseType));
-        } catch (Exception e) {
-            throw new RuntimeException("[SquadOS] Structured LLM call failed: " + e.getMessage(), e);
-        }
+        return chatClient.prompt()
+            .system(systemPrompt)
+            .user(userMessage)
+            .call()
+            .entity(responseType);
     }
 }
