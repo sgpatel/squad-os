@@ -40,7 +40,8 @@ public class MemoryRouter {
 
     /** Session-end: promote flagged WORKING memories to EPISODIC, then flush WORKING. */
     public void promoteAndFlush(String sessionId, String squadId) {
-        InProcessMemoryStore ws = (InProcessMemoryStore) storeFor(MemoryType.WORKING);
+        // Use interface method — no cast, works with any MemoryStore implementation
+        MemoryStore ws = storeFor(MemoryType.WORKING);
         for (MemoryRecord wm : ws.findPromotable(sessionId)) {
             MemoryRecord ep = new MemoryRecord(
                 wm.getSquadId(), wm.getAgentId(), wm.getSessionId(),

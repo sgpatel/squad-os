@@ -58,7 +58,7 @@ public class InProcessMemoryStore implements MemoryStore {
     /** Apply decay pass — called by MemoryDecayService */
     public void applyDecay() { store.values().forEach(MemoryRecord::applyDailyDecay); }
 
-    /** Find WORKING records flagged for session-end promotion */
+    @Override
     public List<MemoryRecord> findPromotable(String sessionId) {
         return store.values().stream()
             .filter(r -> r.getSessionId().equals(sessionId))

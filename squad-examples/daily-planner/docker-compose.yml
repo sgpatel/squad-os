@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: squados-postgres
+    environment:
+      POSTGRES_DB: squados
+      POSTGRES_USER: squados
+      POSTGRES_PASSWORD: squados
+    ports:
+      - "5432:5432"
+    volumes:
+      - squados_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U squados"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  squados_data:

@@ -15,4 +15,12 @@ public interface MemoryStore {
                                 String agentId, int topK, float minScore);
     void deleteBySession(String sessionId);
     int  count();
+
+    /**
+     * Find WORKING records eligible for session-end promotion.
+     * Default: return empty list (only WORKING stores need this).
+     */
+    default List<MemoryRecord> findPromotable(String sessionId) {
+        return java.util.Collections.emptyList();
+    }
 }
