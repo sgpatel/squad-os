@@ -6,6 +6,7 @@ import io.squados.annotation.Agent;
 import io.squados.annotation.AgentRole;
 import io.squados.annotation.PostConstruct;
 import io.squados.config.SquadConfig;
+import io.squados.health.AgentCircuitBreaker;
 import io.squados.llm.LlmOptions;
 import io.squados.llm.LlmPort;
 import io.squados.llm.LlmResponse;
@@ -35,6 +36,7 @@ public class AgentWrapper {
     private final String             name;
     private final LlmOptions         options;
     private final LlmPort            llm;
+    private AgentCircuitBreaker breaker;
 
     // ── Construction ──────────────────────────────────────────────────
 
@@ -107,15 +109,19 @@ public class AgentWrapper {
      */
     public AgentResponse execute(TaskContext ctx) {
         Instant start = Instant.now();
+        if (breaker != null && !breaker.allowCall(role)) {
+            return AgentResponse.failure(role, name,
+                "Circuit open — " + name + " unavailable.", start);
+        }
         try {
             String systemPrompt = buildSystemPrompt(ctx);
             String userMessage  = ctx.getTaskDescription();
-
             LlmResponse raw = llm.chat(systemPrompt, userMessage, options);
-
-            return AgentResponse.of(raw, role, name, start);
-
+            AgentResponse response = AgentResponse.of(raw, role, name, start);
+            if (breaker != null) breaker.onSuccess(role, response.latency().toMillis());
+            return response;
         } catch (Exception e) {
+            if (breaker != null) breaker.onFailure(role, e.getMessage());
             return AgentResponse.failure(role, name,
                 "Execution failed: " + e.getMessage(), start);
         }
@@ -155,6 +161,7 @@ public class AgentWrapper {
 
     // ── Accessors ─────────────────────────────────────────────────────
 
+    public void       setBreaker(AgentCircuitBreaker b) { this.breaker = b; }
     public AgentRole  getRole()       { return role; }
     public String     getName()       { return name; }
     public LlmOptions getOptions()    { return options; }

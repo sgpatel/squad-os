@@ -84,6 +84,11 @@ public class SquadContext {
             breaker.register(wrapper.getRole(), wrapper.getName());
         }
 
+        // Inject breaker into each wrapper so execute() can consult it
+        for (AgentWrapper wrapper : registry.all()) {
+            wrapper.setBreaker(breaker);
+        }
+
         // Step 3b: register @OnMessage listeners on the bus
         for (AgentWrapper wrapper : registry.all()) {
             bus.registerListeners(wrapper.getInstance());
@@ -113,6 +118,15 @@ public class SquadContext {
         AgentWrapper lead = registry.getLead();
         if (lead == null) {
             throw new NoAgentFoundException("No agents registered. Call boot() first.");
+        }
+
+        // Circuit breaker check — if lead is open, try next available agent
+        if (!breaker.allowCall(lead.getRole())) {
+            log("Circuit OPEN for %s — finding fallback agent", lead.getName());
+            lead = registry.all().stream()
+                .filter(w -> breaker.allowCall(w.getRole()))
+                .findFirst()
+                .orElse(lead); // if all open, let it through to fail gracefully
         }
 
         AgentResponse response = lead.execute(ctx);

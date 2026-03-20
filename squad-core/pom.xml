@@ -11,7 +11,7 @@
   </parent>
   <artifactId>squad-core</artifactId>
   <name>SquadOS Core</name>
-  <description>Phase 1-4: annotations, config, context, LlmPort, Memory, MessageBus, CircuitBreaker.</description>
+  <description>Phase 1-5: annotations, config, context, LlmPort, Memory, MessageBus, CircuitBreaker, Hardening.</description>
   <build>
     <plugins>
       <plugin>
@@ -36,6 +36,9 @@
           </execution>
           <execution><id>phase4-tests</id><phase>test</phase><goals><goal>java</goal></goals>
             <configuration><mainClass>io.squados.tests.SquadOsPhase4Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase5-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase5Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
         </executions>
       </plugin>
