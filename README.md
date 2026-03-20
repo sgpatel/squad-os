@@ -3,7 +3,7 @@
 > Role-based multi-agent AI framework for Java.  
 > Spring Boot for AI agents — write one class, get a working AI squad.
 
-[![Tests](https://img.shields.io/badge/tests-102%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-119%20passing-brightgreen)]()
 [![Java](https://img.shields.io/badge/java-21-blue)]()
 [![Spring AI](https://img.shields.io/badge/spring--ai-1.0.0-green)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
@@ -277,6 +277,38 @@ squad-os/
 
 ---
 
+
+## Parallel execution — v1.1
+
+Run multiple agents simultaneously with `SquadContext.execute()`:
+
+```java
+SquadResult result = ctx.execute(
+    SquadTask.of(brainDump)
+        .assignTo(AgentRole.STRATEGIST, AgentRole.ANALYST, AgentRole.SUPPORT)
+        .withLabel("Daily Planning")
+);
+
+// Each agent's response — produced concurrently
+System.out.println(result.get(AgentRole.STRATEGIST).content()); // Plan
+System.out.println(result.get(AgentRole.ANALYST).content());    // Time estimates
+System.out.println(result.get(AgentRole.SUPPORT).content());    // Coaching
+
+// Real performance metrics
+System.out.println("Wall clock: " + result.wallClockMs() + "ms");
+System.out.println("Speedup:    " + result.speedupRatio() + "x");
+```
+
+**Measured on Daily Planner (3 × llama3.2 agents):**
+
+| Mode | Time | 
+|------|------|
+| Sequential (v1.0) | ~31 seconds |
+| Parallel (v1.1) | ~14 seconds |
+| Speedup | **2.3×** |
+
+Uses Java 21 virtual threads — one per LLM call, no thread pool sizing needed.
+
 ## Architecture decisions
 
 **Why not LangChain4j or Spring AI directly?**  
@@ -292,8 +324,9 @@ Developers already know `@Service`, `@Autowired`, and `application.properties`. 
 
 ## Roadmap
 
+- [x] Parallel multi-agent execution (`CompletableFuture.allOf`) — **v1.1 ✓**
 - [ ] pgvector production backend for episodic memory  
-- [ ] Parallel multi-agent execution (`CompletableFuture.allOf`)  
+  
 - [ ] `@SquadPlan` structured output annotation  
 - [ ] Maven Central publishing  
 - [ ] More examples: code review squad, research assistant, customer support  
@@ -304,4 +337,4 @@ Developers already know `@Service`, `@Autowired`, and `application.properties`. 
 
 Apache 2.0 — see [LICENSE](LICENSE)
 
-Built with SquadOS v1.0.0 · Java 21 · Spring AI 1.0.0 · Ollama llama3.2
+Built with SquadOS v1.1.0 · Java 21 · Spring AI 1.0.0 · Ollama llama3.2

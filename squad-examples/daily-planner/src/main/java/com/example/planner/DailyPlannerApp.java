@@ -2,6 +2,8 @@ package com.example.planner;
 
 import com.example.planner.adapters.SpringAiLlmAdapter;
 import io.squados.annotation.SquadApplication;
+import io.squados.execution.SquadTask;
+import io.squados.execution.SquadResult;
 import io.squados.config.SquadConfigBridge;
 import io.squados.context.SquadContext;
 import io.squados.context.SquadRunner;
@@ -82,30 +84,30 @@ public class DailyPlannerApp {
                 return;
             }
 
-            System.out.println("\n⏳ Thinking...\n");
+            System.out.println("\n⏳ Thinking... (all 3 agents running in parallel)\n");
 
-            // ── Agent 1: Planner — sorts and prioritises ──────────
-            var plannerResponse = ctx.submitTo(
-                io.squados.annotation.AgentRole.STRATEGIST,
-                "Here is everything on my mind today. Please organise it:\n\n" + brainDump
+            // ── All 3 agents run SIMULTANEOUSLY via v1.1 parallel execution ──
+            SquadResult result = ctx.execute(
+                SquadTask.of(brainDump)
+                    .assignTo(
+                        io.squados.annotation.AgentRole.STRATEGIST,
+                        io.squados.annotation.AgentRole.ANALYST,
+                        io.squados.annotation.AgentRole.SUPPORT
+                    )
+                    .withLabel("Daily Planning")
+                    .withTimeout(120_000)
             );
 
-            // ── Agent 2: TimeEstimator — realistic time check ─────
-            var timeResponse = ctx.submitTo(
-                io.squados.annotation.AgentRole.ANALYST,
-                "Please estimate time for these tasks:\n\n" + brainDump
-            );
-
-            // ── Agent 3: Coach — momentum and first step ──────────
-            var coachResponse = ctx.submitTo(
-                io.squados.annotation.AgentRole.SUPPORT,
-                "Here are my tasks for today. Please coach me:\n\n" + brainDump
-            );
+            System.out.printf("✓ Done in %dms (%.1fx faster than sequential)%n",
+                result.wallClockMs(), result.speedupRatio());
 
             // ── Print results ─────────────────────────────────────
-            printSection("📋 YOUR PLAN FOR TODAY", plannerResponse.content());
-            printSection("⏱  TIME REALITY CHECK", timeResponse.content());
-            printSection("💪 YOUR COACH SAYS", coachResponse.content());
+            printSection("📋 YOUR PLAN FOR TODAY",
+                result.get(io.squados.annotation.AgentRole.STRATEGIST).content());
+            printSection("⏱  TIME REALITY CHECK",
+                result.get(io.squados.annotation.AgentRole.ANALYST).content());
+            printSection("💪 YOUR COACH SAYS",
+                result.get(io.squados.annotation.AgentRole.SUPPORT).content());
 
             System.out.println("\n" + "═".repeat(50));
             System.out.println("  Go make it happen! 🚀");

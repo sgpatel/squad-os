@@ -9,6 +9,9 @@ import io.squados.exception.NoAgentFoundException;
 import io.squados.bus.AgentMessageBus;
 import io.squados.bus.MessageType;
 import io.squados.bus.AgentMessage;
+import io.squados.execution.ParallelExecutor;
+import io.squados.execution.SquadTask;
+import io.squados.execution.SquadResult;
 import io.squados.health.AgentCircuitBreaker;
 import io.squados.llm.LlmPort;
 
@@ -36,7 +39,8 @@ public class SquadContext {
     private final LlmPort        llm;
     private final AgentRegistry  registry = new AgentRegistry();
     private final AgentMessageBus    bus      = new AgentMessageBus();
-    private final AgentCircuitBreaker breaker  = new AgentCircuitBreaker(bus);
+    private final AgentCircuitBreaker breaker   = new AgentCircuitBreaker(bus);
+    private       ParallelExecutor    executor;
     private boolean booted = false;
 
     // ── Construction ──────────────────────────────────────────────────
@@ -93,6 +97,9 @@ public class SquadContext {
         for (AgentWrapper wrapper : registry.all()) {
             bus.registerListeners(wrapper.getInstance());
         }
+
+        // Step 4: initialise parallel executor
+        this.executor = new ParallelExecutor(registry);
 
         // Step 4: print summary
         printRegistrationSummary();
@@ -156,6 +163,25 @@ public class SquadContext {
         }
         TaskContext ctx = new TaskContext(task, newSessionId(), config.getProfile());
         return target.execute(ctx);
+    }
+
+    /**
+     * Execute a SquadTask — runs assigned roles in parallel.
+     * All agents fire simultaneously; result available when slowest finishes.
+     *
+     * Example:
+     * <pre>
+     * SquadResult result = ctx.execute(
+     *     SquadTask.of("Analyse this code:\n" + code)
+     *         .assignTo(AgentRole.ANALYST, AgentRole.CRITIC, AgentRole.EXECUTOR)
+     *         .withLabel("Code Review")
+     * );
+     * System.out.println(result.get(AgentRole.ANALYST).content());
+     * </pre>
+     */
+    public SquadResult execute(SquadTask task) {
+        ensureBooted();
+        return executor.execute(task);
     }
 
     // ── Accessors ─────────────────────────────────────────────────────
