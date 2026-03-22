@@ -3,10 +3,10 @@
 > **Multi-Agent AI Framework for Java.**
 > Spring Boot patterns for AI agents — write one class, get a working squad.
 
-[![Tests](https://img.shields.io/badge/tests-170%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-306%20passing-brightgreen)]()
 [![Java](https://img.shields.io/badge/java-21-blue)]()
 [![Spring AI](https://img.shields.io/badge/spring--ai-1.0.0-green)]()
-[![Version](https://img.shields.io/badge/version-2.1.0-orange)]()
+[![Version](https://img.shields.io/badge/version-2.9.0-orange)]()
 [![Maven Central](https://img.shields.io/badge/Maven%20Central-2.1.0-blue)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
 
@@ -15,19 +15,10 @@
 ## What is SquadOS?
 
 SquadOS is a Java framework for building teams of AI agents that work together.
-
-Each agent has a **role** (Strategist, Analyst, Support, etc.), its own **personality** (via a prompt),
-and can **talk to other agents** via a message bus. The framework handles everything else:
-discovery, wiring, memory, circuit breaking, parallel execution, and structured output.
-
-| Spring Boot | SquadOS |
-|---|---|
-| `@Service` | `@Agent(role = AgentRole.STRATEGIST)` |
-| `@Autowired` | `@OnMessage(from = AgentRole.TANK)` |
-| `ApplicationContext` | `SquadContext` |
-| `application.properties` | `squad.yml` |
-| `@SpringBootApplication` | `@SquadApplication` |
-| JPA `@Entity` | `@SquadPlan` |
+Each agent has a **role**, its own **personality**, and can **talk to other agents**.
+The framework handles: discovery, wiring, memory, circuit breaking, parallel execution,
+structured output, tool use, voting, approval pipelines, event triggers, self-evaluation,
+agentic loops, observability, and few-shot learning.
 
 ---
 
@@ -43,47 +34,31 @@ discovery, wiring, memory, circuit breaking, parallel execution, and structured 
 
 ---
 
-## Quickstart — Hello Squad in 3 files
-
-**1. Write an agent:**
+## Quickstart — Hello Squad
 
 ```java
-@Agent(
-    role        = AgentRole.STRATEGIST,
-    name        = "Oracle",
-    description = "You are a tactical planner. Be concise and decisive."
-)
-public class OracleAgent {
-    @PostConstruct
-    public void init() { System.out.println("Oracle online."); }
-}
+@Agent(role = AgentRole.STRATEGIST, name = "Oracle",
+       description = "You are a tactical planner. Be concise.")
+public class OracleAgent { }
 ```
 
-**2. Configure** (`src/main/resources/squad.yml`):
-
 ```yaml
+# squad.yml
 squad:
   name: my-squad
   llm:
-    provider: ollama      # or: anthropic, openai, azure-openai
+    provider: ollama
     model: llama3.2
   agents:
     - class: com.example.OracleAgent
 ```
 
-**3. Run:**
-
 ```java
-@SpringBootApplication
-@SquadApplication
+@SpringBootApplication @SquadApplication
 public class Main {
-    public static void main(String[] args) {
-        SquadConfigBridge.applyToSystemProperties();
-        SpringApplication.run(Main.class, args);
-    }
     @Bean LlmPort llmPort(ChatClient.Builder b) { return new SpringAiLlmAdapter(b); }
-    @Bean SquadContext squadContext(LlmPort llm) { return SquadRunner.run(Main.class, llm); }
-    @Bean ApplicationRunner runner(SquadContext ctx) {
+    @Bean SquadContext ctx(LlmPort llm) { return SquadRunner.run(Main.class, llm); }
+    @Bean ApplicationRunner run(SquadContext ctx) {
         return args -> System.out.println(ctx.submit("Plan the mission").content());
     }
 }
@@ -91,217 +66,137 @@ public class Main {
 
 ---
 
-## Real-world example — Daily Planner
+## Full feature set
 
-Paste your messy to-do brain dump. Three agents organise your day in ~14 seconds.
-**Learns your patterns over time** via pgvector. **Returns typed objects** via @SquadPlan.
-
-```
-> reply to sarah, fix auth bug, learn kubernetes, call mum...
-
-[Memory] Found patterns from past sessions:
-• User repeatedly defers: learn kubernetes
-• User repeatedly defers: organise my desk
-
-YOUR PLAN FOR TODAY        TIME REALITY CHECK       YOUR COACH SAYS
-────────────────────       ──────────────────       ────────────────
-DO TODAY:                  fix auth bug — 90 min    QUICK WIN: Reply to Sarah now
-  1. Fix auth bug          reply sarah — 15 min     WATCH OUT: Auth bug — timer it
-  2. Reply to Sarah        TOTAL: 135 min           START WITH: Open Sarah's email
-  3. Call mum              VERDICT: Realistic
-
-DROP IT: Learn Kubernetes, Organise desk (you never do these)
-
-Done in 14184ms  |  [Memory] Session saved. Total memories: 8
-```
-
-```bash
-ollama pull llama3.2
-cd squad-examples/daily-planner
-mvn spring-boot:run
-
-# With persistent memory (pgvector):
-docker-compose up -d
-export SPRING_PROFILES_ACTIVE=pgvector
-mvn spring-boot:run
-```
+| Annotation | What it does | Since |
+|-----------|-------------|-------|
+| `@Agent` | Define an AI agent with role + personality prompt | v1.0 |
+| `@SquadPlan` | Typed structured output — no more raw strings | v2.1 |
+| `@SquadTool` | Agents that call real Java methods / APIs | v2.2 |
+| `@AwaitApproval` | Pause execution, wait for human approval | v2.3 |
+| `@AutoApproval` | Rule-based instant approval (no human) | v2.3 |
+| `@SquadVote` | Multi-agent consensus voting | v2.4 |
+| `@OnEvent` | Kafka / webhook / timer triggered agents | v2.5 |
+| `@Eval` | Self-evaluation quality gate, auto-retry | v2.6 |
+| `@AutoPlan` | Agentic plan-execute-reflect-replan loops | v2.7 |
+| `@Traced` | OpenTelemetry spans, token tracking, latency | v2.8 |
+| `@Improve` | Few-shot learning from human feedback | v2.9 |
+| `@Memory` | Four-tier memory: Working/Episodic/Semantic/Procedural | v1.2 |
+| `@OnMessage` | Agents message each other | v1.0 |
 
 ---
 
-## Prerequisites
-
-| Tool | Version | Notes |
-|------|---------|-------|
-| JDK  | 21+     | [adoptium.net](https://adoptium.net) |
-| Maven | 3.8+  | [maven.apache.org](https://maven.apache.org) |
-| Ollama | latest | [ollama.ai](https://ollama.ai) — local LLM, no API key |
-| Docker | latest | Optional — pgvector memory + Redis multi-node |
-
----
-
-## Installation
-
-```bash
-git clone https://github.com/sgpatel/squad-os
-cd squad-os
-mvn clean install -DskipTests
-```
-
----
-
-## Framework features
-
-### @Agent — define an AI agent
+## @SquadPlan — typed output
 
 ```java
-@Agent(role = AgentRole.SUPPORT, name = "NurseBot",
-       description = "You heal teammates. Be calm and fast.")
-public class NurseBotAgent { }
-```
-
-### @SquadPlan — typed structured output — v2.1
-
-Get typed Java objects instead of raw strings from your agents:
-
-```java
-// Define your output schema
 @SquadPlan(description = "Daily task prioritisation")
 public class DayPlan {
     @Required public List<String> doToday;
-    public List<String> doLater;
     public List<String> dropIt;
     public String verdict;
 }
 
-// Get typed output — one line
 DayPlan plan = ctx.submit("Plan my day:\n" + tasks, DayPlan.class);
-
-// Use typed fields directly
-plan.doToday.forEach(task -> System.out.println("→ " + task));
-System.out.println("Verdict: " + plan.verdict);
+plan.doToday.forEach(t -> System.out.println("→ " + t));
 ```
 
-The framework automatically builds a JSON schema from the class, appends it to the
-agent's system prompt, and deserialises the response into the typed object.
-No Jackson. No Gson. Pure Java reflection.
+## @SquadTool — real API calls
 
-### Parallel execution — v1.1
+```java
+@SquadTool(description = "Get current stock price")
+public String getStockPrice(@ToolParam(description = "Ticker e.g. AAPL") String ticker) {
+    return stockService.getPrice(ticker);
+}
+```
 
-Run multiple agents simultaneously. Wall-clock = slowest agent, not sum:
+## @SquadVote — consensus
+
+```java
+VoteCollector collector = new VoteCollector("fraud-check", VoteRule.UNANIMOUS, TieBreaker.ESCALATE, 3, 30);
+collector.submit(Vote.approve("Risk score clean", 1.0).withVoter("RiskAgent"), "RiskAgent");
+collector.submit(Vote.reject("IP on blocklist", 1.0).withVoter("GeoAgent"), "GeoAgent");
+VoteResult result = collector.resolve(); // REJECTED (1-1, UNANIMOUS failed)
+```
+
+## @AwaitApproval + @AutoApproval
+
+```java
+@AutoApproval(condition = "amount < 10000 AND riskScore < 0.3")
+@AwaitApproval(reason = "Exceeds auto-approval limit", escalateTo = "senior-underwriter")
+public LoanDecision underwriteLoan(LoanApplication app) { ... }
+```
+
+## @Eval — quality gate
+
+```java
+@Eval(judge = AgentRole.CRITIC, minScore = 0.8f, retryOnFail = true, maxRetries = 3)
+public String generateReport(String input) { ... }
+```
+
+## @AutoPlan — agentic loops
+
+```java
+@AutoPlan(goal = "Complete risk report with all sections",
+          maxIterations = 5, stopCondition = "COMPLETE")
+public String generateRiskReport(LoanApplication app) { return "## Report\n"; }
+```
+
+## @Improve — few-shot learning
+
+```java
+@Improve(label = "loan-underwriting", topK = 3, minExamples = 5)
+public LoanDecision underwriteLoan(LoanApplication app) { ... }
+
+// After human review:
+engine.saveFeedback(method, input, output, FeedbackExample.Label.GOOD, "Caught the fraud signal");
+// Next similar loan: agent sees this example in its prompt automatically
+```
+
+## @Traced — observability
+
+```java
+@Traced(spanName = "fraud-detection", trackTokens = true)
+public class FraudAgent { }
+
+// Configure once:
+SquadTracer.configure(new LogTraceExporter());    // stdout
+SquadTracer.configure(new InMemoryTraceExporter()); // testing
+// Plug in: JaegerTraceExporter, DatadogTraceExporter, GrafanaTraceExporter
+```
+
+## Multi-node via Redis (v2.0)
+
+```java
+RedisAgentBus bus = new RedisAgentBus(jedisCommands, "my-squad");
+SquadRegistry registry = new SquadRegistry(redis, "my-squad", "node-a");
+registry.register(AgentRole.STRATEGIST, "Oracle");
+// Agents on separate JVMs discover each other via Redis
+```
+
+---
+
+## Parallel execution (v1.1)
 
 ```java
 SquadResult result = ctx.execute(
     SquadTask.of(input)
         .assignTo(AgentRole.STRATEGIST, AgentRole.ANALYST, AgentRole.SUPPORT)
-        .withLabel("Daily Planning")
 );
-result.get(AgentRole.STRATEGIST).content()   // plan
-System.out.println("Speedup: " + result.speedupRatio() + "x");
-```
-
-| Mode | Time |
-|------|------|
-| Sequential (v1.0) | ~31 seconds |
-| Parallel (v1.1) | ~14 seconds |
-| **Speedup** | **2.3×** |
-
-### Persistent memory — v1.2
-
-Agents remember across sessions using pgvector + Ebbinghaus decay:
-
-```java
-@Memory(type = MemoryType.EPISODIC, scope = MemoryScope.SQUAD,
-        op = MemoryOp.READ_WRITE, topK = 3, importance = Importance.HIGH)
-public SquadPlan buildPlan(TaskContext ctx) { ... }
-```
-
-| Tier | Backend | Persists | Use for |
-|------|---------|---------|---------|
-| WORKING | Redis / in-process | No (2h TTL) | Session scratchpad |
-| EPISODIC | pgvector HNSW | Yes | Past session history |
-| SEMANTIC | Redis KV | Yes | Known facts |
-| PROCEDURAL | PostgreSQL | Yes | Learned playbooks |
-
-```java
-// Development
-MemoryStoreFactory.inProcess()
-
-// Production
-MemoryStoreFactory.withPgVector(dataSource, 64)   // PostgreSQL only
-MemoryStoreFactory.production(dataSource, redis, 64) // Full stack
-```
-
-### Multi-node Squads — v2.0
-
-Agents on separate machines via Redis Pub/Sub:
-
-```java
-// Drop-in replacement for AgentMessageBus
-RedisAgentBus bus = new RedisAgentBus(redisCommands, "my-squad");
-
-// Distributed agent discovery
-SquadRegistry registry = new SquadRegistry(redis, "my-squad", "node-a");
-registry.register(AgentRole.STRATEGIST, "Oracle");
-List<AgentRegistration> analysts = registry.find(AgentRole.ANALYST);
-
-// Distributed circuit breaker — shared state across all nodes
-RedisCircuitBreakerStore circuit = new RedisCircuitBreakerStore(redis, "my-squad");
-circuit.setState(AgentRole.ANALYST, CircuitState.OPEN); // visible to ALL nodes
-```
-
-### @OnMessage — agents talk to each other
-
-```java
-@OnMessage(from = AgentRole.TANK, type = MessageType.HP_CRITICAL)
-public void emergencyHeal(AgentMessage msg) {
-    System.out.println("Healing — HP was: " + msg.getPayload(Integer.class));
-}
-```
-
-### AgentCircuitBreaker — agents self-heal
-
-If an agent fails 3 times, circuit opens. Framework routes to next healthy agent.
-Auto-recovers on success. In multi-node mode, circuit state is shared via Redis.
-
----
-
-## Switching LLM providers
-
-Change two lines in `squad.yml` — zero code changes:
-
-```yaml
-# Local Ollama (no API key)
-llm:
-  provider: ollama
-  model: llama3.2
-
-# Anthropic Claude
-llm:
-  provider: anthropic
-  model: claude-sonnet-4-6
-
-# OpenAI
-llm:
-  provider: openai
-  model: gpt-4o
+result.get(AgentRole.STRATEGIST).content();
+System.out.println("Speedup: " + result.speedupRatio() + "x"); // ~2.3x
 ```
 
 ---
 
-## Agent roles
+## Examples
 
-| Role | Default temp | Use for |
-|------|-------------|---------|
-| STRATEGIST | 0.5 | Planning, coordination |
-| ANALYST | 0.4 | Research, analysis |
-| EXECUTOR | 0.3 | Building, coding |
-| SUPPORT | 0.2 | Healing, assisting |
-| TANK | 0.3 | Gatekeeping, validation |
-| DPS | 0.8 | Generation, ideation |
-| RESEARCHER | 0.2 | Fact-finding |
-| WRITER | 0.6 | Content creation |
-| VISIONARY | 0.9 | Concept generation |
-| WILDCARD | — | Broadcast / subscribe-all |
+| Example | Features |
+|---------|---------|
+| **Daily Planner** | 3 agents, @SquadPlan, pgvector memory, pattern learning |
+| **Code Review Squad** | Security + Quality + Suggestions, typed reports |
+| **Multi-node Demo** | Node A (Oracle) + Node B (Blitz + NurseBot) via Redis |
+| **Embedding Demo** | Mock vs real semantic similarity comparison |
+| **Snack Thief Squad** | All 18 features — office pizza crime investigation 🍕 |
 
 ---
 
@@ -312,51 +207,38 @@ mvn clean test
 ```
 
 ```
-Phase 1  — Core @Agent framework           17/17
-Phase 2  — Four-tier memory layer          17/17
-Phase 3  — AgentMessageBus / @OnMessage    17/17
-Phase 4  — AgentCircuitBreaker             17/17
-Phase 5  — MissionState / TokenBudget      17/17
-Phase 6  — Spring AI + Ollama wiring       17/17
-Phase 7  — Parallel agents (v1.1)          17/17
-Phase 8  — pgvector + Redis stores (v1.2)  17/17
-Phase 9  — Multi-node Squads (v2.0)        17/17
-Phase 10 — @SquadPlan typed output (v2.1)  17/17
-──────────────────────────────────────────
-Total: 170 tests  0 failed  10 phases
+Phase 1-6   v1.0   Core framework                102/102 ✓
+Phase 7     v1.1   Parallel agents                 17/17  ✓
+Phase 8     v1.2   pgvector + Redis memory          17/17  ✓
+Phase 9     v2.0   Multi-node Redis Pub/Sub         17/17  ✓
+Phase 10    v2.1   @SquadPlan typed output          17/17  ✓
+Phase 11    v2.2   @SquadTool real API calls         17/17  ✓
+Phase 12    v2.3   @AwaitApproval + @AutoApproval   17/17  ✓
+Phase 13    v2.4   @SquadVote consensus             17/17  ✓
+Phase 14    v2.5   @OnEvent event-driven            17/17  ✓
+Phase 15    v2.6   @Eval quality gate               17/17  ✓
+Phase 16    v2.7   @AutoPlan agentic loops          17/17  ✓
+Phase 17    v2.8   @Traced observability            17/17  ✓
+Phase 18    v2.9   @Improve few-shot learning       17/17  ✓
+────────────────────────────────────────────────────────
+Total                                            306/306 ✓
 ```
 
 ---
 
-## Project structure
+## Prerequisites
 
-```
-squad-os/
-├── squad-core/                   The framework (ZERO runtime dependencies)
-│   └── src/main/java/io/squados/
-│       ├── annotation/           @Agent @OnMessage @Memory @SquadPlan @Required
-│       │                         @MissionProfile @PostConstruct AgentRole
-│       ├── context/              SquadContext AgentWrapper AgentRegistry
-│       │                         MissionState TokenBudget SquadRunner SquadRegistry
-│       ├── execution/            SquadTask SquadResult ParallelExecutor
-│       ├── bus/                  AgentMessageBus RedisAgentBus AgentMessage MessageType
-│       ├── agent/                AgentResponse TaskContext SquadPlanDeserialiser
-│       ├── memory/
-│       │   ├── store/            InProcessMemoryStore PgVectorEpisodicStore
-│       │   │                     RedisWorkingStore MemoryStoreFactory
-│       │   └── retrieval/        MemoryRouter EmbeddingPort MockEmbeddingPort
-│       ├── health/               AgentCircuitBreaker AgentHealth
-│       │                         RedisCircuitBreakerStore
-│       ├── llm/                  LlmPort LlmOptions LlmResponse MockLlmPort
-│       ├── config/               SquadConfigParser SquadConfigBridge
-│       └── exception/            SquadPlanException AgentConfigException
-│
-├── squad-starter/                Hello Squad (Ollama quickstart)
-│
-└── squad-examples/
-    ├── daily-planner/            @SquadPlan typed output + pgvector memory
-    ├── code-review/              3 specialist agents: Security + Quality + Fixes
-    └── embedding-demo/           Mock vs real semantic similarity comparison
+| Tool | Version | Notes |
+|------|---------|-------|
+| JDK  | 21+     | [adoptium.net](https://adoptium.net) |
+| Maven | 3.8+  | [maven.apache.org](https://maven.apache.org) |
+| Ollama | latest | [ollama.ai](https://ollama.ai) — local LLM, no API key needed |
+| Docker | latest | Optional — pgvector + Redis |
+
+```bash
+git clone https://github.com/sgpatel/squad-os
+cd squad-os
+mvn clean install -DskipTests
 ```
 
 ---
@@ -364,46 +246,50 @@ squad-os/
 ## Architecture decisions
 
 **Why not just use Spring AI or LangChain4j directly?**
-Both are excellent — SquadOS uses them under the hood. SquadOS adds the **team layer**:
-role-typed agents, inter-agent messaging, persistent memory, circuit breaking, parallel
-execution, and structured output. Spring AI handles LLM calls; SquadOS handles the squad.
-
-**Why @SquadPlan instead of manual JSON parsing?**
-LLM responses are unpredictable — sometimes markdown, sometimes plain JSON, sometimes
-with explanations. @SquadPlan automatically strips code fences, validates required fields,
-and gives you a typed Java object. Your code never touches raw LLM text.
+Both are excellent — SquadOS uses them under the hood (LLM calls).
+SquadOS adds the **team layer**: role-typed agents, inter-agent messaging,
+persistent memory, circuit breaking, parallel execution, structured output,
+tool use, voting, approval pipelines, event triggers, self-evaluation,
+agentic loops, observability, and few-shot learning from feedback.
 
 **Why zero deps in squad-core?**
-No runtime dependencies. Spring AI and adapters live in consumer modules. Use SquadOS
-with any LLM provider without pulling in ones you don't need.
-
-**Why pgvector for episodic memory?**
-Episodic memory needs semantic similarity — "fix login bug" should match "auth service
-broken". pgvector's HNSW index makes this fast at scale. Ebbinghaus decay keeps memory
-relevant; old irrelevant memories fade, frequently-accessed ones stay sharp.
+No runtime dependencies. Spring AI adapters live in consumer modules.
+Use SquadOS with any LLM provider without pulling in ones you don't need.
 
 **Single-node vs multi-node — zero code change?**
-Yes. Swap `AgentMessageBus` for `RedisAgentBus` in one `@Bean`. Same `@Agent`,
-same `@OnMessage`, same `@Memory` — the framework routes automatically.
+Yes. Swap `AgentMessageBus` for `RedisAgentBus` in one `@Bean`.
 
 ---
 
+## Published versions
+
+| Version | Features |
+|---------|---------|
+| 1.2.0 | Core + parallel + pgvector | 
+| 2.0.0 | + Multi-node Redis Pub/Sub |
+| 2.1.0 | + @SquadPlan typed output |
+
 ## Roadmap
 
-- [x] Core @Agent framework — **v1.0.0**
-- [x] Parallel multi-agent execution — **v1.1.0** (2.3x speedup)
-- [x] pgvector persistent memory — **v1.2.0**
-- [x] Multi-node Squads via Redis Pub/Sub — **v2.0.0**
-- [x] @SquadPlan structured typed output — **v2.1.0**
-- [ ] Phase 10 multi-node live demo (two Spring Boot apps via Redis)
-- [ ] Research Assistant example
-- [ ] Customer Support Squad example
-- [ ] Maven Central publishing automation
+- [x] v1.0 — Core @Agent framework
+- [x] v1.1 — Parallel agents (2.3x speedup)
+- [x] v1.2 — pgvector persistent memory
+- [x] v2.0 — Multi-node Squads via Redis
+- [x] v2.1 — @SquadPlan structured output
+- [x] v2.2 — @SquadTool real API calls
+- [x] v2.3 — @AwaitApproval + @AutoApproval
+- [x] v2.4 — @SquadVote consensus
+- [x] v2.5 — @OnEvent Kafka/webhook triggers
+- [x] v2.6 — @Eval quality gate
+- [x] v2.7 — @AutoPlan agentic loops
+- [x] v2.8 — @Traced OpenTelemetry
+- [x] v2.9 — @Improve few-shot learning
+- [ ] v3.0 — @SecureAgent RBAC + JWT
+- [ ] v3.1 — @Delegate dynamic routing
+- [ ] v3.2 — Fraud Detection Squad (all features end-to-end)
 
 ---
 
 ## License
 
-Apache 2.0
-
-Built with SquadOS v2.1.0 · Java 21 · Spring AI 1.0.0 · Ollama llama3.2 · pgvector · Redis
+Apache 2.0 · Built with SquadOS v2.9 · Java 21 · Spring AI 1.0 · Ollama · pgvector · Redis
