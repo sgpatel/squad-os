@@ -1,3 +1,21 @@
+## v3.2.0 (2026-03-22) — Full Maven Central release
+### Added
+- All 15 annotations now live in a single published artifact
+- @Traced: spans, token counts, latency fully operational from Maven Central
+- @SecureAgent: RBAC + JWT, AuditLog, SecurityGuard
+- @Delegate: LLM_CHOICE / ROUND_ROBIN / LOAD_BALANCE / FIRST_MATCH routing
+- @Improve: few-shot learning from human feedback
+- @AutoPlan: agentic plan-execute-reflect-replan loops
+- @Eval: self-evaluation quality gate with auto-retry
+- @OnEvent: Kafka/webhook/timer event-driven agents
+- @SquadVote: multi-agent consensus (MAJORITY/UNANIMOUS/ANY/SUPERMAJORITY/WEIGHTED)
+- @AwaitApproval + @AutoApproval: human-in-the-loop pipeline
+- @SquadTool: agents that call real Java methods / APIs
+- @SquadPlan: typed structured output
+- squad-examples/fraud-detection: all 15 annotations in one production use case
+- squad-examples/snack-thief: humorous showcase — Karen is guilty (4-1)
+- Total: 340 tests, 20 phases, 6 examples
+
 # SquadOS Changelog
 
 ## v3.1.0 (2026-03-22) — @Delegate dynamic routing
