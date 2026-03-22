@@ -1,7 +1,7 @@
 # SquadOS
 
-> Role-based multi-agent AI framework for Java.
-> Spring Boot for AI agents — write one class, get a working AI squad.
+> **Multi-Agent AI Framework for Java.**
+> Spring Boot patterns for AI agents — write one class, get a working squad.
 
 [![Tests](https://img.shields.io/badge/tests-136%20passing-brightgreen)]()
 [![Java](https://img.shields.io/badge/java-21-blue)]()

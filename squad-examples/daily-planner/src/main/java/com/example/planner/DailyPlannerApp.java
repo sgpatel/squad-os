@@ -127,10 +127,10 @@ public class DailyPlannerApp {
 
     private void printBanner() {
         System.out.println();
-        System.out.println("=================================================");
-        System.out.println("  SquadOS Daily Planner  (pgvector memory ON)");
-        System.out.println("  3 AI agents. Learns your patterns over time.");
-        System.out.println("=================================================");
+        System.out.println("=======================================================");
+        System.out.println("  SquadOS — Multi-Agent AI Framework for Java");
+        System.out.println("  Daily Planner · 3 agents · learns your patterns");
+        System.out.println("=======================================================");
     }
 
     private void printSection(String title, String content) {

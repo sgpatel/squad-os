@@ -208,10 +208,9 @@ public class SquadContext {
 
     private void printBanner() {
         System.out.println();
-        System.out.println("  ╔═══════════════════════════════════════════╗");
-        System.out.println("  ║           SquadOS Framework v0.0.1        ║");
-        System.out.println("  ║   Role-based multi-agent AI framework     ║");
-        System.out.println("  ╚═══════════════════════════════════════════╝");
+        System.out.println("  ╔══════════════════════════════════════════════════╗");
+        System.out.println("  ║   SquadOS — Multi-Agent AI Framework for Java  ║");
+        System.out.println("  ╚══════════════════════════════════════════════════╝");
         System.out.printf ("  Squad   : %s%n", config.getName());
         System.out.printf ("  Profile : %s%n", config.getProfile());
         System.out.printf ("  Provider: %s / %s%n",
