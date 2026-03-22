@@ -5,7 +5,7 @@
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>io.squados</groupId>
+    <groupId>io.github.sgpatel</groupId>
     <artifactId>squad-os</artifactId>
     <version>1.1.0-SNAPSHOT</version>
   </parent>
@@ -37,28 +37,28 @@
         <version>3.1.0</version>
         <executions>
           <execution><id>phase1-tests</id><phase>test</phase><goals><goal>java</goal></goals>
-            <configuration><mainClass>io.squados.tests.SquadOsPhase1Tests</mainClass><classpathScope>test</classpathScope></configuration>
+            <configuration><mainClass>io.github.sgpatel.tests.SquadOsPhase1Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
           <execution><id>phase2-tests</id><phase>test</phase><goals><goal>java</goal></goals>
-            <configuration><mainClass>io.squados.tests.SquadOsPhase2Tests</mainClass><classpathScope>test</classpathScope></configuration>
+            <configuration><mainClass>io.github.sgpatel.tests.SquadOsPhase2Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
           <execution><id>phase3-tests</id><phase>test</phase><goals><goal>java</goal></goals>
-            <configuration><mainClass>io.squados.tests.SquadOsPhase3Tests</mainClass><classpathScope>test</classpathScope></configuration>
+            <configuration><mainClass>io.github.sgpatel.tests.SquadOsPhase3Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
           <execution><id>phase4-tests</id><phase>test</phase><goals><goal>java</goal></goals>
-            <configuration><mainClass>io.squados.tests.SquadOsPhase4Tests</mainClass><classpathScope>test</classpathScope></configuration>
+            <configuration><mainClass>io.github.sgpatel.tests.SquadOsPhase4Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
           <execution><id>phase5-tests</id><phase>test</phase><goals><goal>java</goal></goals>
-            <configuration><mainClass>io.squados.tests.SquadOsPhase5Tests</mainClass><classpathScope>test</classpathScope></configuration>
+            <configuration><mainClass>io.github.sgpatel.tests.SquadOsPhase5Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
           <execution><id>phase6-tests</id><phase>test</phase><goals><goal>java</goal></goals>
-            <configuration><mainClass>io.squados.tests.SquadOsPhase6Tests</mainClass><classpathScope>test</classpathScope></configuration>
+            <configuration><mainClass>io.github.sgpatel.tests.SquadOsPhase6Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
           <execution><id>phase7-tests</id><phase>test</phase><goals><goal>java</goal></goals>
-            <configuration><mainClass>io.squados.tests.SquadOsPhase7Tests</mainClass><classpathScope>test</classpathScope></configuration>
+            <configuration><mainClass>io.github.sgpatel.tests.SquadOsPhase7Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
           <execution><id>phase8-tests</id><phase>test</phase><goals><goal>java</goal></goals>
-            <configuration><mainClass>io.squados.tests.SquadOsPhase8Tests</mainClass><classpathScope>test</classpathScope></configuration>
+            <configuration><mainClass>io.github.sgpatel.tests.SquadOsPhase8Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
         </executions>
       </plugin>

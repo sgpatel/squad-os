@@ -43,7 +43,7 @@
 
     <!-- SquadOS framework -->
     <dependency>
-      <groupId>io.squados</groupId>
+      <groupId>io.github.sgpatel</groupId>
       <artifactId>squad-core</artifactId>
       <version>${squados.version}</version>
     </dependency>

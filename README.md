@@ -138,7 +138,7 @@ mvn spring-boot:run -Dspring.profiles.active=pgvector
 ## Installation
 
 ```bash
-git clone https://github.com/your-org/squad-os
+git clone https://github.com/sgpatel/squad-os
 cd squad-os
 mvn clean install -DskipTests
 ```
@@ -375,7 +375,7 @@ Ebbinghaus decay ensures old irrelevant memories fade while frequently-accessed 
 - [x] Parallel multi-agent execution — **v1.1.0** (2.3x speedup)
 - [x] pgvector persistent memory — **v1.2.0** (agents learn your patterns)
 - [ ] More examples: Code Review Squad, Research Assistant, Customer Support
-- [ ] Maven Central (io.squados:squad-core:1.2.0)
+- [ ] Maven Central (io.github.sgpatel:squad-core:1.2.0)
 - [ ] Multi-node squads via Redis Pub/Sub
 
 ---

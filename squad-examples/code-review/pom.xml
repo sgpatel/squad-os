@@ -5,19 +5,19 @@
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <parent>
-    <groupId>io.github.sgpatel</groupId>
-    <artifactId>squad-os</artifactId>
-    <version>1.1.0-SNAPSHOT</version>
-  </parent>
-
-  <artifactId>squad-starter</artifactId>
-  <name>SquadOS Starter</name>
-  <description>Hello Squad — Ollama llama3.2, no API key required.</description>
+  <groupId>com.example</groupId>
+  <artifactId>code-review</artifactId>
+  <version>1.0.0</version>
+  <name>SquadOS Code Review Squad</name>
+  <description>3 AI agents review your code in parallel: security, quality, and fix suggestions.</description>
 
   <properties>
+    <java.version>21</java.version>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
     <spring-ai.version>1.0.0</spring-ai.version>
     <spring-boot.version>3.3.0</spring-boot.version>
+    <squados.version>1.1.0-SNAPSHOT</squados.version>
   </properties>
 
   <dependencyManagement>
@@ -40,29 +40,19 @@
   </dependencyManagement>
 
   <dependencies>
-
     <dependency>
       <groupId>io.github.sgpatel</groupId>
       <artifactId>squad-core</artifactId>
-      <version>1.1.0-SNAPSHOT</version>
+      <version>${squados.version}</version>
     </dependency>
-
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter</artifactId>
     </dependency>
-
-    <!--
-      Spring AI Ollama — NEW artifact name as of Spring AI 1.0 GA.
-      Old name was: spring-ai-ollama-spring-boot-starter (1.0.0-M6 and below)
-      New name is:  spring-ai-starter-model-ollama
-      Version managed by spring-ai-bom above.
-    -->
     <dependency>
       <groupId>org.springframework.ai</groupId>
       <artifactId>spring-ai-starter-model-ollama</artifactId>
     </dependency>
-
   </dependencies>
 
   <build>
@@ -71,6 +61,9 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
         <version>${spring-boot.version}</version>
+        <configuration>
+          <mainClass>com.example.review.CodeReviewApp</mainClass>
+        </configuration>
       </plugin>
     </plugins>
   </build>
