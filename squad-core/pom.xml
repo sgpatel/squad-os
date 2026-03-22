@@ -66,6 +66,9 @@
           <execution><id>phase10-tests</id><phase>test</phase><goals><goal>java</goal></goals>
             <configuration><mainClass>io.squados.tests.SquadOsPhase10Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
+          <execution><id>phase15-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase15Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
           <execution><id>phase14-tests</id><phase>test</phase><goals><goal>java</goal></goals>
             <configuration><mainClass>io.squados.tests.SquadOsPhase14Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
