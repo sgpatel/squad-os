@@ -22,7 +22,7 @@ jobs:
           distribution: 'temurin'
           cache: maven
       - name: Run all tests
-        run: mvn clean test --no-transfer-progress
+        run: mvn clean test --no-transfer-progress -pl squad-core -am
 
   publish:
     name: Publish to Maven Central
@@ -61,7 +61,7 @@ jobs:
       - name: Publish squad-core to Maven Central
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: mvn deploy -P release -pl squad-core -am -DskipTests "-Dgpg.passphrase=${GPG_PASSPHRASE}" --no-transfer-progress
+        run: mvn deploy -P release -pl squad-core,squad-spring-boot-starter -am -DskipTests "-Dgpg.passphrase=${GPG_PASSPHRASE}" --no-transfer-progress
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')

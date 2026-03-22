@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SquadOS Dashboard</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0d0d0d;color:#ccc;font-family:'SF Mono',Monaco,monospace;font-size:13px}
+  .header{background:#111;border-bottom:1px solid #222;padding:14px 24px;display:flex;align-items:center;justify-content:space-between}
+  .header h1{color:#6fcf97;font-size:16px;font-weight:700;letter-spacing:1px}
+  .header .meta{color:#555;font-size:11px}
+  .header .live{display:flex;align-items:center;gap:6px;color:#6fcf97;font-size:11px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#6fcf97;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;padding:16px 24px}
+  .stat{background:#111;border-radius:8px;padding:14px;border:1px solid #1a1a1a}
+  .stat .val{color:#fff;font-size:24px;font-weight:700;margin-bottom:4px}
+  .stat .lbl{color:#555;font-size:11px;text-transform:uppercase;letter-spacing:1px}
+  .stat.green .val{color:#6fcf97}
+  .stat.red .val{color:#e74c3c}
+  .stat.yellow .val{color:#f2c94c}
+  .stat.blue .val{color:#56b6c2}
+  .panels{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 24px 24px}
+  .panel{background:#111;border-radius:8px;border:1px solid #1a1a1a}
+  .panel.full{grid-column:1/-1}
+  .panel-head{padding:12px 16px;border-bottom:1px solid #1a1a1a;color:#fff;font-size:12px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+  .panel-head .count{background:#1a1a1a;color:#6fcf97;border-radius:4px;padding:2px 8px;font-size:11px}
+  .panel-body{padding:12px;max-height:280px;overflow-y:auto}
+  table{width:100%;border-collapse:collapse}
+  th{color:#555;font-size:10px;text-transform:uppercase;letter-spacing:1px;padding:6px 8px;text-align:left;border-bottom:1px solid #1a1a1a}
+  td{padding:6px 8px;border-bottom:1px solid #161616;font-size:11px;color:#aaa}
+  tr:hover td{background:#161616}
+  .badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700}
+  .badge.ONLINE,.badge.OK,.badge.GRANTED,.badge.APPROVED{background:#0d2b1a;color:#6fcf97}
+  .badge.ERROR,.badge.DENIED,.badge.REJECTED{background:#2b0d0d;color:#e74c3c}
+  .badge.PENDING{background:#2b2200;color:#f2c94c}
+  .badge.ANALYST{background:#1a1a2b;color:#56b6c2}
+  .badge.STRATEGIST{background:#1a2b1a;color:#6fcf97}
+  .badge.RESEARCHER{background:#2b1a2b;color:#9b59b6}
+  .badge.CRITIC{background:#2b1a1a;color:#e67e22}
+  .badge.SUPPORT{background:#1a2b2b;color:#1abc9c}
+  .activity-item{padding:6px 0;border-bottom:1px solid #161616;display:flex;gap:8px;align-items:flex-start}
+  .activity-time{color:#444;font-size:10px;min-width:80px}
+  .activity-type{font-size:10px;font-weight:700;min-width:60px}
+  .activity-type.AGENT{color:#6fcf97}
+  .activity-type.VOTE{color:#56b6c2}
+  .activity-type.APPROVAL{color:#f2c94c}
+  .activity-type.SYSTEM{color:#9b59b6}
+  .activity-msg{color:#aaa;font-size:11px}
+  .btn{background:#1a2b1a;color:#6fcf97;border:1px solid #2a4a2a;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:10px;font-family:inherit}
+  .btn:hover{background:#2a4a2a}
+  .btn.reject{background:#2b1a1a;color:#e74c3c;border-color:#4a2a2a}
+  .btn.reject:hover{background:#4a1a1a}
+  .refresh-bar{padding:8px 24px;color:#444;font-size:10px;display:flex;gap:16px}
+  ::-webkit-scrollbar{width:4px}
+  ::-webkit-scrollbar-track{background:#0d0d0d}
+  ::-webkit-scrollbar-thumb{background:#333;border-radius:2px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🛡️ SquadOS Dashboard</h1>
+    <div class="meta">Multi-Agent AI Framework for Java &nbsp;·&nbsp; v3.3.0</div>
+  </div>
+  <div class="live"><div class="dot"></div>LIVE &nbsp;·&nbsp; auto-refresh 5s</div>
+</div>
+
+<div class="grid" id="stats">
+  <div class="stat green"><div class="val" id="s-agents">-</div><div class="lbl">Agents Online</div></div>
+  <div class="stat blue"><div class="val" id="s-spans">-</div><div class="lbl">Total Spans</div></div>
+  <div class="stat blue"><div class="val" id="s-tokens">-</div><div class="lbl">Total Tokens</div></div>
+  <div class="stat yellow"><div class="val" id="s-latency">-</div><div class="lbl">Avg Latency (ms)</div></div>
+  <div class="stat yellow"><div class="val" id="s-pending">-</div><div class="lbl">Pending Approvals</div></div>
+</div>
+
+<div class="panels">
+
+  <!-- Agents -->
+  <div class="panel">
+    <div class="panel-head">Agents <span class="count" id="c-agents">0</span></div>
+    <div class="panel-body">
+      <table>
+        <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Temp</th><th>Max Tokens</th></tr></thead>
+        <tbody id="t-agents"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Activity Feed -->
+  <div class="panel">
+    <div class="panel-head">Activity Feed <span class="count" id="c-activity">0</span></div>
+    <div class="panel-body" id="t-activity"></div>
+  </div>
+
+  <!-- Trace Spans -->
+  <div class="panel full">
+    <div class="panel-head">Trace Spans (@Traced) <span class="count" id="c-spans">0</span></div>
+    <div class="panel-body">
+      <table>
+        <thead><tr><th>Span</th><th>Agent</th><th>Role</th><th>Duration</th><th>Tokens</th><th>Status</th><th>Time</th></tr></thead>
+        <tbody id="t-spans"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Vote History -->
+  <div class="panel">
+    <div class="panel-head">Vote History (@SquadVote) <span class="count" id="c-votes">0</span></div>
+    <div class="panel-body">
+      <table>
+        <thead><tr><th>Topic</th><th>Outcome</th><th>For</th><th>Against</th></tr></thead>
+        <tbody id="t-votes"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Approvals -->
+  <div class="panel">
+    <div class="panel-head">Approval Queue (@AwaitApproval) <span class="count" id="c-approvals">0</span></div>
+    <div class="panel-body">
+      <table>
+        <thead><tr><th>Method</th><th>Status</th><th>Priority</th><th>Action</th></tr></thead>
+        <tbody id="t-approvals"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Audit Log -->
+  <div class="panel">
+    <div class="panel-head">Audit Log (@SecureAgent) <span class="count" id="c-audit">0</span></div>
+    <div class="panel-body">
+      <table>
+        <thead><tr><th>Subject</th><th>Method</th><th>Decision</th><th>Time</th></tr></thead>
+        <tbody id="t-audit"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Feedback -->
+  <div class="panel">
+    <div class="panel-head">Feedback Store (@Improve) <span class="count" id="c-feedback">0</span></div>
+    <div class="panel-body">
+      <table>
+        <thead><tr><th>Label</th><th>Method</th><th>Note</th><th>Time</th></tr></thead>
+        <tbody id="t-feedback"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="refresh-bar" id="refresh-bar">Last updated: -</div>
+
+<script>
+const API = '/api';
+const fmt = (t) => new Date(t).toLocaleTimeString();
+const badge = (v, cls) => `<span class="badge ${cls||v}">${v}</span>`;
+
+async function load() {
+  try {
+    const [status, agents, spans, votes, approvals, feedback, audit, activity] = await Promise.all([
+      fetch(API+'/status').then(r=>r.json()),
+      fetch(API+'/agents').then(r=>r.json()),
+      fetch(API+'/traces').then(r=>r.json()),
+      fetch(API+'/votes').then(r=>r.json()),
+      fetch(API+'/approvals').then(r=>r.json()),
+      fetch(API+'/feedback').then(r=>r.json()),
+      fetch(API+'/audit').then(r=>r.json()),
+      fetch(API+'/activity').then(r=>r.json()),
+    ]);
+
+    // Stats
+    document.getElementById('s-agents').textContent  = status.agentCount;
+    document.getElementById('s-spans').textContent   = status.totalSpans;
+    document.getElementById('s-tokens').textContent  = status.totalTokens.toLocaleString();
+    document.getElementById('s-latency').textContent = status.avgLatencyMs;
+    document.getElementById('s-pending').textContent = status.pendingApprovals;
+
+    // Agents
+    document.getElementById('c-agents').textContent = agents.length;
+    document.getElementById('t-agents').innerHTML = agents.map(a =>
+      `<tr><td>${a.name}</td><td>${badge(a.role)}</td><td>${badge('ONLINE')}</td><td>${a.temp}</td><td>${a.maxTokens}</td></tr>`
+    ).join('');
+
+    // Spans
+    document.getElementById('c-spans').textContent = spans.length;
+    document.getElementById('t-spans').innerHTML = spans.slice(0,20).map(s =>
+      `<tr><td>${s.spanName}</td><td>${s.agentName}</td><td>${badge(s.agentRole)}</td>
+       <td>${s.durationMs}ms</td><td>${s.tokens}</td><td>${badge(s.status)}</td>
+       <td>${fmt(s.timestamp)}</td></tr>`
+    ).join('') || '<tr><td colspan="7" style="color:#444;text-align:center;padding:20px">No spans yet — run some agent calls</td></tr>';
+
+    // Votes
+    document.getElementById('c-votes').textContent = votes.length;
+    document.getElementById('t-votes').innerHTML = votes.map(v =>
+      `<tr><td>${v.topic}</td><td>${badge(v.outcome)}</td>
+       <td style="color:#6fcf97">${v.approve}</td>
+       <td style="color:#e74c3c">${v.reject}</td></tr>`
+    ).join('') || '<tr><td colspan="4" style="color:#444;text-align:center;padding:20px">No votes yet</td></tr>';
+
+    // Approvals
+    document.getElementById('c-approvals').textContent = approvals.length;
+    document.getElementById('t-approvals').innerHTML = approvals.map(a =>
+      `<tr><td>${a.method}</td><td>${badge(a.status)}</td><td>${badge(a.priority,'PENDING')}</td>
+       <td>${a.status==='PENDING'
+         ? `<button class="btn" onclick="approve('${a.id}')">✓ Approve</button>
+            <button class="btn reject" onclick="reject('${a.id}')">✗ Reject</button>`
+         : '-'}</td></tr>`
+    ).join('') || '<tr><td colspan="4" style="color:#444;text-align:center;padding:20px">No approvals</td></tr>';
+
+    // Audit
+    document.getElementById('c-audit').textContent = audit.length;
+    document.getElementById('t-audit').innerHTML = audit.slice(0,15).map(e =>
+      `<tr><td>${e.subject}</td><td>${e.method.split('.').pop()}</td>
+       <td>${badge(e.decision)}</td><td>${fmt(e.time)}</td></tr>`
+    ).join('') || '<tr><td colspan="4" style="color:#444;text-align:center;padding:20px">No audit entries</td></tr>';
+
+    // Feedback
+    document.getElementById('c-feedback').textContent = feedback.total;
+    document.getElementById('t-feedback').innerHTML = (feedback.recent||[]).slice(0,10).map(f =>
+      `<tr><td>${badge(f.label, f.label==='GOOD'?'GRANTED':'REJECTED')}</td>
+       <td>${f.method.split('.').pop()}</td>
+       <td>${f.note||'-'}</td>
+       <td>${fmt(f.time)}</td></tr>`
+    ).join('') || '<tr><td colspan="4" style="color:#444;text-align:center;padding:20px">No feedback yet</td></tr>';
+
+    // Activity
+    document.getElementById('c-activity').textContent = activity.length;
+    document.getElementById('t-activity').innerHTML = activity.slice(0,15).map(a =>
+      `<div class="activity-item">
+        <span class="activity-time">${fmt(a.time)}</span>
+        <span class="activity-type ${a.type}">${a.type}</span>
+        <span class="activity-msg">${a.agent}: ${a.message}</span>
+      </div>`
+    ).join('');
+
+    document.getElementById('refresh-bar').textContent =
+      'Last updated: ' + new Date().toLocaleTimeString() +
+      '  ·  Squad: ' + status.squadName +
+      '  ·  Errors: ' + status.errorCount +
+      '  ·  Feedback: ' + status.feedbackCount;
+
+  } catch(e) {
+    document.getElementById('refresh-bar').textContent = 'Connection error: ' + e.message + ' — retrying...';
+  }
+}
+
+async function approve(id) {
+  await fetch(API+'/approvals/'+id+'/approve', {method:'POST'});
+  load();
+}
+async function reject(id) {
+  await fetch(API+'/approvals/'+id+'/reject', {method:'POST'});
+  load();
+}
+
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

@@ -16,6 +16,7 @@
     <module>squad-core</module>
     <module>squad-starter</module>
     <module>squad-spring-boot-starter</module>
+    <module>squad-dashboard</module>
     <module>squad-examples/daily-planner</module>
     <module>squad-examples/code-review</module>
     <module>squad-examples/embedding-demo</module>

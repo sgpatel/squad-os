@@ -1,0 +1,7 @@
+squad:
+  name: dashboard-squad
+  profile: work
+  llm:
+    provider: ollama
+    model: llama3.2
+  agents: []
