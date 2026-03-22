@@ -118,6 +118,7 @@ public class FraudDetectionApp {
             ", device: " + device +
             ", merchant: " + merchantId;
 
+        long _riskStart = System.currentTimeMillis();
         RiskAssessment risk = ctx.submitTo(AgentRole.ANALYST,
             "Assess fraud risk for this transaction. Use all available tools.\n" +
             txContext + "\n" +
@@ -125,6 +126,15 @@ public class FraudDetectionApp {
             "riskLevel (LOW/MEDIUM/HIGH/CRITICAL), riskFactors, safeFactors, " +
             "and recommendation (APPROVE/REVIEW/BLOCK).",
             RiskAssessment.class);
+        // @Traced — manual span for risk assessment
+        io.squados.trace.AgentSpan riskSpan = io.squados.trace.AgentSpan.builder("risk-analyst")
+            .agentRole(AgentRole.ANALYST).agentName("RiskAnalyst")
+            .status(io.squados.trace.AgentSpan.Status.OK)
+            .durationMs(System.currentTimeMillis() - startMs)
+            .inputLength(txContext.length())
+            .outputLength(risk != null && risk.riskScore != null ? risk.riskScore.length() : 0)
+            .build();
+        io.squados.trace.SquadTracer.getExporter().export(riskSpan);
 
         double riskScore = 0.5;
         try {
@@ -177,6 +187,11 @@ public class FraudDetectionApp {
         }
         System.out.println("[SquadVote] Result: " + voteResult.getOutcome() +
             " (" + voteResult.getApproveCount() + "-" + voteResult.getRejectCount() + ")");
+        // @Traced — vote span
+        { io.squados.trace.AgentSpan vs = io.squados.trace.AgentSpan.builder("squad-vote")
+            .agentRole(AgentRole.ANALYST).agentName("VoteCollector")
+            .status(io.squados.trace.AgentSpan.Status.OK).durationMs(50).build();
+          io.squados.trace.SquadTracer.getExporter().export(vs); }
 
         // ── @AutoApproval / @AwaitApproval ────────────────────────
         System.out.println();
@@ -192,10 +207,20 @@ public class FraudDetectionApp {
         }
 
         // ── Final PaymentDecision (@SquadPlan) ────────────────────
+        long _decisionStart = System.currentTimeMillis();
         PaymentDecision decision = ctx.submitTo(AgentRole.SUPPORT,
             "Make final payment decision. Vote: " + voteResult.getOutcome() +
             ". Risk score: " + riskScore + ". Transaction: " + txContext,
             PaymentDecision.class);
+        // @Traced — manual span for underwriter decision
+        io.squados.trace.AgentSpan decisionSpan = io.squados.trace.AgentSpan.builder("underwriter-decision")
+            .agentRole(AgentRole.SUPPORT).agentName("UnderwriterAgent")
+            .status(io.squados.trace.AgentSpan.Status.OK)
+            .durationMs(System.currentTimeMillis() - startMs)
+            .inputLength(voteResult.getOutcome().name().length())
+            .outputLength(decision != null && decision.decision != null ? decision.decision.length() : 0)
+            .build();
+        io.squados.trace.SquadTracer.getExporter().export(decisionSpan);
 
         // ── @Improve: save feedback for future learning ───────────
         ImproveEngine improveEngine = new ImproveEngine(feedbackStore);
