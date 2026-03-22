@@ -10,6 +10,7 @@ import io.squados.bus.AgentMessageBus;
 import io.squados.bus.MessageType;
 import io.squados.bus.AgentMessage;
 import io.squados.execution.ParallelExecutor;
+import io.squados.agent.SquadPlanDeserialiser;
 import io.squados.execution.SquadTask;
 import io.squados.execution.SquadResult;
 import io.squados.health.AgentCircuitBreaker;
@@ -182,6 +183,40 @@ public class SquadContext {
     public SquadResult execute(SquadTask task) {
         ensureBooted();
         return executor.execute(task);
+    }
+
+    /**
+     * Submit a task and deserialise the response into a typed {@literal @}SquadPlan object.
+     *
+     * <pre>
+     * DayPlan plan = ctx.submit("Plan my day:\n" + tasks, DayPlan.class);
+     * plan.getDoToday()  // List<String>
+     * plan.getVerdict()  // "Realistic"
+     * </pre>
+     *
+     * @param input       The task input
+     * @param planClass   Class annotated with {@literal @}SquadPlan
+     * @return            Populated instance of planClass
+     */
+    public <T> T submit(String input, Class<T> planClass) {
+        ensureBooted();
+        // Build schema-aware prompt
+        String schemaHint = SquadPlanDeserialiser.buildSchemaPrompt(planClass);
+        String enrichedInput = input + schemaHint;
+        // Submit to lead agent
+        AgentResponse response = submit(enrichedInput);
+        // Deserialise JSON response into typed object
+        return SquadPlanDeserialiser.deserialise(response.content(), planClass);
+    }
+
+    /**
+     * Submit to a specific role and deserialise into a typed plan.
+     */
+    public <T> T submitTo(AgentRole role, String input, Class<T> planClass) {
+        ensureBooted();
+        String schemaHint = SquadPlanDeserialiser.buildSchemaPrompt(planClass);
+        AgentResponse response = submitTo(role, input + schemaHint);
+        return SquadPlanDeserialiser.deserialise(response.content(), planClass);
     }
 
     // ── Accessors ─────────────────────────────────────────────────────
