@@ -88,7 +88,7 @@ public class PlannerMemoryService {
                 currentSession(), pattern);
         });
 
-        System.out.println("[Memory] Session saved. Total memories: " + memoryManager.totalMemories());
+        // logged by caller
     }
 
     public int totalMemories() { return memoryManager.totalMemories(); }
