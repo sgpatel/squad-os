@@ -19,5 +19,10 @@ public enum MessageType {
     CIRCUIT_OPEN,       // HealthMonitor fires when agent is degraded
 
     // ── Generic ───────────────────────────────────────────────────
-    CUSTOM              // Developer-defined events via AgentMessage.customType
+    CUSTOM,
+    DEFEND,
+    HEAL,
+    ATTACK,
+    TASK_COMPLETE,
+    PING              // Developer-defined events via AgentMessage.customType
 }

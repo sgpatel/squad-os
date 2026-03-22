@@ -80,4 +80,36 @@ public class AgentMessage {
                + ", type=" + (customType != null ? customType : type)
                + ", payload=" + payload + "}";
     }
+    private String nodeId = "local";
+
+    public String toJson() {
+        String p = payload == null ? "" : payload.toString()
+            .replace("\\", "\\\\").replace("\"", "\\\"");
+        return "{\"from\":\"" + from.name() + "\"," +
+               "\"type\":\"" + type.name() + "\"," +
+               "\"nodeId\":\"" + nodeId + "\"," +
+               "\"payload\":\"" + p + "\"," +
+               "\"ts\":\"" + messageId + "\"}";
+    }
+
+    public static AgentMessage fromJson(String json) {
+        try {
+            AgentRole   f = AgentRole.valueOf(extract(json,"from"));
+            MessageType t = MessageType.valueOf(extract(json,"type"));
+            String      p = extract(json,"payload");
+            AgentMessage m = new AgentMessage(f,t,p);
+            m.nodeId = extract(json,"nodeId");
+            return m;
+        } catch (Exception e) {
+            return new AgentMessage(AgentRole.WILDCARD, MessageType.CUSTOM, json);
+        }
+    }
+
+    private static String extract(String json, String key) {
+        String s = "\"" + key + "\":\"";
+        int i = json.indexOf(s); if (i<0) return "";
+        i += s.length();
+        int j = json.indexOf("\"",i); return j<0?"":json.substring(i,j);
+    }
 }
+

@@ -6,19 +6,22 @@ import org.springframework.ai.embedding.EmbeddingModel;
 /**
  * Production EmbeddingPort backed by Spring AI EmbeddingModel.
  *
- * Works with any Spring AI embedding provider:
- *   - Ollama nomic-embed-text (local, no API key)   recommended default
- *   - OpenAI text-embedding-3-small (API key needed)
+ * Supports any Spring AI embedding provider:
+ *   - Ollama nomic-embed-text  (768 dims, local, no API key)
+ *   - Ollama mxbai-embed-large (1024 dims, local, higher quality)
+ *   - OpenAI text-embedding-3-small (1536 dims, needs API key)
  *
- * Pull the model first:
+ * Setup:
  *   ollama pull nomic-embed-text
  *
  * Configure in application.properties:
  *   spring.ai.ollama.embedding.options.model=nomic-embed-text
  *
- * Why this matters vs MockEmbeddingPort:
- *   Mock: "fix login bug" vs "auth service broken" = LOW similarity
- *   Real: "fix login bug" vs "auth service broken" = HIGH similarity (same concept)
+ * Why real embeddings matter over MockEmbeddingPort:
+ *   Mock:  "fix login bug"  vs "auth service broken"  = 0.02 similarity (keyword miss)
+ *   Real:  "fix login bug"  vs "auth service broken"  = 0.87 similarity (semantic match)
+ *
+ * This is the ONLY class in squad-starter that imports Spring AI embedding classes.
  */
 public class SpringAiEmbeddingAdapter implements EmbeddingPort {
 
@@ -27,9 +30,10 @@ public class SpringAiEmbeddingAdapter implements EmbeddingPort {
 
     public SpringAiEmbeddingAdapter(EmbeddingModel model) {
         this.model = model;
-        float[] probe = model.embed("probe");
+        // Probe dimensions once at startup
+        float[] probe = model.embed("warmup");
         this.dims = probe.length;
-        System.out.printf("[SquadOS] EmbeddingPort: %s (%d dims)%n",
+        System.out.printf("[SquadOS] Real embeddings active: %s (%d dims)%n",
             model.getClass().getSimpleName(), this.dims);
     }
 

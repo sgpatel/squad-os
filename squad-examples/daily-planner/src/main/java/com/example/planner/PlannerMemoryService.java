@@ -88,8 +88,7 @@ public class PlannerMemoryService {
                 currentSession(), pattern);
         });
 
-        System.out.println("[Memory] Session saved to pgvector. " +
-            "Total memories: " + memoryManager.totalMemories());
+        System.out.println("[Memory] Session saved. Total memories: " + memoryManager.totalMemories());
     }
 
     public int totalMemories() { return memoryManager.totalMemories(); }
