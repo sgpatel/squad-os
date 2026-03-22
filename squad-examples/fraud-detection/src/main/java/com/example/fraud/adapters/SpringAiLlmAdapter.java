@@ -1,6 +1,8 @@
 package com.example.fraud.adapters;
 import io.squados.llm.*;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.metadata.Usage;
 public class SpringAiLlmAdapter implements LlmPort {
     private final ChatClient chatClient;
     public SpringAiLlmAdapter(ChatClient.Builder builder) {
@@ -8,9 +10,18 @@ public class SpringAiLlmAdapter implements LlmPort {
     }
     @Override
     public LlmResponse chat(String sys, String user, LlmOptions opts) {
+        ChatResponse cr = chatClient.prompt().system(sys).user(user).call().chatResponse();
+        int prompt = 0, completion = 0;
+        try {
+            Usage usage = cr.getMetadata().getUsage();
+            if (usage != null) {
+                prompt     = usage.getPromptTokens() != null ? usage.getPromptTokens().intValue() : 0;
+                completion = usage.getCompletionTokens() != null ? usage.getCompletionTokens().intValue() : 0;
+            }
+        } catch (Exception ignored) {}
         return new LlmResponse(
-            chatClient.prompt().system(sys).user(user).call().content(),
-            0, 0, "ollama");
+            cr.getResult().getOutput().getText(),
+            prompt, completion, "ollama");
     }
     @Override
     public <T> T chatStructured(String sys, String user, Class<T> type, LlmOptions opts) {

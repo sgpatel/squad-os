@@ -118,6 +118,22 @@ public class AgentWrapper {
             String userMessage  = ctx.getTaskDescription();
             LlmResponse raw = llm.chat(systemPrompt, userMessage, options);
             AgentResponse response = AgentResponse.of(raw, role, name, start);
+            // @Traced — auto-record span for every LLM call
+            try {
+                io.squados.trace.AgentSpan _span = io.squados.trace.AgentSpan.builder(name)
+                    .agentRole(role)
+                    .agentName(name)
+                    .status(io.squados.trace.AgentSpan.Status.OK)
+                    .durationMs(response.latency().toMillis())
+                    .inputLength(ctx.getTaskDescription() != null ? ctx.getTaskDescription().length() : 0)
+                    .outputLength(raw.content() != null ? raw.content().length() : 0)
+                    .promptTokens(raw.promptTokens())
+                    .completionTokens(raw.completionTokens())
+                    .build();
+                io.squados.trace.SquadTracer.getExporter().export(_span);
+            } catch (Exception _te) {
+                // tracer must never break agent execution
+            }
             if (breaker != null) breaker.onSuccess(role, response.latency().toMillis());
             return response;
         } catch (Exception e) {
