@@ -1,0 +1,139 @@
+{
+  "groups": [
+    {
+      "name": "squad",
+      "type": "io.squados.boot.SquadProperties",
+      "sourceType": "io.squados.boot.SquadProperties"
+    },
+    {
+      "name": "squad.llm",
+      "type": "io.squados.boot.SquadProperties$Llm",
+      "sourceType": "io.squados.boot.SquadProperties"
+    },
+    {
+      "name": "squad.tracing",
+      "type": "io.squados.boot.SquadProperties$Tracing",
+      "sourceType": "io.squados.boot.SquadProperties"
+    },
+    {
+      "name": "squad.security",
+      "type": "io.squados.boot.SquadProperties$Security",
+      "sourceType": "io.squados.boot.SquadProperties"
+    },
+    {
+      "name": "squad.approval",
+      "type": "io.squados.boot.SquadProperties$Approval",
+      "sourceType": "io.squados.boot.SquadProperties"
+    }
+  ],
+  "properties": [
+    {
+      "name": "squad.name",
+      "type": "java.lang.String",
+      "defaultValue": "my-squad",
+      "description": "Squad name shown in boot banner."
+    },
+    {
+      "name": "squad.llm.provider",
+      "type": "java.lang.String",
+      "defaultValue": "ollama",
+      "description": "LLM provider: ollama, openai, anthropic."
+    },
+    {
+      "name": "squad.llm.model",
+      "type": "java.lang.String",
+      "defaultValue": "llama3.2",
+      "description": "Model name e.g. llama3.2, gpt-4o, claude-3-5-sonnet."
+    },
+    {
+      "name": "squad.llm.temperature",
+      "type": "java.lang.Float",
+      "defaultValue": 0.5,
+      "description": "LLM temperature 0.0 (deterministic) to 1.0 (creative)."
+    },
+    {
+      "name": "squad.llm.max-tokens",
+      "type": "java.lang.Integer",
+      "defaultValue": 2048,
+      "description": "Maximum tokens per LLM response."
+    },
+    {
+      "name": "squad.tracing.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Enable @Traced observability."
+    },
+    {
+      "name": "squad.tracing.exporter",
+      "type": "java.lang.String",
+      "defaultValue": "log",
+      "description": "Trace exporter: log (stdout), memory (in-process), jaeger."
+    },
+    {
+      "name": "squad.tracing.jaeger-url",
+      "type": "java.lang.String",
+      "defaultValue": "http://localhost:14268/api/traces",
+      "description": "Jaeger endpoint URL when exporter=jaeger."
+    },
+    {
+      "name": "squad.security.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": false,
+      "description": "Enable @SecureAgent RBAC + JWT enforcement."
+    },
+    {
+      "name": "squad.security.jwt-issuer",
+      "type": "java.lang.String",
+      "defaultValue": "squados",
+      "description": "Expected JWT issuer claim."
+    },
+    {
+      "name": "squad.security.audit-log",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Write audit log for all @SecureAgent calls."
+    },
+    {
+      "name": "squad.approval.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "Enable @AwaitApproval + @AutoApproval pipeline."
+    }
+  ],
+  "hints": [
+    {
+      "name": "squad.llm.provider",
+      "values": [
+        {
+          "value": "ollama",
+          "description": "Local Ollama — no API key needed"
+        },
+        {
+          "value": "openai",
+          "description": "OpenAI API"
+        },
+        {
+          "value": "anthropic",
+          "description": "Anthropic Claude API"
+        }
+      ]
+    },
+    {
+      "name": "squad.tracing.exporter",
+      "values": [
+        {
+          "value": "log",
+          "description": "Print spans to stdout"
+        },
+        {
+          "value": "memory",
+          "description": "Store spans in-memory (InMemoryTraceExporter bean)"
+        },
+        {
+          "value": "jaeger",
+          "description": "Send spans to Jaeger via OTLP/HTTP"
+        }
+      ]
+    }
+  ]
+}
