@@ -1,12 +1,8 @@
 package com.example.fraud;
 
-import com.example.fraud.adapters.SpringAiLlmAdapter;
 import com.example.fraud.plans.*;
 import io.squados.annotation.*;
-import io.squados.approval.*;
-import io.squados.config.SquadConfigBridge;
 import io.squados.context.SquadContext;
-import io.squados.context.SquadRunner;
 import io.squados.delegate.*;
 import io.squados.event.*;
 import io.squados.improve.*;
@@ -14,46 +10,35 @@ import io.squados.llm.LlmPort;
 import io.squados.security.*;
 import io.squados.trace.*;
 import io.squados.vote.*;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import java.time.Instant;
 
+/**
+ * FraudDetectionApp — Real-time payment fraud detection.
+ *
+ * Uses squad-spring-boot-starter:3.3.0 for zero-config auto-wiring.
+ * Zero @Bean boilerplate — starter auto-configures:
+ *   LlmPort, SquadContext, EventBus, ApprovalStore, FeedbackStore,
+ *   AuditLog, SecurityGuard, JwtValidator
+ *
+ * Only override: InMemoryTraceExporter for telemetry access in runner.
+ */
 @SpringBootApplication
 @SquadApplication
 public class FraudDetectionApp {
 
     public static void main(String[] args) {
-        SquadConfigBridge.applyToSystemProperties();
         SpringApplication.run(FraudDetectionApp.class, args);
     }
 
-    @Bean public LlmPort llmPort(ChatClient.Builder builder) {
-        return new SpringAiLlmAdapter(builder);
-    }
-
-    @Bean public SquadContext squadContext(LlmPort llmPort) {
-        return SquadRunner.run(FraudDetectionApp.class, llmPort);
-    }
-
+    /** Override starter LogTraceExporter with InMemory for telemetry display. */
     @Bean public InMemoryTraceExporter traceExporter() {
         InMemoryTraceExporter exp = new InMemoryTraceExporter();
         SquadTracer.configure(exp);
         return exp;
-    }
-
-    @Bean public InProcessApprovalStore approvalStore() {
-        return new InProcessApprovalStore();
-    }
-
-    @Bean public InProcessEventBus eventBus() {
-        return new InProcessEventBus();
-    }
-
-    @Bean public InProcessFeedbackStore feedbackStore() {
-        return new InProcessFeedbackStore();
     }
 
     @Bean
@@ -84,7 +69,6 @@ public class FraudDetectionApp {
         System.out.println("\n" + "=".repeat(60));
         System.out.println("  " + scenarioTitle);
         System.out.println("=".repeat(60));
-
         long startMs = System.currentTimeMillis();
         tracer.clear();
 
@@ -95,38 +79,32 @@ public class FraudDetectionApp {
         eventBus.publish("payments.incoming", payload);
         System.out.println("[GatewayAgent] Payment event fired: " + payload);
 
-        // @Delegate: route to specialist
-        DelegateRouter router = new DelegateRouter(llmPort);
+        // @Delegate: routing
+        new DelegateRouter(llmPort);
         String routeContext = Double.parseDouble(amount) > 10000
             ? "high value suspicious transaction" : "standard transaction";
         System.out.println("[Delegate] Routing context: " + routeContext);
 
-        // @SquadTool + @SquadPlan: RiskAnalyst assesses risk
+        // @SquadTool + @SquadPlan: risk assessment
         System.out.println("\n[RiskAnalyst] Running risk tools...");
-        String txContext = "Transaction: GBP " + amount +
-            " from customer " + customerId + " in " + country +
-            ", IP: " + ip + ", device: " + device + ", merchant: " + merchantId;
+        String txContext = "Transaction: GBP " + amount + " from customer " + customerId +
+            " in " + country + ", IP: " + ip + ", device: " + device + ", merchant: " + merchantId;
 
-        // @Traced manual span — start
         long riskStart = System.currentTimeMillis();
         RiskAssessment risk = ctx.submitTo(AgentRole.ANALYST,
-            "Assess fraud risk for this transaction. Use available context.\n" +
-            txContext + "\n" +
-            "Provide riskScore (0.0-1.0 as string), riskLevel (LOW/MEDIUM/HIGH/CRITICAL), " +
-            "riskFactors, safeFactors, recommendation (APPROVE/REVIEW/BLOCK).",
+            "Assess fraud risk for this transaction.\n" + txContext +
+            "\nProvide riskScore (0.0-1.0 as string), riskLevel (LOW/MEDIUM/HIGH/CRITICAL)," +
+            " riskFactors, safeFactors, recommendation (APPROVE/REVIEW/BLOCK).",
             RiskAssessment.class);
-        // @Traced — risk assessment span
-        io.squados.trace.AgentSpan riskSpan = io.squados.trace.AgentSpan.builder("risk-analyst")
+        SquadTracer.getExporter().export(AgentSpan.builder("risk-analyst")
             .agentRole(AgentRole.ANALYST).agentName("RiskAnalyst")
-            .status(io.squados.trace.AgentSpan.Status.OK)
+            .status(AgentSpan.Status.OK)
             .durationMs(System.currentTimeMillis() - riskStart)
-            .inputLength(txContext.length()).build();
-        io.squados.trace.SquadTracer.getExporter().export(riskSpan);
+            .inputLength(txContext.length()).build());
 
         double riskScore = 0.5;
-        try {
-            if (risk.riskScore != null) riskScore = Double.parseDouble(risk.riskScore);
-        } catch (Exception ignored) {}
+        try { if (risk.riskScore != null) riskScore = Double.parseDouble(risk.riskScore); }
+        catch (Exception ignored) {}
 
         System.out.println("[RiskAnalyst] Risk Level:  " + risk.riskLevel);
         System.out.println("[RiskAnalyst] Risk Score:  " + risk.riskScore);
@@ -134,102 +112,83 @@ public class FraudDetectionApp {
         if (risk.riskFactors != null)
             risk.riskFactors.forEach(f -> System.out.println("[RiskAnalyst] Factor:      " + f));
 
-        // @SecureAgent: set compliance JWT identity
+        // @SecureAgent: JWT identity
         long expiry = Instant.now().plusSeconds(3600).getEpochSecond();
-        String token = JwtValidator.createTestToken("system", "squados", expiry,
-            "compliance", "senior-risk");
-        AgentIdentity identity = new JwtValidator().validate(token);
+        AgentIdentity identity = new JwtValidator().validate(
+            JwtValidator.createTestToken("system", "squados", expiry, "compliance", "senior-risk"));
         SecurityContext.set(identity);
-        System.out.println("[SecureAgent] Identity set: " + identity.getSubject() +
-            " " + identity.getRoles());
+        System.out.println("[SecureAgent] Identity: " + identity.getSubject() + " " + identity.getRoles());
 
-        // @SquadVote: 3 agents vote
+        // @SquadVote
         System.out.println("\n[SquadVote] Calling the vote...");
         VoteCollector collector = new VoteCollector(
-            "fraud-verdict-" + customerId,
-            VoteRule.MAJORITY, TieBreaker.ESCALATE, 3, 30);
-
+            "fraud-verdict-" + customerId, VoteRule.MAJORITY, TieBreaker.ESCALATE, 3, 30);
         if (riskScore < 0.4) {
-            collector.submit(Vote.approve("Risk score low, transaction normal", 1.0).withVoter("RiskAnalyst"), "RiskAnalyst");
-            collector.submit(Vote.approve("Behaviour consistent with profile", 1.0).withVoter("BehaviourAgent"), "BehaviourAgent");
-            collector.submit(Vote.approve("Passes AML/KYC checks", 1.0).withVoter("ComplianceAgent"), "ComplianceAgent");
+            collector.submit(Vote.approve("Risk score low", 1.0).withVoter("RiskAnalyst"), "RiskAnalyst");
+            collector.submit(Vote.approve("Behaviour normal", 1.0).withVoter("BehaviourAgent"), "BehaviourAgent");
+            collector.submit(Vote.approve("AML/KYC passed", 1.0).withVoter("ComplianceAgent"), "ComplianceAgent");
         } else {
-            collector.submit(Vote.reject("Risk score elevated: " + riskScore, 1.0).withVoter("RiskAnalyst"), "RiskAnalyst");
-            collector.submit(Vote.reject("Behaviour anomaly detected", 1.0).withVoter("BehaviourAgent"), "BehaviourAgent");
+            collector.submit(Vote.reject("Risk elevated: " + riskScore, 1.0).withVoter("RiskAnalyst"), "RiskAnalyst");
+            collector.submit(Vote.reject("Behaviour anomaly", 1.0).withVoter("BehaviourAgent"), "BehaviourAgent");
             collector.submit(Vote.reject("AML threshold exceeded", 1.0).withVoter("ComplianceAgent"), "ComplianceAgent");
         }
-
         VoteResult voteResult;
-        try {
-            voteResult = collector.resolve();
-        } catch (InterruptedException e) {
+        try { voteResult = collector.resolve(); }
+        catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             voteResult = new VoteResult(VoteResult.Outcome.TIMEOUT, new java.util.ArrayList<>(), "fraud-verdict");
         }
-        // @Traced — vote span
-        { io.squados.trace.AgentSpan vs = io.squados.trace.AgentSpan.builder("squad-vote")
+        SquadTracer.getExporter().export(AgentSpan.builder("squad-vote")
             .agentRole(AgentRole.ANALYST).agentName("VoteCollector")
-            .status(io.squados.trace.AgentSpan.Status.OK).durationMs(50).build();
-          io.squados.trace.SquadTracer.getExporter().export(vs); }
-
+            .status(AgentSpan.Status.OK).durationMs(50).build());
         System.out.println("[SquadVote] Result: " + voteResult.getOutcome() +
             " (" + voteResult.getApproveCount() + "-" + voteResult.getRejectCount() + ")");
 
         // @AutoApproval / @AwaitApproval
         System.out.println();
-        if (riskScore < 0.3) {
-            System.out.println("[AutoApproval] riskScore " + riskScore + " < 0.3 — AUTO-APPROVED");
-        } else if (riskScore > 0.7) {
-            System.out.println("[AwaitApproval] riskScore " + riskScore + " > 0.7 — ESCALATING to senior-fraud-analyst");
-        } else {
-            System.out.println("[Decision] riskScore " + riskScore + " — APPROVE with monitoring flag");
-        }
+        if (riskScore < 0.3) System.out.println("[AutoApproval] AUTO-APPROVED");
+        else if (riskScore > 0.7) System.out.println("[AwaitApproval] ESCALATING to senior-fraud-analyst");
+        else System.out.println("[Decision] APPROVE with monitoring flag");
 
-        // @SquadPlan: final PaymentDecision
+        // @SquadPlan: final decision
         long decisionStart = System.currentTimeMillis();
         PaymentDecision decision = ctx.submitTo(AgentRole.SUPPORT,
-            "Make final payment decision. Vote: " + voteResult.getOutcome() +
-            ". Risk score: " + riskScore + ". Transaction: " + txContext,
-            PaymentDecision.class);
-        io.squados.trace.AgentSpan decisionSpan = io.squados.trace.AgentSpan.builder("underwriter-decision")
+            "Final payment decision. Vote: " + voteResult.getOutcome() +
+            ". Risk: " + riskScore + ". " + txContext, PaymentDecision.class);
+        SquadTracer.getExporter().export(AgentSpan.builder("underwriter-decision")
             .agentRole(AgentRole.SUPPORT).agentName("UnderwriterAgent")
-            .status(io.squados.trace.AgentSpan.Status.OK)
-            .durationMs(System.currentTimeMillis() - decisionStart).build();
-        io.squados.trace.SquadTracer.getExporter().export(decisionSpan);
+            .status(AgentSpan.Status.OK)
+            .durationMs(System.currentTimeMillis() - decisionStart).build());
 
         // @Improve: save feedback
-        FeedbackExample example = new FeedbackExample(
+        feedbackStore.save(new FeedbackExample(
             "fraud-risk-assessment", txContext,
             "riskScore=" + riskScore + " recommendation=" + risk.recommendation,
             riskScore < 0.5 ? FeedbackExample.Label.GOOD : FeedbackExample.Label.BAD,
-            "Processed correctly");
-        feedbackStore.save(example);
+            "auto-saved"));
 
-        // Clear @SecureAgent identity
         SecurityContext.clear();
 
-        // @Traced: telemetry summary
-        long durationMs = System.currentTimeMillis() - startMs;
+        // @Traced: telemetry
         System.out.println("\n[Result]");
         System.out.println("  Decision:  " + decision.decision);
         System.out.println("  Reason:    " + decision.reason);
-        if (decision.reviewAssignedTo != null)
-            System.out.println("  Escalated: " + decision.reviewAssignedTo);
         System.out.println("\n[Telemetry @Traced]");
         System.out.println("  Spans:     " + tracer.size());
         System.out.println("  Tokens:    " + tracer.totalTokens());
-        System.out.printf( "  Latency:   %dms%n", durationMs);
-        System.out.println("  Feedback:  " + feedbackStore.count("fraud-risk-assessment") + " examples stored for @Improve");
+        System.out.printf( "  Latency:   %dms%n", System.currentTimeMillis() - startMs);
+        System.out.println("  Feedback:  " + feedbackStore.count("fraud-risk-assessment") + " examples (@Improve)");
     }
 
-    @AutoPlan(goal = "Find the snack thief", maxIterations = 3,
-              stopCondition = "SOLVED", onMaxIterations = IterationPolicy.RETURN_BEST)
+    @AutoPlan(goal = "Assess fraud risk comprehensively",
+              maxIterations = 3, stopCondition = "COMPLETE",
+              onMaxIterations = IterationPolicy.RETURN_BEST)
     public String investigatePlaceholder() { return "started"; }
 
     private void printBanner() {
         System.out.println();
         System.out.println("\uD83D\uDEE1\uFE0F  FRAUD DETECTION SQUAD \uD83D\uDEE1\uFE0F");
-        System.out.println("Powered by SquadOS v3.3 — 15 annotations, 340 tests");
-        System.out.println("Real-time payment fraud detection — production ready\n");
+        System.out.println("Powered by squad-spring-boot-starter:3.3.0");
+        System.out.println("Zero @Bean boilerplate — starter handles everything\n");
     }
 }

@@ -4,6 +4,12 @@ import io.squados.annotation.Agent;
 import io.squados.annotation.AgentRole;
 import io.squados.annotation.PostConstruct;
 import io.squados.annotation.SquadApplication;
+import io.squados.trace.InMemoryTraceExporter;
+import io.squados.trace.SquadTracer;
+import io.squados.approval.InProcessApprovalStore;
+import io.squados.improve.InProcessFeedbackStore;
+import io.squados.security.AuditLog;
+import io.squados.security.SecurityGuard;
 import io.squados.context.SquadContext;
 import io.squados.vote.*;
 import io.squados.annotation.VoteRule;
@@ -23,6 +29,16 @@ import org.springframework.context.annotation.Bean;
 @SpringBootApplication
 @SquadApplication
 public class DashboardApp {
+
+    @Bean public InMemoryTraceExporter traceExporter() {
+        InMemoryTraceExporter exp = new InMemoryTraceExporter();
+        SquadTracer.configure(exp);
+        return exp;
+    }
+    @Bean public InProcessApprovalStore approvalStore() { return new InProcessApprovalStore(); }
+    @Bean public InProcessFeedbackStore feedbackStore() { return new InProcessFeedbackStore(); }
+    @Bean public AuditLog auditLog() { return new AuditLog(); }
+    @Bean public SecurityGuard securityGuard(AuditLog log) { return new SecurityGuard(log); }
 
     public static void main(String[] args) {
         SpringApplication.run(DashboardApp.class, args);

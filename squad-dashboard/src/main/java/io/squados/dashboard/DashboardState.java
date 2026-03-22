@@ -7,6 +7,7 @@ import io.squados.improve.InProcessFeedbackStore;
 import io.squados.security.AuditLog;
 import io.squados.trace.AgentSpan;
 import io.squados.trace.InMemoryTraceExporter;
+import io.squados.trace.TraceExporter;
 import io.squados.vote.VoteResult;
 
 import org.springframework.stereotype.Component;
@@ -35,11 +36,13 @@ public class DashboardState {
 
     public record ActivityEntry(Instant timestamp, String type, String agent, String message) {}
 
-    public DashboardState(InMemoryTraceExporter traceExporter,
+    public DashboardState(TraceExporter traceExporterRaw,
                           InProcessApprovalStore approvalStore,
                           InProcessFeedbackStore feedbackStore,
                           AuditLog auditLog) {
-        this.traceExporter = traceExporter;
+        this.traceExporter = (traceExporterRaw instanceof InMemoryTraceExporter)
+            ? (InMemoryTraceExporter) traceExporterRaw
+            : new InMemoryTraceExporter();
         this.approvalStore = approvalStore;
         this.feedbackStore = feedbackStore;
         this.auditLog      = auditLog;

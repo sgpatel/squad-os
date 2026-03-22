@@ -4,4 +4,5 @@ squad:
   llm:
     provider: ollama
     model: llama3.2
-  agents: []
+  agents:
+    - class: io.squados.dashboard.MonitorAgent
