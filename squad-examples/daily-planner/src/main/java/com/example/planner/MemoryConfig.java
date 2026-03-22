@@ -5,66 +5,67 @@ import io.squados.memory.retrieval.EmbeddingPort;
 import io.squados.memory.retrieval.MemoryRouter;
 import io.squados.memory.retrieval.MockEmbeddingPort;
 import io.squados.memory.store.MemoryStoreFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 
 import javax.sql.DataSource;
 
-/**
- * Wires memory layer based on squados.memory.pgvector.enabled.
- *
- * MODE 1 — in-memory (default, no infrastructure):
- *   mvn spring-boot:run
- *   Memories reset on restart. Good for trying out the planner.
- *
- * MODE 2 — pgvector persistent:
- *   docker-compose up -d
- *   mvn spring-boot:run -Dspring.profiles.active=pgvector
- *   Memories persist across restarts. Oracle learns your patterns.
- */
 @Configuration
 public class MemoryConfig {
 
     @Value("${squados.memory.pgvector.enabled:false}")
     private boolean pgvectorEnabled;
 
+    @Value("${squados.memory.real-embeddings:false}")
+    private boolean realEmbeddings;
+
     @Value("${squados.memory.embedding.dimensions:64}")
     private int dimensions;
 
+    /** Mock — keyword similarity, no model needed (default) */
     @Bean
-    public EmbeddingPort embeddingPort() {
+    @ConditionalOnProperty(name = "squados.memory.real-embeddings",
+                           havingValue = "false", matchIfMissing = true)
+    public EmbeddingPort mockEmbeddingPort() {
+        System.out.println("[Memory] Using MockEmbeddingPort (keyword similarity)");
         return new MockEmbeddingPort();
     }
 
-    /**
-     * In-memory router — no database needed.
-     * Active when squados.memory.pgvector.enabled=false (default).
-     */
+    /** Real semantic embeddings via Ollama nomic-embed-text */
     @Bean
-    @ConditionalOnProperty(name = "squados.memory.pgvector.enabled", havingValue = "false", matchIfMissing = true)
+    @ConditionalOnProperty(name = "squados.memory.real-embeddings", havingValue = "true")
+    public EmbeddingPort ollamaEmbeddingPort(EmbeddingModel embeddingModel) {
+        System.out.println("[Memory] Using Ollama semantic embeddings");
+        // Inline adapter — Spring AI lives here in daily-planner, not squad-core
+        return new EmbeddingPort() {
+            private final int dims = embeddingModel.embed("probe").length;
+            @Override public float[] embed(String text) { return embeddingModel.embed(text); }
+            @Override public int dimensions() { return dims; }
+        };
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "squados.memory.pgvector.enabled",
+                           havingValue = "false", matchIfMissing = true)
     public MemoryRouter inProcessMemoryRouter() {
-        System.out.println("[Memory] In-memory mode — memories reset on restart.");
-        System.out.println("[Memory] To persist, run: -Dspring.profiles.active=pgvector");
+        System.out.println("[Memory] In-memory store (resets on restart)");
         return MemoryStoreFactory.inProcess();
     }
 
-    /**
-     * pgvector router — persists to PostgreSQL.
-     * Active when squados.memory.pgvector.enabled=true (pgvector profile).
-     */
     @Bean
     @ConditionalOnProperty(name = "squados.memory.pgvector.enabled", havingValue = "true")
     public MemoryRouter pgVectorMemoryRouter(DataSource dataSource) {
-        System.out.println("[Memory] pgvector mode — memories persist to PostgreSQL.");
-        return MemoryStoreFactory.withPgVector(dataSource, dimensions);
+        int dims = realEmbeddings ? 768 : dimensions;
+        System.out.println("[Memory] pgvector store (" + dims + " dims)");
+        return MemoryStoreFactory.withPgVector(dataSource, dims);
     }
 
     @Bean
-    public MemoryManager memoryManager(MemoryRouter memoryRouter, EmbeddingPort embeddingPort) {
+    public MemoryManager memoryManager(MemoryRouter memoryRouter,
+                                       EmbeddingPort embeddingPort) {
         return new MemoryManager(memoryRouter, embeddingPort);
     }
 }
