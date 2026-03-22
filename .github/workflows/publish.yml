@@ -54,7 +54,9 @@ jobs:
           SETTINGS_EOF
 
       - name: Publish squad-core to Maven Central
-        run: mvn deploy -P release -pl squad-core -am -DskipTests -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }} --no-transfer-progress
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: mvn deploy -P release -pl squad-core -am -DskipTests "-Dgpg.passphrase=${GPG_PASSPHRASE}" --no-transfer-progress
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
