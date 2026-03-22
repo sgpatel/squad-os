@@ -53,11 +53,13 @@ public class RedisAgentBus {
     }
 
     public void unsubscribe(AgentRole from, MessageType type) {
-        String channel  = channel(from, type);
+        // Only clear handlers — keep Redis subscription alive for reuse.
+        // This allows subscribe() to be called again on the same channel
+        // for the next mission without creating duplicate Redis connections.
         String topicKey = topicKey(from, type);
         handlers.remove(topicKey);
-        listeners.remove(channel);
-        redis.unsubscribe(channel);
+        // Note: we intentionally do NOT call redis.unsubscribe() or remove
+        // from listeners map — the channel stays open, handlers are just cleared.
     }
 
     public int subscriptionCount() {

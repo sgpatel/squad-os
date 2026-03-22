@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: squados-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Optional: Redis UI for watching messages flow
+  redis-ui:
+    image: redislabs/redisinsight:latest
+    container_name: squados-redis-ui
+    ports:
+      - "5540:5540"
+    depends_on:
+      - redis

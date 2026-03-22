@@ -1,0 +1,8 @@
+squad:
+  name: "multi-node"
+  profile: work
+  llm:
+    provider: ollama
+    model: llama3.2
+  agents:
+    - class: com.example.nodea.OracleAgent
