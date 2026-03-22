@@ -1,82 +1,63 @@
 # Publishing SquadOS to Maven Central
 
-## One-time setup
+## How releases work
 
-### 1. Create a Sonatype account
-- Go to https://issues.sonatype.org and create an account
-- Open a new project ticket requesting `io.github.sgpatel` namespace
-- Wait for approval (usually 1-2 business days)
+Releases are fully automated. Push a git tag to trigger the pipeline:
 
-### 2. Generate a GPG key
 ```bash
-gpg --gen-key
-# Use your real name and email
-# Remember the passphrase
-
-# List keys to find your key ID
-gpg --list-secret-keys --keyid-format=long
-
-# Export public key to keyserver
-gpg --keyserver keyserver.ubuntu.com --send-keys YOUR_KEY_ID
-
-# Export private key (for GitHub Actions secret)
-gpg --armor --export-secret-keys YOUR_KEY_ID
-```
-
-### 3. Add ~/.m2/settings.xml
-```xml
-<settings>
-  <servers>
-    <server>
-      <id>ossrh</id>
-      <username>YOUR_SONATYPE_USERNAME</username>
-      <password>YOUR_SONATYPE_TOKEN</password>
-    </server>
-  </servers>
-</settings>
-```
-
-### 4. Add GitHub Actions secrets
-In your GitHub repo → Settings → Secrets → Actions:
-- `OSSRH_USERNAME` — your Sonatype username
-- `OSSRH_TOKEN`    — your Sonatype user token (not password)
-- `GPG_PRIVATE_KEY` — output of: gpg --armor --export-secret-keys YOUR_KEY_ID
-- `GPG_PASSPHRASE`  — your GPG key passphrase
-
-## Publishing a release
-
-### Option A: Automatic (via git tag)
-```bash
-# 1. Update version in all poms
-mvn versions:set -DnewVersion=1.2.0
+# 1. Bump versions in all poms
+# (replace 2.1.0 with new version)
+find . -name "pom.xml" -exec sed -i '' 's/2.1.0/2.2.0/g' {} +
 
 # 2. Run tests
 mvn clean test
 
 # 3. Commit + tag
 git add -A
-git commit -m "release: v1.2.0"
-git tag -a v1.2.0 -m "v1.2.0"
-git push origin main --tags
-# GitHub Actions automatically publishes to Maven Central
+git commit -m "release: v2.2.0"
+git tag -a v2.2.0 -m "v2.2.0 — description"
+git push origin master --tags
 ```
 
-### Option B: Manual local publish
+GitHub Actions then:
+1. Runs all 170 tests
+2. Publishes squad-core to Maven Central
+3. Creates GitHub Release with dependency snippet
+
+## One-time setup (already done)
+
+### Sonatype account
+- Namespace `io.github.sgpatel` verified at central.sonatype.com
+
+### GPG key
 ```bash
-# Build, sign, and deploy squad-core only
-mvn deploy -P release -pl squad-core -am -DskipTests
+gpg --gen-key
+gpg --keyserver hkps://keys.openpgp.org --send-keys YOUR_KEY_ID
+gpg --armor --export-secret-keys YOUR_KEY_ID > gpg-private-key.asc
 ```
 
-## Verify publication
-After ~10 minutes, check:
-- https://central.sonatype.com/artifact/io.github.sgpatel/squad-core
-- https://search.maven.org/artifact/io.github.sgpatel/squad-core
+### GitHub secrets (already configured)
+| Secret | Value |
+|--------|-------|
+| OSSRH_USERNAME | Sonatype token username |
+| OSSRH_TOKEN | Sonatype token password |
+| GPG_PRIVATE_KEY | Contents of gpg-private-key.asc |
+| GPG_PASSPHRASE | GPG key passphrase |
+
+## Published versions
+
+| Version | Features | Maven Central |
+|---------|----------|---------------|
+| 1.2.0 | Core + parallel + pgvector | ✓ live |
+| 2.0.0 | + Multi-node Redis Pub/Sub | ✓ live |
+| 2.1.0 | + @SquadPlan typed output | ✓ live |
 
 ## Usage after publication
+
 ```xml
 <dependency>
   <groupId>io.github.sgpatel</groupId>
   <artifactId>squad-core</artifactId>
-  <version>1.2.0</version>
+  <version>2.1.0</version>
 </dependency>
 ```
