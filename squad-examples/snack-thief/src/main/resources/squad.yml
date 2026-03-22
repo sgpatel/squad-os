@@ -1,0 +1,12 @@
+squad:
+  name: "snack-thief-squad"
+  profile: work
+  llm:
+    provider: ollama
+    model: llama3.2
+  agents:
+    - class: com.example.snackthief.agents.SherlockBotAgent
+    - class: com.example.snackthief.agents.CsiGptAgent
+    - class: com.example.snackthief.agents.GossipAgentAgent
+    - class: com.example.snackthief.agents.HrBotAgent
+    - class: com.example.snackthief.agents.JudgeJudyAgent

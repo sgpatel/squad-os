@@ -18,6 +18,7 @@
     <module>squad-examples/daily-planner</module>
     <module>squad-examples/code-review</module>
     <module>squad-examples/embedding-demo</module>
+    <module>squad-examples/snack-thief</module>
   </modules>
 
   <properties>
