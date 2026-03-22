@@ -13,9 +13,9 @@ import java.lang.annotation.*;
  * Usage:
  * <pre>
  * // Trigger on Kafka payment events
- * {@literal @}OnEvent(topic = "payments.incoming", filter = "amount > 10000")
+ * {@literal @}OnEvent(topic = "payments.incoming", filter = "amount &gt; 10000")
  * public void onLargePayment(SquadEvent event) {
- *     // Called for every payment > £10,000
+ *     // Called for every payment &gt; £10,000
  *     fraudSquad.assess(event.getPayload());
  * }
  *
@@ -36,7 +36,7 @@ public @interface OnEvent {
     /**
      * Optional filter expression.
      * Uses same syntax as @AutoApproval conditions.
-     * Example: "amount > 10000 AND currency == USD"
+     * Example: "amount &gt; 10000 AND currency == USD"
      */
     String filter() default "";
 

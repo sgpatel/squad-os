@@ -15,22 +15,22 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * Decision flow for a method annotated with both:
  * <pre>
- *   {@literal @}AutoApproval(condition = "amount < 10000")
+ *   {@literal @}AutoApproval(condition = "amount &lt; 10000")
  *   {@literal @}AwaitApproval(reason = "Exceeds auto-approval limit")
  * </pre>
  *
  * 1. Method executes normally, returns result
  * 2. ApprovalEngine evaluates @AutoApproval condition against result
- * 3a. Condition passes (amount < 10000) -> AUTO_APPROVED, return immediately
- * 3b. Condition fails (amount >= 10000) -> fall through to @AwaitApproval
+ * 3a. Condition passes (amount &lt; 10000) -> AUTO_APPROVED, return immediately
+ * 3b. Condition fails (amount &gt;= 10000) -> fall through to @AwaitApproval
  * 4. @AwaitApproval: persist, notify approver, block thread
  * 5. Human approves -> return result  |  rejects -> throw exception
  *
  * Condition syntax (simple expression evaluator):
- *   "amount < 10000"                    field comparison
- *   "amount < 10000 AND riskScore < 0.3" compound AND
+ *   "amount &lt; 10000"                    field comparison
+ *   "amount &lt; 10000 AND riskScore &lt; 0.3" compound AND
  *   "status == APPROVED"                string equality
- *   "amount < 10000 OR amount == 0"     compound OR
+ *   "amount &lt; 10000 OR amount == 0"     compound OR
  */
 public class ApprovalEngine {
 
@@ -134,8 +134,8 @@ public class ApprovalEngine {
      * Extracts field values from the result object via reflection.
      *
      * Examples:
-     *   "amount < 10000"
-     *   "amount < 10000 AND riskScore < 0.3"
+     *   "amount &lt; 10000"
+     *   "amount &lt; 10000 AND riskScore &lt; 0.3"
      *   "status == APPROVED"
      */
     public boolean evaluateCondition(String condition, Object result) {

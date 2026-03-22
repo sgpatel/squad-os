@@ -27,12 +27,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * P08 — ParallelExecutor all agents receive same input
  * P09 — SquadResult.allSucceeded() true when all pass
  * P10 — SquadResult.wallClockMs() is less than sum of latencies
- * P11 — SquadResult.speedupRatio() > 1 for parallel execution
+ * P11 — SquadResult.speedupRatio() &gt; 1 for parallel execution
  * P12 — SquadResult.totalTokens() sums all agents
  * P13 — SquadResult.get() returns correct agent response
  * P14 — SquadContext.execute(SquadTask) works end-to-end
  * P15 — ParallelExecutor skips missing roles gracefully
- * P16 — 3 agents run truly in parallel (wall-clock < sum)
+ * P16 — 3 agents run truly in parallel (wall-clock &lt; sum)
  * P17 — SquadTask assigns all registered if no roles specified
  */
 public class SquadOsPhase7Tests {

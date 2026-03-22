@@ -19,7 +19,7 @@ import java.time.Instant;
  *
  * Responsibilities:
  *   1. Instantiate the agent class via reflection
- *   2. Resolve effective LlmOptions (yml overrides > role defaults)
+ *   2. Resolve effective LlmOptions (yml overrides &gt; role defaults)
  *   3. Build the system prompt from @Agent metadata
  *   4. Call LlmPort.chat() and wrap the result in AgentResponse
  *   5. Invoke @PostConstruct after instantiation
@@ -50,7 +50,7 @@ public class AgentWrapper {
         this.name        = resolveName(agentClass, annotation);
         this.llm         = llm;
 
-        // Resolve effective LlmOptions: yml overrides > role defaults
+        // Resolve effective LlmOptions: yml overrides &gt; role defaults
         this.options = (agentConfig != null)
                 ? agentConfig.resolveOptions(role, squadConfig.getLlm().getModel())
                 : role.defaultOptions().withModel(squadConfig.getLlm().getModel());

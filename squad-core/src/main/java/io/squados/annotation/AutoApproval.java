@@ -14,7 +14,7 @@ import java.lang.annotation.*;
  * <pre>
  * // Auto-approve loans under £10,000 with risk score below 0.3
  * {@literal @}AutoApproval(
- *     condition  = "amount < 10000 AND riskScore < 0.3",
+ *     condition  = "amount &lt; 10000 AND riskScore &lt; 0.3",
  *     reason     = "Within auto-approval limits"
  * )
  * {@literal @}AwaitApproval(reason = "Exceeds auto-approval threshold")
@@ -33,7 +33,7 @@ public @interface AutoApproval {
      * Condition expression evaluated against the result object.
      * Supported operators: AND, OR, NOT, <, >, <=, >=, ==, !=
      * Supported field access: result.fieldName
-     * Example: "amount < 10000 AND riskScore < 0.3"
+     * Example: "amount &lt; 10000 AND riskScore &lt; 0.3"
      */
     String condition();
 

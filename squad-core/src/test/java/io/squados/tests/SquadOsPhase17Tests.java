@@ -18,7 +18,7 @@ import java.util.List;
  * T07 — InMemoryTraceExporter.getByName() filters by spanName
  * T08 — InMemoryTraceExporter.getErrors() returns only error spans
  * T09 — InMemoryTraceExporter.totalTokens() sums all spans
- * T10 — SquadTracer.record captures duration > 0
+ * T10 — SquadTracer.record captures duration &gt; 0
  * T11 — SquadTracer.record status OK on success
  * T12 — SquadTracer.record status ERROR on exception
  * T13 — SquadTracer.record captures input and output length

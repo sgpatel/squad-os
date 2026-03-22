@@ -157,7 +157,7 @@ public class SquadOsPhase14Tests {
         EventRouter router = new EventRouter(bus);
         router.register(agent);
         router.start();
-        // amount > 10000 — should pass filter
+        // amount &gt; 10000 — should pass filter
         router.publish("payments.large", "{\"amount\": 50000}");
         Thread.sleep(200);
         assertEquals(1, agent.received.size(), "filter passes: amount 50000 > 10000");
@@ -169,7 +169,7 @@ public class SquadOsPhase14Tests {
         EventRouter router = new EventRouter(bus);
         router.register(agent);
         router.start();
-        // amount <= 10000 — should be blocked
+        // amount &lt;= 10000 — should be blocked
         router.publish("payments.large", "{\"amount\": 500}");
         Thread.sleep(200);
         assertEquals(0, agent.received.size(), "filter blocks: amount 500 not > 10000");
@@ -181,7 +181,7 @@ public class SquadOsPhase14Tests {
         EventRouter router = new EventRouter(bus);
         router.register(agent);
         router.start();
-        // amount > 1000 AND currency == USD
+        // amount &gt; 1000 AND currency == USD
         router.publish("payments.multi", "{\"amount\": 5000, \"currency\": \"USD\"}");
         Thread.sleep(200);
         assertEquals(1, agent.received.size(), "AND filter: both match -> passes");

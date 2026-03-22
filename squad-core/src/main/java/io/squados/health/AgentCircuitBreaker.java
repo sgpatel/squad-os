@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * The critical section is the status transition check in onFailure():
  * without synchronization, 50 threads can ALL pass the
- * "failureCount >= threshold" check before any of them sets CIRCUIT_OPEN,
+ * "failureCount &gt;= threshold" check before any of them sets CIRCUIT_OPEN,
  * producing dozens of redundant open events.
  *
  * Fix: synchronize per-agent on the AgentHealth object so only one
@@ -66,7 +66,7 @@ public class AgentCircuitBreaker {
         if (h == null) return;
 
         // Synchronize on h so only ONE thread performs the status transition.
-        // Without this, 50 concurrent threads all read failureCount < threshold,
+        // Without this, 50 concurrent threads all read failureCount &lt; threshold,
         // all increment past it simultaneously, and all try to open the circuit.
         synchronized (h) {
             h.recordFailure(error);

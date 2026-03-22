@@ -13,8 +13,8 @@ import java.util.*;
  * Orchestrates the @Eval quality gate:
  *   1. Agent produces output
  *   2. EvalJudge scores it
- *   3. If score >= minScore: return output
- *   4. If score < minScore and retryOnFail: retry agent with feedback
+ *   3. If score &gt;= minScore: return output
+ *   4. If score &lt; minScore and retryOnFail: retry agent with feedback
  *   5. After maxRetries: apply onFail policy
  */
 public class EvalRunner {

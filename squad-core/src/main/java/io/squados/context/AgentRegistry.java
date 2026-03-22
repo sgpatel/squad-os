@@ -58,7 +58,7 @@ public class AgentRegistry {
     /**
      * Get the lead agent — the one that should handle incoming tasks first.
      *
-     * Priority: STRATEGIST > ANALYST > EXECUTOR > first registered.
+     * Priority: STRATEGIST &gt; ANALYST &gt; EXECUTOR &gt; first registered.
      * This mirrors Spring's @Primary — one agent is designated the entry point.
      */
     public AgentWrapper getLead() {

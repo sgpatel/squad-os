@@ -12,14 +12,14 @@ import java.util.*;
  * Phase 15 — v2.6 @Eval self-evaluation quality gate
  *
  * Q01 — EvalScore.overall() averages all criteria scores
- * Q02 — EvalScore.passes() true when overall >= minScore
- * Q03 — EvalScore.passes() false when overall < minScore
+ * Q02 — EvalScore.passes() true when overall &gt;= minScore
+ * Q03 — EvalScore.passes() false when overall &lt; minScore
  * Q04 — EvalScore.get(criterion) returns individual score
  * Q05 — EvalJudge.extractScore parses score from judge output
  * Q06 — EvalJudge.extractScore returns 0.5 when criterion not found
  * Q07 — EvalJudge.extractScore clamps score to [0.0, 1.0]
- * Q08 — EvalRunner passes immediately when score >= minScore
- * Q09 — EvalRunner retries when score < minScore
+ * Q08 — EvalRunner passes immediately when score &gt;= minScore
+ * Q09 — EvalRunner retries when score &lt; minScore
  * Q10 — EvalRunner returns best attempt after max retries (RETURN_BEST)
  * Q11 — EvalRunner throws EvalFailedException (THROW policy)
  * Q12 — EvalRunner does not retry when retryOnFail=false

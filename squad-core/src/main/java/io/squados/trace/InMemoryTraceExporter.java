@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
  * List<AgentSpan> spans = exporter.getSpans();
  * assertEquals(1, spans.size());
  * assertEquals("loan-underwriting", spans.get(0).getSpanName());
- * assertTrue(spans.get(0).getDurationMs() > 0);
+ * assertTrue(spans.get(0).getDurationMs() &gt; 0);
  * </pre>
  */
 public class InMemoryTraceExporter implements TraceExporter {

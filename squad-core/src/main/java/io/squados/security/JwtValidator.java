@@ -23,7 +23,7 @@ import java.util.*;
  *   1. Token is not null/empty
  *   2. Token has 3 parts (header.payload.signature)
  *   3. Payload decodes to valid JSON
- *   4. Token is not expired (exp > now)
+ *   4. Token is not expired (exp &gt; now)
  *   5. Issuer matches expected issuer (if configured)
  */
 public class JwtValidator {

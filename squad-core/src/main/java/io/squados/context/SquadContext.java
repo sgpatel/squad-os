@@ -113,7 +113,7 @@ public class SquadContext {
      * Submit a task to the lead agent.
      *
      * The lead agent is determined by AgentRegistry.getLead():
-     * STRATEGIST > ANALYST > EXECUTOR > first registered.
+     * STRATEGIST &gt; ANALYST &gt; EXECUTOR &gt; first registered.
      *
      * @param task  The task description string.
      * @return      AgentResponse from the lead agent.

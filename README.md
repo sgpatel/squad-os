@@ -7,7 +7,7 @@
 [![Java](https://img.shields.io/badge/java-21-blue)]()
 [![Spring AI](https://img.shields.io/badge/spring--ai-1.0.0-green)]()
 [![Version](https://img.shields.io/badge/version-3.1.0-orange)]()
-[![Maven Central](https://img.shields.io/badge/Maven%20Central-2.1.0-blue)]()
+[![Maven Central](https://img.shields.io/badge/Maven%20Central-3.1.0-blue)](https://central.sonatype.com/artifact/io.github.sgpatel/squad-core)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
 
 ---

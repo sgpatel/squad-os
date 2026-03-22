@@ -149,7 +149,7 @@ public class SquadOsPhase12Tests {
     }
 
     void A03_autoApprovalFalseEscalates() throws Exception {
-        // amount >= 10000 -> falls through to @AwaitApproval
+        // amount &gt;= 10000 -> falls through to @AwaitApproval
         var d = new LoanDecision(50000, 0.2, "PENDING");
         InProcessApprovalStore store = new InProcessApprovalStore();
         ApprovalEngine eng = new ApprovalEngine(store, 50L);
@@ -183,7 +183,7 @@ public class SquadOsPhase12Tests {
     }
 
     void A06_autoApprovalOrOneTrue() throws Exception {
-        // autoWithFallback uses only "amount < 10000", OR not needed,
+        // autoWithFallback uses only "amount &lt; 10000", OR not needed,
         // test engine directly with OR condition
         ApprovalEngine eng = engine();
         var d = new LoanDecision(5000, 0.9, "PENDING");

@@ -119,7 +119,7 @@ public class SquadConfig {
 
         /**
          * Resolve the effective LlmOptions for this agent.
-         * Priority: explicit yml values > AgentRole defaults > LlmOptions.defaults()
+         * Priority: explicit yml values &gt; AgentRole defaults &gt; LlmOptions.defaults()
          */
         public LlmOptions resolveOptions(AgentRole agentRole, String globalModel) {
             LlmOptions roleDefaults = (agentRole != null)

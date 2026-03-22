@@ -8,8 +8,8 @@ import java.lang.annotation.*;
  *   1. Captures the agent output
  *   2. Passes it to a judge agent (the CriticAgent or a dedicated EvalAgent)
  *   3. Judge scores across configured criteria (faithfulness, completeness, etc.)
- *   4. If score >= minScore: return the output
- *   5. If score < minScore and retryOnFail=true: retry up to maxRetries times
+ *   4. If score &gt;= minScore: return the output
+ *   5. If score &lt; minScore and retryOnFail=true: retry up to maxRetries times
  *   6. If still below threshold: throw EvalFailedException or return best attempt
  *
  * Usage:
