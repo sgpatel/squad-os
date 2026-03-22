@@ -1,0 +1,12 @@
+squad:
+  name: fraud-detection-squad
+  profile: work
+  llm:
+    provider: ollama
+    model: llama3.2
+  agents:
+    - class: com.example.fraud.agents.GatewayAgent
+    - class: com.example.fraud.agents.RiskAnalystAgent
+    - class: com.example.fraud.agents.BehaviourAgent
+    - class: com.example.fraud.agents.ComplianceAgent
+    - class: com.example.fraud.agents.UnderwriterAgent

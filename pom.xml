@@ -19,6 +19,7 @@
     <module>squad-examples/code-review</module>
     <module>squad-examples/embedding-demo</module>
     <module>squad-examples/snack-thief</module>
+    <module>squad-examples/fraud-detection</module>
   </modules>
 
   <properties>
