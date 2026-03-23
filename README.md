@@ -5,313 +5,313 @@
 
 [![Tests](https://img.shields.io/badge/tests-340%20passing-brightgreen)]()
 [![Java](https://img.shields.io/badge/java-21-blue)]()
-[![Spring AI](https://img.shields.io/badge/spring--ai-1.0.0-green)]()
-[![Version](https://img.shields.io/badge/version-3.2.0-orange)]()
-[![Maven Central](https://img.shields.io/badge/Maven%20Central-3.2.0-blue)](https://central.sonatype.com/artifact/io.github.sgpatel/squad-core)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
-
----
+[![Maven Central](https://img.shields.io/badge/Maven%20Central-3.4.0-orange)](https://central.sonatype.com/artifact/io.github.sgpatel/squad-core)
+[![License](https://img.shields.io/badge/license-MIT-green)]()
 
 ## What is SquadOS?
 
-SquadOS is a Java framework for building teams of AI agents that work together.
-Each agent has a **role**, its own **personality**, and can **talk to other agents**.
-The framework handles everything: discovery, wiring, memory, parallel execution,
-structured output, tool use, voting, approval pipelines, event triggers,
-self-evaluation, agentic loops, observability, few-shot learning, security, and dynamic routing.
+SquadOS is a production-ready multi-agent AI framework for Java. Define agents with annotations,
+wire them together, and run complex AI workflows — all without leaving Spring Boot.
 
----
+Think of it as **Spring Boot for AI agents**: the same convention-over-configuration philosophy,
+the same annotation-driven development, but for orchestrating LLM-powered agents.
 
-## Add to your project
+## Quick Start
+
+**Option A — Spring Boot Starter (zero boilerplate):**
+
+```xml
+<dependency>
+  <groupId>io.github.sgpatel</groupId>
+  <artifactId>squad-spring-boot-starter</artifactId>
+  <version>3.4.0</version>
+</dependency>
+```
+
+```java
+@SpringBootApplication
+@SquadApplication
+public class MyApp {
+    public static void main(String[] args) {
+        SpringApplication.run(MyApp.class, args);
+    }
+    // That's it. SquadContext, LlmPort, TraceExporter, ApprovalStore
+    // — all auto-configured from application.properties
+}
+```
+
+```properties
+# application.properties
+squad.name=my-squad
+squad.llm.provider=ollama
+squad.llm.model=llama3.2
+squad.tracing.enabled=true
+squad.security.enabled=false
+```
+
+**Option B — Core only (wire yourself):**
 
 ```xml
 <dependency>
   <groupId>io.github.sgpatel</groupId>
   <artifactId>squad-core</artifactId>
-  <version>2.1.0</version>
+  <version>3.4.0</version>
 </dependency>
 ```
 
----
-
-## Quickstart — Hello Squad
+## Your First Agent
 
 ```java
-@Agent(role = AgentRole.STRATEGIST, name = "Oracle",
-       description = "You are a tactical planner. Be concise.")
-public class OracleAgent { }
-```
+@Agent(
+    role = AgentRole.ANALYST,
+    name = "ResearchAgent",
+    description = "You are a research analyst. Answer questions with evidence."
+)
+public class ResearchAgent {
 
-```yaml
-# squad.yml
-squad:
-  name: my-squad
-  llm:
-    provider: ollama
-    model: llama3.2
-  agents:
-    - class: com.example.OracleAgent
-```
+    @PostConstruct
+    public void init() {
+        System.out.println("ResearchAgent online.");
+    }
 
-```java
-@SpringBootApplication @SquadApplication
-public class Main {
-    @Bean LlmPort llmPort(ChatClient.Builder b) { return new SpringAiLlmAdapter(b); }
-    @Bean SquadContext ctx(LlmPort llm) { return SquadRunner.run(Main.class, llm); }
-    @Bean ApplicationRunner run(SquadContext ctx) {
-        return args -> System.out.println(ctx.submit("Plan the mission").content());
+    @SquadTool(description = "Search the web for information")
+    public String search(@ToolParam(description = "Search query") String query) {
+        return "Results for: " + query;
     }
 }
 ```
 
----
-
-## Full feature set — 15 annotations, 20 phases, 340 tests
-
-| Annotation | What it does | Since |
-|-----------|-------------|-------|
-| `@Agent` | Define an AI agent with role + personality prompt | v1.0 |
-| `@SquadPlan` | Typed structured output — no more raw strings | v2.1 |
-| `@SquadTool` | Agents that call real Java methods / APIs | v2.2 |
-| `@AwaitApproval` | Pause execution, wait for human approval | v2.3 |
-| `@AutoApproval` | Rule-based instant approval (no human needed) | v2.3 |
-| `@SquadVote` | Multi-agent consensus voting | v2.4 |
-| `@OnEvent` | Kafka / webhook / timer triggered agents | v2.5 |
-| `@Eval` | Self-evaluation quality gate, auto-retry | v2.6 |
-| `@AutoPlan` | Agentic plan-execute-reflect-replan loops | v2.7 |
-| `@Traced` | OpenTelemetry spans, token tracking, latency | v2.8 |
-| `@Improve` | Few-shot learning from human feedback | v2.9 |
-| `@SecureAgent` | RBAC + JWT — authenticated and public modes | v3.0 |
-| `@Delegate` | Dynamic agent routing at runtime | v3.1 |
-| `@Memory` | Four-tier memory: Working/Episodic/Semantic/Procedural | v1.2 |
-| `@OnMessage` | Agents message each other | v1.0 |
-
----
-
-## Feature examples
-
-### @SquadPlan — typed output
 ```java
-@SquadPlan(description = "Daily task prioritisation")
-public class DayPlan {
-    @Required public List<String> doToday;
-    public List<String> dropIt;
-    public String verdict;
+// In your ApplicationRunner:
+AgentResponse response = ctx.submitTo(AgentRole.ANALYST, "What is quantum computing?");
+System.out.println(response.content());
+```
+
+## The 15 Annotations
+
+| Annotation | Purpose |
+|-----------|---------|
+| `@Agent` | Declare an agent with role, name, description |
+| `@SquadApplication` | Mark the Spring Boot entry point |
+| `@PostConstruct` | Lifecycle hook — runs when agent boots |
+| `@OnMessage` | React to messages from other agents |
+| `@MissionProfile` | Activate agent for a named profile |
+| `@SquadPlan` | Typed structured output from LLM |
+| `@Required` | Mark a @SquadPlan field as mandatory |
+| `@SquadTool` | Expose a Java method as an LLM tool |
+| `@ToolParam` | Describe a tool parameter |
+| `@AwaitApproval` | Pause execution for human review |
+| `@AutoApproval` | Auto-approve based on a condition expression |
+| `@SquadVote` | Multi-agent consensus voting |
+| `@OnEvent` | Event-driven agent activation |
+| `@Eval` | Quality gate — auto-retry if score below threshold |
+| `@AutoPlan` | Agentic plan-execute-reflect-replan loop |
+| `@Traced` | Observability — record spans with token counts |
+| `@Improve` | Few-shot learning from human feedback |
+| `@SecureAgent` | RBAC + JWT access control |
+| `@Delegate` | Dynamic routing to specialist agents |
+
+## Typed Outputs with @SquadPlan
+
+```java
+@SquadPlan(description = "Payment fraud assessment")
+public class RiskAssessment {
+    @Required public String riskLevel;    // LOW / MEDIUM / HIGH / CRITICAL
+    @Required public String riskScore;    // "0.0" to "1.0"
+    public List<String>    riskFactors;
+    public String          recommendation; // APPROVE / REVIEW / BLOCK
 }
-DayPlan plan = ctx.submit("Plan my day:\n" + tasks, DayPlan.class);
+
+// Submit and get back a typed object:
+RiskAssessment result = ctx.submitTo(AgentRole.ANALYST, transactionContext, RiskAssessment.class);
+System.out.println(result.riskLevel);   // HIGH
+System.out.println(result.riskScore);   // 0.87
 ```
 
-### @SquadTool — real API calls
+## Multi-Agent Voting
+
 ```java
-@SquadTool(description = "Get current stock price")
-public String getStockPrice(@ToolParam(description = "Ticker") String ticker) {
-    return stockService.getPrice(ticker);
-}
+VoteCollector collector = new VoteCollector(
+    "fraud-verdict", VoteRule.MAJORITY, TieBreaker.ESCALATE, 3, 30);
+
+collector.submit(Vote.approve("Risk score clean", 1.0).withVoter("RiskAnalyst"), "RiskAnalyst");
+collector.submit(Vote.approve("Behaviour normal", 1.0).withVoter("BehaviourAgent"), "BehaviourAgent");
+collector.submit(Vote.reject("AML flag triggered", 1.0).withVoter("ComplianceAgent"), "ComplianceAgent");
+
+VoteResult result = collector.resolve();
+System.out.println(result.getOutcome()); // APPROVED (2-1)
 ```
 
-### @SquadVote — consensus
+## Human-in-the-Loop Approvals
+
 ```java
-VoteCollector collector = new VoteCollector("fraud-check",
-    VoteRule.UNANIMOUS, TieBreaker.ESCALATE, 3, 30);
-collector.submit(Vote.approve("Clean", 1.0).withVoter("RiskAgent"), "RiskAgent");
-collector.submit(Vote.reject("IP blocked", 1.0).withVoter("GeoAgent"), "GeoAgent");
-VoteResult result = collector.resolve(); // REJECTED
-```
-
-### @AwaitApproval + @AutoApproval
-```java
-@AutoApproval(condition = "amount < 10000 AND riskScore < 0.3")
-@AwaitApproval(reason = "Exceeds limit", escalateTo = "senior-underwriter")
-public LoanDecision underwriteLoan(LoanApplication app) { ... }
-```
-
-### @Eval — quality gate
-```java
-@Eval(judge = AgentRole.CRITIC, minScore = 0.8f, retryOnFail = true, maxRetries = 3)
-public String generateReport(String input) { ... }
-```
-
-### @AutoPlan — agentic loops
-```java
-@AutoPlan(goal = "Complete risk report with all sections",
-          maxIterations = 5, stopCondition = "COMPLETE")
-public String generateRiskReport(LoanApplication app) { return "## Report\n"; }
-```
-
-### @Improve — few-shot learning
-```java
-@Improve(label = "loan-underwriting", topK = 3, minExamples = 5)
-public LoanDecision underwriteLoan(LoanApplication app) { ... }
-
-// After human review — agent learns automatically:
-engine.saveFeedback(method, input, output, FeedbackExample.Label.GOOD, "Caught the fraud signal");
-```
-
-### @SecureAgent — RBAC + JWT
-```java
-// Authenticated — compliance team only
-@SecureAgent(roles = {"compliance"}, auditLog = true)
-public CustomerPII getCustomerData(String id) { ... }
-
-// Public — no auth needed
-@SecureAgent(mode = AccessMode.PUBLIC)
-public String getExchangeRates() { ... }
-
-// Wire identity from JWT:
-AgentIdentity identity = new JwtValidator().validate(token);
-SecurityContext.set(identity);
-```
-
-### @Delegate — dynamic routing
-```java
-// LLM picks the best specialist at runtime
-@Delegate(candidates = {AgentRole.ANALYST, AgentRole.RESEARCHER, AgentRole.EXECUTOR},
-          strategy = DelegateStrategy.LLM_CHOICE, fallback = AgentRole.STRATEGIST)
-public String routeTask(String input) { return input; }
-
-// Rule-based routing — no LLM call needed
-@Delegate(
-    candidates  = {AgentRole.ANALYST,  AgentRole.RESEARCHER,      AgentRole.EXECUTOR},
-    strategy    = DelegateStrategy.FIRST_MATCH,
-    conditions  = {"data OR analysis", "research OR investigate", "build OR execute"}
+@AutoApproval(condition = "riskScore < 0.3 AND velocity < 5")
+@AwaitApproval(
+    reason      = "High-risk transaction requires review",
+    timeoutHours = 4,
+    onTimeout   = TimeoutPolicy.REJECT,
+    escalateTo  = "senior-fraud-analyst",
+    priority    = ApprovalPriority.HIGH
 )
-public String ruleRoute(String input) { return input; }
+public PaymentDecision underwrite(String transactionContext) { ... }
 ```
 
-### @Traced — observability
+## Observability with @Traced
+
 ```java
 @Traced(spanName = "fraud-detection", trackTokens = true)
 public class FraudAgent { }
 
-SquadTracer.configure(new LogTraceExporter());      // stdout
-SquadTracer.configure(new InMemoryTraceExporter()); // testing
-// Plug in: JaegerTraceExporter, DatadogTraceExporter, GrafanaTraceExporter
+// Configure exporter — in-memory (development):
+SquadTracer.configure(new InMemoryTraceExporter());
+
+// Or Redis (production, shared across JVMs):
+SquadTracer.configure(new RedisTraceExporter("localhost", 6379));
 ```
 
-### Parallel execution (v1.1)
+## Security with @SecureAgent
+
 ```java
-SquadResult result = ctx.execute(
-    SquadTask.of(input)
-        .assignTo(AgentRole.STRATEGIST, AgentRole.ANALYST, AgentRole.SUPPORT)
-);
-System.out.println("Speedup: " + result.speedupRatio() + "x"); // ~2.3x
+@SecureAgent(roles = {"compliance"}, auditLog = true)
+public ComplianceReport check(String transaction) { ... }
+
+// Set JWT identity before calling:
+String token = JwtValidator.createTestToken("alice", "squados", expiry, "compliance");
+AgentIdentity id = new JwtValidator().validate(token);
+SecurityContext.set(id);
 ```
 
-### Multi-node via Redis (v2.0)
+## Redis Shared Trace Store
+
+For multi-JVM deployments — all squads write spans to the same Redis instance:
+
 ```java
-RedisAgentBus bus = new RedisAgentBus(jedisCommands, "my-squad");
-SquadRegistry registry = new SquadRegistry(redis, "my-squad", "node-a");
-registry.register(AgentRole.STRATEGIST, "Oracle");
-// Agents on separate JVMs discover each other via Redis
+// In every service that should share traces:
+RedisTraceExporter exp = new RedisTraceExporter("localhost", 6379);
+SquadTracer.configure(exp);
 ```
 
----
+```xml
+<!-- Add Jedis to pom.xml (only needed for Redis tracing) -->
+<dependency>
+  <groupId>redis.clients</groupId>
+  <artifactId>jedis</artifactId>
+  <version>5.1.0</version>
+</dependency>
+```
+
+Redis keys:
+- `squados:traces` — LIST of JSON AgentSpan records (newest first, max 500)
+- `squados:traces:tokens` — STRING cumulative token count (INCRBY)
+
+## Modules
+
+| Module | Description | Published |
+|--------|-------------|-----------|
+| `squad-core` | Framework core — zero runtime deps | ✅ Maven Central |
+| `squad-spring-boot-starter` | Zero-config Spring Boot auto-configuration | ✅ Maven Central |
+| `squad-dashboard` | React + Recharts live monitoring dashboard | Local only |
+| `squad-examples/fraud-detection` | All 15 annotations — payment fraud detection | Local only |
+| `squad-examples/snack-thief` | All 15 annotations — Karen stole the pizza 🍕 | Local only |
+| `squad-examples/daily-planner` | @SquadPlan typed output demo | Local only |
+| `squad-examples/multi-node` | Redis Pub/Sub multi-JVM demo | Local only |
 
 ## Examples
 
-| Example | Features used |
-|---------|--------------|
-| **Daily Planner** | 3 agents, @SquadPlan, pgvector memory |
-| **Code Review Squad** | Security + Quality + Suggestions, typed reports |
-| **Multi-node Demo** | Node A (Oracle) + Node B (Blitz + NurseBot) via Redis |
-| **Embedding Demo** | Mock vs real semantic similarity comparison |
-| **Snack Thief Squad** | All 15 annotations — office pizza crime investigation 🍕 |
-
----
-
-## Test suite
-
-```
-Phase 1-6   v1.0   Core framework                102/102 ✓
-Phase 7     v1.1   Parallel agents                 17/17  ✓
-Phase 8     v1.2   pgvector + Redis memory          17/17  ✓
-Phase 9     v2.0   Multi-node Redis Pub/Sub         17/17  ✓
-Phase 10    v2.1   @SquadPlan typed output          17/17  ✓
-Phase 11    v2.2   @SquadTool real API calls         17/17  ✓
-Phase 12    v2.3   @AwaitApproval + @AutoApproval   17/17  ✓
-Phase 13    v2.4   @SquadVote consensus             17/17  ✓
-Phase 14    v2.5   @OnEvent event-driven            17/17  ✓
-Phase 15    v2.6   @Eval quality gate               17/17  ✓
-Phase 16    v2.7   @AutoPlan agentic loops          17/17  ✓
-Phase 17    v2.8   @Traced observability            17/17  ✓
-Phase 18    v2.9   @Improve few-shot learning       17/17  ✓
-Phase 19    v3.0   @SecureAgent RBAC + JWT          17/17  ✓
-Phase 20    v3.1   @Delegate dynamic routing        17/17  ✓
-────────────────────────────────────────────────────────
-Total                                            340/340 ✓
-```
-
+### Fraud Detection Squad (all 15 annotations)
 ```bash
-mvn clean test  # run all 340 tests
-```
-
----
-
-## Prerequisites
-
-| Tool | Version | Notes |
-|------|---------|-------|
-| JDK  | 21+     | [adoptium.net](https://adoptium.net) |
-| Maven | 3.8+  | [maven.apache.org](https://maven.apache.org) |
-| Ollama | latest | [ollama.ai](https://ollama.ai) — local LLM, no API key |
-| Docker | latest | Optional — pgvector + Redis |
-
-```bash
-git clone https://github.com/sgpatel/squad-os
-cd squad-os
-mvn clean install -DskipTests
 ollama pull llama3.2
-cd squad-starter && mvn spring-boot:run
+cd squad-examples/fraud-detection
+mvn spring-boot:run
 ```
 
----
+5 specialist agents: GatewayAgent · RiskAnalyst · BehaviourAgent · ComplianceAgent · UnderwriterAgent
 
-## Architecture decisions
+**Scenario 1** (regular customer, known device):
+```
+[RiskAnalyst]  Risk Level: LOW  | Risk Score: 0.18
+[SquadVote]    APPROVED (3-0)
+[AutoApproval] riskScore 0.18 < 0.3 — AUTO-APPROVED
+```
 
-**Why not just use Spring AI or LangChain4j directly?**
-Both are excellent — SquadOS uses them under the hood.
-SquadOS adds the **team layer**: 15 annotations covering everything from
-role-typed agents to few-shot learning, security, and dynamic routing.
-Zero runtime dependencies in squad-core.
+**Scenario 2** (Tor IP, flagged customer, unverified merchant):
+```
+[RiskAnalyst]  Risk Level: CRITICAL | Risk Score: 1.0
+[SquadVote]    REJECTED (0-3)
+[AwaitApproval] ESCALATING to senior-fraud-analyst
+```
 
-**Why zero deps in squad-core?**
-No runtime dependencies. Spring AI adapters live in consumer modules.
-Use SquadOS with any LLM provider.
+### Snack Thief Squad 🍕
+```bash
+cd squad-examples/snack-thief
+mvn spring-boot:run
+# Verdict: Karen is guilty (4-1)
+```
 
-**Single-node vs multi-node — zero code change?**
-Yes. Swap `AgentMessageBus` for `RedisAgentBus` in one `@Bean`.
+### Live Dashboard
+```bash
+# Start Redis first:
+docker run -d -p 6379:6379 redis:7-alpine
 
----
+# Run fraud-detection (writes spans to Redis):
+cd squad-examples/fraud-detection && mvn spring-boot:run
 
-## Published to Maven Central
+# Run dashboard (reads from same Redis):
+cd squad-dashboard && mvn spring-boot:run
 
-| Version | Features |
-|---------|---------|
-| 1.2.0 | Core + parallel + pgvector |
-| 2.0.0 | + Multi-node Redis Pub/Sub |
-| 2.1.0 | + @SquadPlan typed output |
+# Open http://localhost:8080
+```
 
-## Roadmap
+Dashboard features: 7 tabs · 8 live charts · Agent health · Vote history · Approval queue · Audit log · Feedback store
 
-- [x] v1.0 — Core @Agent framework
-- [x] v1.1 — Parallel agents (2.3x speedup)
-- [x] v1.2 — pgvector persistent memory
-- [x] v2.0 — Multi-node Squads via Redis
-- [x] v2.1 — @SquadPlan structured output
-- [x] v2.2 — @SquadTool real API calls
-- [x] v2.3 — @AwaitApproval + @AutoApproval
-- [x] v2.4 — @SquadVote consensus
-- [x] v2.5 — @OnEvent Kafka/webhook triggers
-- [x] v2.6 — @Eval quality gate
-- [x] v2.7 — @AutoPlan agentic loops
-- [x] v2.8 — @Traced OpenTelemetry
-- [x] v2.9 — @Improve few-shot learning
-- [x] v3.0 — @SecureAgent RBAC + JWT
-- [x] v3.1 — @Delegate dynamic routing
-- [ ] v3.2 — Fraud Detection Squad (all 15 features end-to-end)
+## Spring Boot Starter — application.properties Reference
 
----
+```properties
+# Squad identity
+squad.name=my-squad
+
+# LLM (Ollama by default)
+squad.llm.provider=ollama
+squad.llm.model=llama3.2
+squad.llm.temperature=0.5
+squad.llm.max-tokens=2048
+
+# Tracing
+squad.tracing.enabled=true
+squad.tracing.exporter=memory        # log | memory | jaeger
+squad.tracing.jaeger-url=http://localhost:14268/api/traces
+
+# Security
+squad.security.enabled=false
+squad.security.jwt-issuer=squados
+squad.security.audit-log=true
+
+# Approvals
+squad.approval.enabled=true
+```
+
+## Version History
+
+| Version | Key Features |
+|---------|-------------|
+| 1.2.0 | Core framework, parallel agents, pgvector memory |
+| 2.0.0 | Multi-node Redis Pub/Sub |
+| 2.1.0 | @SquadPlan typed output |
+| 3.2.0 | All 15 annotations, 340 tests |
+| 3.3.0 | squad-spring-boot-starter, Fraud Detection + Snack Thief examples |
+| **3.4.0** | **RedisTraceExporter, real token tracking, React dashboard** |
+
+## Requirements
+
+- Java 21+
+- Maven 3.8+
+- Ollama (or any Spring AI-compatible LLM provider)
+- Redis (optional — only for RedisTraceExporter multi-JVM tracing)
 
 ## License
 
-Apache 2.0 · Built with SquadOS v3.1 · Java 21 · Spring AI 1.0 · Ollama · pgvector · Redis
+MIT — use freely in commercial projects.
+
+---
+
+Built with ☕ and too many LLM calls by [@sgpatel](https://github.com/sgpatel)
