@@ -6,6 +6,7 @@ import io.squados.approval.InProcessApprovalStore;
 import io.squados.context.SquadContext;
 import io.squados.security.AuditLog;
 import io.squados.trace.AgentSpan;
+import io.squados.trace.RedisTraceExporter;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

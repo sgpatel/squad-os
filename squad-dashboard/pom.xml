@@ -7,7 +7,7 @@
   <parent>
     <groupId>io.github.sgpatel</groupId>
     <artifactId>squad-os</artifactId>
-    <version>3.3.0</version>
+    <version>3.4.0</version>
   </parent>
   <artifactId>squad-dashboard</artifactId>
   <name>SquadOS Dashboard</name>
@@ -41,6 +41,11 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>redis.clients</groupId>
+      <artifactId>jedis</artifactId>
+      <version>5.1.0</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.ai</groupId>

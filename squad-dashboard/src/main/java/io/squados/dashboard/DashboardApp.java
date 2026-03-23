@@ -4,7 +4,7 @@ import io.squados.annotation.Agent;
 import io.squados.annotation.AgentRole;
 import io.squados.annotation.PostConstruct;
 import io.squados.annotation.SquadApplication;
-import io.squados.trace.InMemoryTraceExporter;
+import io.squados.trace.RedisTraceExporter;
 import io.squados.trace.SquadTracer;
 import io.squados.approval.InProcessApprovalStore;
 import io.squados.improve.InProcessFeedbackStore;
@@ -30,9 +30,11 @@ import org.springframework.context.annotation.Bean;
 @SquadApplication
 public class DashboardApp {
 
-    @Bean public InMemoryTraceExporter traceExporter() {
-        InMemoryTraceExporter exp = new InMemoryTraceExporter();
-        SquadTracer.configure(exp);
+    @Bean public io.squados.trace.RedisTraceExporter traceExporter() {
+        String host = System.getProperty("redis.host", "localhost");
+        int port = Integer.parseInt(System.getProperty("redis.port", "6379"));
+        io.squados.trace.RedisTraceExporter exp = new io.squados.trace.RedisTraceExporter(host, port);
+        io.squados.trace.SquadTracer.configure(exp);
         return exp;
     }
     @Bean public InProcessApprovalStore approvalStore() { return new InProcessApprovalStore(); }

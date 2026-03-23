@@ -37,8 +37,10 @@ public class FraudDetectionApp {
         return SquadRunner.run(FraudDetectionApp.class, tracker);
     }
 
-    @Bean public InMemoryTraceExporter traceExporter() {
-        InMemoryTraceExporter exp = new InMemoryTraceExporter();
+    @Bean public io.squados.trace.RedisTraceExporter traceExporter() {
+        io.squados.trace.RedisTraceExporter exp = new io.squados.trace.RedisTraceExporter(
+            System.getProperty("redis.host", "localhost"),
+            Integer.parseInt(System.getProperty("redis.port", "6379")));
         SquadTracer.configure(exp);
         return exp;
     }
@@ -50,7 +52,7 @@ public class FraudDetectionApp {
     @Bean
     public ApplicationRunner runner(SquadContext ctx,
                                     TokenTrackingLlmPort tracker,
-                                    InMemoryTraceExporter tracer,
+                                    io.squados.trace.RedisTraceExporter tracer,
                                     InProcessEventBus eventBus,
                                     InProcessFeedbackStore feedbackStore) {
         return args -> {
@@ -67,7 +69,7 @@ public class FraudDetectionApp {
 
     private void runScenario(SquadContext ctx,
                               TokenTrackingLlmPort tracker,
-                              InMemoryTraceExporter tracer,
+                              io.squados.trace.RedisTraceExporter tracer,
                               InProcessEventBus eventBus,
                               InProcessFeedbackStore feedbackStore,
                               String customerId, String amount, String country,
