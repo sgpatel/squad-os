@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>io.github.sgpatel.sentinel</groupId>
+  <artifactId>sentinel-ai</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <name>SentinelAI — Social Media Mention Analyser</name>
+  <description>Enterprise-grade AI-powered social media mention analyser with SquadOS agents.</description>
+  <properties>
+    <java.version>21</java.version>
+    <maven.compiler.source>21</maven.compiler.source>
+    <maven.compiler.target>21</maven.compiler.target>
+    <spring-boot.version>3.3.0</spring-boot.version>
+    <spring-ai.version>1.0.0</spring-ai.version>
+    <squados.version>3.4.0</squados.version>
+  </properties>
+  <modules>
+    <module>sentinel-shared</module>
+    <module>sentinel-backend</module>
+  </modules>
+</project>

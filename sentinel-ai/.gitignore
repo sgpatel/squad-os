@@ -1,0 +1,26 @@
+# Maven builds
+**/target/
+
+# Node modules
+**/node_modules/
+
+# Build outputs
+**/dist/
+**/build/
+
+# IDE
+.idea/
+**/*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+**/*.log
+**/logs/
+
+# Env secrets
+**/.env.local
+**/.env.*.local

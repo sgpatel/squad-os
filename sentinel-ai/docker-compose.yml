@@ -1,0 +1,41 @@
+version: "3.9"
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    volumes: [redis-data:/data]
+    command: redis-server --save 60 1
+
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollama-data:/root/.ollama]
+    environment:
+      - OLLAMA_ORIGINS=*
+
+  backend:
+    build:
+      context: ./sentinel-backend
+      dockerfile: Dockerfile
+    ports: ["8090:8090"]
+    depends_on: [redis, ollama]
+    environment:
+      - SPRING_AI_OLLAMA_BASE_URL=http://ollama:11434
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./sentinel-backend/src:/app/src
+
+  frontend:
+    build:
+      context: ./sentinel-frontend
+      dockerfile: Dockerfile
+    ports: ["3000:3000"]
+    depends_on: [backend]
+    environment:
+      - VITE_API_URL=http://localhost:8090
+      - VITE_WS_URL=ws://localhost:8090/ws/mentions
+
+volumes:
+  redis-data:
+  ollama-data:

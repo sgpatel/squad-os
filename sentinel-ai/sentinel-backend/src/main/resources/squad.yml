@@ -1,0 +1,14 @@
+squad:
+  name: sentinel-squad
+  profile: work
+  llm:
+    provider: ollama
+    model: llama3.2
+  agents:
+    - class: io.sentinel.backend.agents.MonitorAgent
+    - class: io.sentinel.backend.agents.SentimentAgent
+    - class: io.sentinel.backend.agents.TrendAgent
+    - class: io.sentinel.backend.agents.ReplyAgent
+    - class: io.sentinel.backend.agents.TicketAgent
+    - class: io.sentinel.backend.agents.EscalationAgent
+    - class: io.sentinel.backend.agents.ComplianceAgent
