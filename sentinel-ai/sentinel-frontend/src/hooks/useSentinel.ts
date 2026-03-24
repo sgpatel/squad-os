@@ -45,27 +45,35 @@ export function useMentions(limit = 50, sentiment?: string) {
 }
 
 // ── WebSocket live feed (no auth — WS uses same CORS config) ─────
-export function useLiveMentions() {
-  const [mentions, setMentions] = useState<Mention[]>([]);
+// useLiveEvents — returns only real-time WebSocket events (NEW/PROCESSED)
+// App merges these with the polled list to avoid replacing history
+export function useLiveEvents() {
+  const [events, setEvents] = useState<{type:string; data:Mention}[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   useEffect(() => {
     const connect = () => {
       const ws = new WebSocket(WS);
       wsRef.current = ws;
       ws.onmessage = (e) => {
-        const { type, data } = JSON.parse(e.data);
-        if (type === "mention.processed" || type === "mention.new") {
-          setMentions(prev =>
-            [data, ...prev.filter(m => m.id !== data.id)].slice(0, 100));
-        }
+        try {
+          const event = JSON.parse(e.data);
+          if (event.type === "mention.processed" || event.type === "mention.new") {
+            setEvents(prev => [event, ...prev].slice(0, 20));
+          }
+        } catch {}
       };
       ws.onclose = () => setTimeout(connect, 3000);
-      ws.onerror = () => ws.close();
+      ws.onerror  = () => ws.close();
     };
     connect();
     return () => wsRef.current?.close();
   }, []);
-  return mentions;
+  return events;
+}
+// Keep old name as alias for backward compat
+export function useLiveMentions() {
+  const events = useLiveEvents();
+  return events.map(e => e.data);
 }
 
 // ── Analytics hooks ───────────────────────────────────────────────

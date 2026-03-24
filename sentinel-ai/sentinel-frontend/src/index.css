@@ -1,14 +1,14 @@
 :root{--bg:#080b0f;--bg2:#0d1117;--bg3:#141b22;--border:#1e293b;
   --green:#22c55e;--blue:#3b82f6;--purple:#a855f7;--orange:#f97316;
   --red:#ef4444;--teal:#14b8a6;--yellow:#eab308;--pink:#ec4899;
-  --text:#e2e8f0;--muted:#475569;--dim:#334155}
+  --text:#e2e8f0;--muted:#475569}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:13px}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:2px}
+input,textarea,button{font-family:inherit}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-.fade-up{animation:fadeUp .25s ease forwards}
-.slide-in{animation:slideIn .3s ease forwards}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}

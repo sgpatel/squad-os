@@ -22,7 +22,7 @@ public class MentionEntity {
     public String  urgency;
     public String  topic;
     @Column(length = 500) public String summary;
-    public String  priority;
+    @Column(length = 20) public String priority;
     public String  escalationPath;
     public String  assignedTeam;
     public String  ticketId;
