@@ -23,6 +23,9 @@ const EMOTION_ICON: Record<string,string> = {
   FRUSTRATION:"😤", ANGER:"😡", SADNESS:"😢", JOY:"😊",
   SURPRISE:"😮", FEAR:"😰", NEUTRAL:"😐", SARCASM:"🙃"
 };
+const PLATFORM_ICON: Record<string,string> = {
+  TWITTER:"🐦", FACEBOOK:"📘", INSTAGRAM:"📷", LINKEDIN:"💼"
+};
 
 // ── Shared UI helpers ─────────────────────────────────────────────
 function Badge({ label, color }:{ label:string; color:string }) {
@@ -96,7 +99,7 @@ function MentionCard({ m, onDone, isNew, focused }:
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4,flexWrap:"wrap" as const}}>
-          {isNew&&<span style={{background:C.blue+"22",color:C.blue,borderRadius:4,padding:"1px 6px",fontSize:9,fontWeight:700}}>NEW</span>}
+          <span style={{fontSize:12}}>{PLATFORM_ICON[m.platform]||"📱"}</span>
           <span style={{color:"var(--text2)",fontSize:11,fontWeight:600}}>@{m.authorUsername}</span>
           <span style={{color:"var(--dim)",fontSize:9}}>{fmtFollowers(m.authorFollowers)} followers</span>
           {m.isViral&&<Badge label="🔥 VIRAL" color={C.orange}/>}
@@ -263,6 +266,7 @@ export default function App() {
   const [testText, setTestText]     = useState("");
   const [testAuthor, setTestAuthor] = useState("test_user");
   const [testFoll, setTestFoll]     = useState("500");
+  const [testPlatform, setTestPlatform] = useState("TWITTER");
   const [submitting, setSubmitting] = useState(false);
   const { toasts, add: addToast, remove: removeToast } = useToast();
 
@@ -334,7 +338,7 @@ export default function App() {
   const doTest = async() => {
     if(!testText.trim()) return;
     setSubmitting(true);
-    await ingestMention(testText, testAuthor, parseInt(testFoll)||500);
+    await ingestMention(testText, testAuthor, parseInt(testFoll)||500, testPlatform);
     setTestText(""); setSubmitting(false);
     addToast({type:"info",title:"Submitted",message:"AI pipeline is analysing your mention..."});
     setTimeout(refetchMentions, 5000);
@@ -658,7 +662,18 @@ export default function App() {
                   style={{width:"100%",background:"var(--bg)",border:"1px solid var(--border)",color:"var(--text)",
                     padding:"10px 12px",borderRadius:8,fontSize:12,resize:"vertical",minHeight:80,outline:"none"}}/>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:16}}>
+                <div>
+                  <label style={{display:"block",color:"var(--muted)",fontSize:11,marginBottom:6}}>PLATFORM</label>
+                  <select value={testPlatform} onChange={e=>setTestPlatform(e.target.value)}
+                    style={{width:"100%",background:"var(--bg)",border:"1px solid var(--border)",
+                      color:"var(--text)",padding:"8px 12px",borderRadius:8,fontSize:12,outline:"none"}}>
+                    <option value="TWITTER">🐦 Twitter</option>
+                    <option value="FACEBOOK">📘 Facebook</option>
+                    <option value="INSTAGRAM">📷 Instagram</option>
+                    <option value="LINKEDIN">💼 LinkedIn</option>
+                  </select>
+                </div>
                 <div>
                   <label style={{display:"block",color:"var(--muted)",fontSize:11,marginBottom:6}}>AUTHOR</label>
                   <input value={testAuthor} onChange={e=>setTestAuthor(e.target.value)}
@@ -705,3 +720,4 @@ export default function App() {
     <Toast toasts={toasts} onRemove={removeToast}/>
   </div>;
 }
+

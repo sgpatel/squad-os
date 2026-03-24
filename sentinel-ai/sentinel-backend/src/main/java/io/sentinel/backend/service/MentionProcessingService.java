@@ -40,10 +40,12 @@ public class MentionProcessingService {
         mention.updatedAt = Instant.now();
         repo.save(mention);
         ws.broadcast("mention.new", mention);
+        System.out.println("[MentionService] Processing mention: " + mention.id + " from " + mention.platform);
 
         try {
             long start = System.currentTimeMillis();
             String mentionCtx = buildContext(mention);
+            System.out.println("[MentionService] Starting sentiment analysis for: " + mention.id);
 
             // Step 1 — Sentiment analysis
             SentimentAgent.SentimentAnalysis sentiment = ctx.submitTo(
@@ -51,9 +53,11 @@ public class MentionProcessingService {
                 "Analyse the sentiment of this social media mention:\n" + mentionCtx +
                 "\nReturn ONLY valid JSON. No preamble.",
                 SentimentAgent.SentimentAnalysis.class);
+            System.out.println("[MentionService] Sentiment analysis completed. Sentiment: " + (sentiment != null ? sentiment.sentiment : "null"));
             applySentiment(mention, sentiment);
 
             // Step 2 — Escalation priority
+            System.out.println("[MentionService] Starting escalation analysis for: " + mention.id);
             EscalationAgent.EscalationDecision escalation = ctx.submitTo(
                 AgentRole.CRITIC,
                 "Determine escalation for:\n" + mentionCtx +
@@ -62,31 +66,45 @@ public class MentionProcessingService {
                 ", Followers: " + mention.authorFollowers +
                 "\nReturn ONLY valid JSON.",
                 EscalationAgent.EscalationDecision.class);
+            System.out.println("[MentionService] Escalation analysis completed. Priority: " + (escalation != null ? escalation.priority : "null"));
             applyEscalation(mention, escalation);
 
             // Step 3 — Generate reply (all sentiments)
             if (autoReplyEnabled) {
-                ReplyAgent.GeneratedReply reply = ctx.submitTo(
-                    AgentRole.SUPPORT,
-                    "Generate a reply for this " + mention.sentimentLabel + " mention:\n" +
-                    mentionCtx + "\nBrand: " + brandName +
-                    ", Priority: " + mention.priority +
-                    "\nReturn ONLY valid JSON.",
-                    ReplyAgent.GeneratedReply.class);
+                try {
+                    ReplyAgent.GeneratedReply reply = ctx.submitTo(
+                        AgentRole.SUPPORT,
+                        "Generate a reply for this " + mention.sentimentLabel + " mention:\n" +
+                        mentionCtx + "\nBrand: " + brandName +
+                        ", Priority: " + mention.priority +
+                        "\nReturn ONLY valid JSON.",
+                        ReplyAgent.GeneratedReply.class);
 
-                // Step 3b — Compliance check
-                ComplianceAgent.ComplianceReview compliance = ctx.submitTo(
-                    AgentRole.CRITIC,
-                    "Review this reply for brand compliance:\n" +
-                    "Mention: " + mention.text + "\nProposed reply: " +
-                    (reply.replyText != null ? reply.replyText : "") +
-                    "\nReturn ONLY valid JSON.",
-                    ComplianceAgent.ComplianceReview.class);
+                    if (reply != null && reply.replyText != null) {
+                        // Step 3b — Compliance check
+                        try {
+                            ComplianceAgent.ComplianceReview compliance = ctx.submitTo(
+                                AgentRole.CRITIC,
+                                "Review this reply for brand compliance:\n" +
+                                "Mention: " + mention.text + "\nProposed reply: " +
+                                reply.replyText +
+                                "\nReturn ONLY valid JSON.",
+                                ComplianceAgent.ComplianceReview.class);
 
-                mention.replyText = "true".equalsIgnoreCase(compliance.approved)
-                    ? reply.replyText
-                    : (compliance.revisedReply != null ? compliance.revisedReply : reply.replyText);
-                mention.replyStatus = "PENDING";
+                            mention.replyText = (compliance != null && "true".equalsIgnoreCase(compliance.approved))
+                                ? reply.replyText
+                                : (compliance != null && compliance.revisedReply != null ? compliance.revisedReply : reply.replyText);
+                            mention.replyStatus = "PENDING";
+                        } catch (Exception ce) {
+                            System.err.println("[MentionService] Compliance check failed: " + ce.getMessage());
+                            mention.replyText = reply.replyText;
+                            mention.replyStatus = "PENDING";
+                        }
+                    }
+                } catch (Exception re) {
+                    System.err.println("[MentionService] Reply generation failed: " + re.getMessage());
+                    // Continue without reply
+                }
             }
 
             // Step 4 — Create ticket for NEGATIVE / P1 / P2
@@ -101,11 +119,13 @@ public class MentionProcessingService {
                     "\nReturn ONLY valid JSON.",
                     TicketAgent.TicketPayload.class);
 
-                String ticketId = ticketFactory.get().createTicket(mention, tp);
-                if (ticketId != null) {
-                    mention.ticketId     = ticketId;
-                    mention.ticketSystem = ticketFactory.get().getName();
-                    mention.ticketStatus = "OPEN";
+                if (tp != null) {
+                    String ticketId = ticketFactory.get().createTicket(mention, tp);
+                    if (ticketId != null) {
+                        mention.ticketId     = ticketId;
+                        mention.ticketSystem = ticketFactory.get().getName();
+                        mention.ticketStatus = "OPEN";
+                    }
                 }
             }
 
@@ -132,6 +152,15 @@ public class MentionProcessingService {
             repo.save(mention);
             ws.broadcast("mention.error", mention);
             System.err.println("[MentionService] Error processing " + mention.id + ": " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            // Ensure status is updated to DONE if still ANALYSING
+            if ("ANALYSING".equals(mention.processingStatus)) {
+                mention.processingStatus = "DONE";
+                mention.updatedAt = Instant.now();
+                repo.save(mention);
+                ws.broadcast("mention.processed", mention);
+            }
         }
         return mention;
     }
@@ -145,22 +174,42 @@ public class MentionProcessingService {
     }
 
     private void applySentiment(MentionEntity m, SentimentAgent.SentimentAnalysis s) {
-        m.sentimentLabel = s.sentiment;
-        try { m.sentimentScore = Double.parseDouble(s.score); } catch (Exception ignored) {}
-        m.primaryEmotion = s.primaryEmotion;
-        m.urgency        = s.urgency;
-        m.topic          = s.topic;
-        m.summary        = s.summary;
-        m.assignedTeam   = s.suggestedTeam;
+        if (s == null) {
+            // Fallback when AI model is unavailable
+            m.sentimentLabel = "NEUTRAL";
+            m.sentimentScore = 0.5;
+            m.primaryEmotion = "NEUTRAL";
+            m.urgency = "MEDIUM";
+            m.topic = "GENERAL_COMPLAINT";
+            m.summary = "Pending analysis";
+            m.assignedTeam = "CUSTOMER_CARE";
+            m.urgencyScore = 50;
+            return;
+        }
+        m.sentimentLabel = s.sentiment != null ? s.sentiment : "NEUTRAL";
+        try { m.sentimentScore = Double.parseDouble(s.score != null ? s.score : "0.5"); } catch (Exception ignored) {}
+        m.primaryEmotion = s.primaryEmotion != null ? s.primaryEmotion : "NEUTRAL";
+        m.urgency        = s.urgency != null ? s.urgency : "MEDIUM";
+        m.topic          = s.topic != null ? s.topic : "GENERAL_COMPLAINT";
+        m.summary        = s.summary != null ? s.summary : "No summary available";
+        m.assignedTeam   = s.suggestedTeam != null ? s.suggestedTeam : "CUSTOMER_CARE";
         m.urgencyScore   = "CRITICAL".equals(s.urgency) ? 95 :
                            "HIGH".equals(s.urgency)     ? 75 :
                            "MEDIUM".equals(s.urgency)   ? 50 : 25;
     }
 
     private void applyEscalation(MentionEntity m, EscalationAgent.EscalationDecision e) {
+        if (e == null) {
+            // Fallback when AI model is unavailable
+            m.priority = "P3";
+            m.assignedTeam = m.assignedTeam != null ? m.assignedTeam : "CUSTOMER_CARE";
+            m.isViral = false;
+            m.viralRiskScore = 20;
+            return;
+        }
         // Normalize LLM output to P1/P2/P3/P4 regardless of what the model returns
         m.priority = normalizePriority(e.priority);
-        m.assignedTeam  = e.escalationPath;
+        m.assignedTeam  = e.escalationPath != null ? e.escalationPath : m.assignedTeam;
         m.isViral       = "true".equalsIgnoreCase(e.isViralRisk);
         m.viralRiskScore = m.isViral ? 80 : 20;
     }
