@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useAuth } from "./auth/AuthContext";
+import { LoginPage } from "./auth/LoginPage";
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { useMentions, useLiveMentions, useAnalytics, useTrend,
@@ -222,7 +224,10 @@ function StatCard({ label, value, color, sub, icon }:
 
 // ── Main App ──────────────────────────────────────────────────────
 export default function App() {
-  const [tab, setTab] = useState("overview");
+  const { user, logout, isAdmin } = useAuth();
+    // Auth guard — show login page if not authenticated
+    if (!user) return <LoginPage />;
+    const [tab, setTab] = useState("overview");
   const [testText, setTestText] = useState("");
   const [testAuthor, setTestAuthor] = useState("test_user");
   const [testFollowers, setTestFollowers] = useState("500");
@@ -299,7 +304,32 @@ export default function App() {
             </button>
           ))}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6,
+            background: "#0d1424", border: "1px solid #1e293b",
+            borderRadius: 8, padding: "5px 10px" }}>
+            <div style={{ width: 24, height: 24, borderRadius: "50%",
+              background: "linear-gradient(135deg,#3b82f6,#2563eb)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 11, fontWeight: 700, color: "white" }}>
+              {user.username[0].toUpperCase()}
+            </div>
+            <div>
+              <div style={{ color: "#f1f5f9", fontSize: 11, fontWeight: 600 }}>
+                {user.fullName || user.username}
+              </div>
+              <div style={{ color: "#334155", fontSize: 9 }}>{user.role}</div>
+            </div>
+          </div>
+          <button onClick={logout} style={{
+            background: "none", border: "1px solid #1e293b",
+            color: "#475569", padding: "5px 12px", borderRadius: 7,
+            cursor: "pointer", fontSize: 11, fontFamily: "Inter",
+            transition: "all .2s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#ef4444"; e.currentTarget.style.color = "#ef4444"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#475569"; }}>
+            Sign Out
+          </button>
           <LiveDot />
           <span style={{ color: "#22c55e", fontSize: 11 }}>LIVE</span>
           <span style={{ color: "#334155", fontSize: 11 }}>
