@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS mentions (
     urgency            VARCHAR(20),
     topic              VARCHAR(100),
     summary            VARCHAR(500),
-    priority           VARCHAR(5),
+    priority           VARCHAR(20),
     escalation_path    VARCHAR(100),
     assigned_team      VARCHAR(100),
     ticket_id          VARCHAR(100),
