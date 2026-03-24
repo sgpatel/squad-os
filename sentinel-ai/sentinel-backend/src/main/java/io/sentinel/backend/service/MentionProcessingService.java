@@ -158,9 +158,21 @@ public class MentionProcessingService {
     }
 
     private void applyEscalation(MentionEntity m, EscalationAgent.EscalationDecision e) {
-        m.priority      = e.priority;
+        // Normalize LLM output to P1/P2/P3/P4 regardless of what the model returns
+        m.priority = normalizePriority(e.priority);
         m.assignedTeam  = e.escalationPath;
         m.isViral       = "true".equalsIgnoreCase(e.isViralRisk);
         m.viralRiskScore = m.isViral ? 80 : 20;
+    }
+
+    private String normalizePriority(String raw) {
+        if (raw == null) return "P3";
+        return switch (raw.toUpperCase().trim()) {
+            case "P1", "CRITICAL", "URGENT"  -> "P1";
+            case "P2", "HIGH"                -> "P2";
+            case "P3", "MEDIUM", "NORMAL"    -> "P3";
+            case "P4", "LOW"                 -> "P4";
+            default -> raw.startsWith("P") && raw.length() == 2 ? raw : "P3";
+        };
     }
 }
