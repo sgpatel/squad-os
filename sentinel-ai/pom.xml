@@ -17,6 +17,27 @@
     <spring-ai.version>1.0.0</spring-ai.version>
     <squados.version>3.4.0</squados.version>
   </properties>
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-deploy-plugin</artifactId>
+          <version>3.1.2</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.13.0</version>
+          <configuration>
+            <source>21</source>
+            <target>21</target>
+            <release>21</release>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
   <modules>
     <module>sentinel-shared</module>
     <module>sentinel-backend</module>

@@ -1,6 +1,6 @@
 package io.sentinel.backend;
-
 import io.sentinel.backend.adapter.SpringAiLlmAdapter;
+import io.sentinel.backend.ingestion.TwitterMentionIngestionService;
 import io.sentinel.backend.websocket.MentionWebSocketHandler;
 import io.squados.annotation.SquadApplication;
 import io.squados.approval.InProcessApprovalStore;
@@ -11,6 +11,7 @@ import io.squados.llm.LlmPort;
 import io.squados.trace.InMemoryTraceExporter;
 import io.squados.trace.SquadTracer;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -40,22 +41,19 @@ public class SentinelApp implements WebSocketConfigurer {
     @Bean public LlmPort llmPort(ChatClient.Builder builder) {
         return new SpringAiLlmAdapter(builder);
     }
-
     @Bean public SquadContext squadContext(LlmPort llmPort) {
         return SquadRunner.run(SentinelApp.class, llmPort);
     }
-
     @Bean public InMemoryTraceExporter traceExporter() {
         InMemoryTraceExporter exp = new InMemoryTraceExporter();
-        SquadTracer.configure(exp);
-        return exp;
+        SquadTracer.configure(exp); return exp;
     }
+    @Bean public InProcessApprovalStore approvalStore() { return new InProcessApprovalStore(); }
+    @Bean public InProcessFeedbackStore feedbackStore() { return new InProcessFeedbackStore(); }
 
-    @Bean public InProcessApprovalStore approvalStore() {
-        return new InProcessApprovalStore();
-    }
-
-    @Bean public InProcessFeedbackStore feedbackStore() {
-        return new InProcessFeedbackStore();
+    // Start Twitter ingestion on startup if enabled
+    @Bean
+    public ApplicationRunner twitterStartup(TwitterMentionIngestionService twitter) {
+        return args -> twitter.start();
     }
 }

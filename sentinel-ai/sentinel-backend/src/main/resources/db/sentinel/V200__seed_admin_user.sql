@@ -1,0 +1,4 @@
+-- Admin user is created programmatically by DataInitializer.java on startup
+-- using BCryptPasswordEncoder to ensure hash correctness.
+-- Default credentials: admin / Admin@123
+-- See: io.sentinel.backend.security.DataInitializer
