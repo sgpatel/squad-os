@@ -23,7 +23,16 @@ import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
-@SpringBootApplication
+@SpringBootApplication(exclude = {
+    org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration.class,
+    org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration.class,
+    org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration.class,
+    org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration.class,
+    org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration.class,
+    org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration.class,
+    org.springframework.ai.model.anthropic.autoconfigure.AnthropicChatAutoConfiguration.class,
+    org.springframework.ai.model.vertexai.autoconfigure.gemini.VertexAiGeminiChatAutoConfiguration.class
+})
 @SquadApplication
 @EnableScheduling
 @EnableWebSocket
