@@ -29,7 +29,7 @@ public class TicketAgent {
     public static class TicketPayload {
         @Required public String title;
         @Required public String description;
-        @Required public String category;
+        public String category;
         @Required public String priority;
         public java.util.List<String> tags;
         public String suggestedResolution;

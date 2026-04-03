@@ -31,11 +31,11 @@ public class SentimentAgent {
     @SquadPlan(description = "Structured sentiment analysis result")
     public static class SentimentAnalysis {
         @Required public String sentiment;
-        @Required public String score;
-        @Required public String primaryEmotion;
-        @Required public String urgency;
-        @Required public String topic;
-        @Required public String summary;
+        public String score;
+        public String primaryEmotion;
+        public String urgency;
+        public String topic;
+        public String summary;
         public java.util.List<String> keywords;
         public String requiresHumanReview;
         public String suggestedTeam;

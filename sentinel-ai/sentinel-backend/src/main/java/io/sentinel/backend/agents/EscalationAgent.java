@@ -25,8 +25,8 @@ public class EscalationAgent {
     @SquadPlan(description = "Escalation decision")
     public static class EscalationDecision {
         @Required public String priority;
-        @Required public String escalationPath;
-        @Required public String slaHours;
+        public String escalationPath;
+        public String slaHours;
         public String isViralRisk;
         public String requiresImmediateAction;
         public String reason;
