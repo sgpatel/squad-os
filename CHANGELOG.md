@@ -1,3 +1,79 @@
+## v3.7.0 (2026-04-11) — Streaming, Guardrails, Durable Workflows, Pipeline Orchestration
+### Added
+- **LLM Streaming** — token-by-token output via `@Streaming` annotation
+  - `StreamToken` record + `TokenWriter` SPI (`StdoutTokenWriter`, `LoggerTokenWriter`, `NoOpTokenWriter`)
+  - `LlmPort.chatStream()` default implementation; `MockLlmPort` splits responses into chunks
+  - `SquadContext.submitStream()` — SSE-ready streaming submissions
+- **Guardrail Engine** — pluggable safety + compliance filter pipeline via `@Guardrails`
+  - 8 built-in filters: `PiiDetector`, `PromptInjectionDetector`, `ToxicityFilter`, `HallucinationDetector`,
+    `GroundingFilter`, `SensitiveTopicFilter`, `RegulatoryComplianceFilter`, `ConfidentialDataFilter`
+  - 3 actions: `LOG_ONLY`, `REDACT`, `BLOCK_AND_LOG`
+  - `GuardrailAuditLog` — thread-safe violation history; `GuardrailException` (not retried)
+- **Durable Workflow Engine** — checkpoint-based workflows surviving JVM restarts via `@DurableAgent`
+  - `WorkflowState` state machine: PENDING → RUNNING → PAUSED → COMPLETED/FAILED
+  - `DurableStore` SPI: `InProcessDurableStore` + `RedisDurableStore` (raw RESP, zero deps)
+  - `DurableEngine` — idempotent submit (COMPLETED workflows return cached result)
+  - `SquadContext.submitDurable()`, `pauseWorkflow()`, `resumeWorkflow()`, `getWorkflowState()`
+- **Retry Engine** — exponential backoff via `@Retry`
+  - Configurable: maxAttempts, backoffMs, multiplier, maxBackoffMs
+  - Non-retryable: `RateLimitExceededException`, `GuardrailException`, `AgentSecurityException`
+  - `RetryExhaustedException` carries agentName, attempts, totalElapsedMs
+- **Pipeline Orchestration** — sequential multi-agent workflows via `@Pipeline` + `@Step`
+  - `ConditionEvaluator` — `contains`, `startsWith`, `endsWith`, `matches`, `isEmpty`, `success`, `failure` + `||`/`&&`
+  - `PipelineResult` — per-step `AgentResponse` map, `finalOutput()`, `skippedSteps()`, `totalTokens()`
+  - `SquadContext.submitPipeline()` — discovers `@Pipeline` on agent class automatically
+- **Rate Limiting** — sliding-window enforcement via `@RateLimit`
+  - Per-agent calls/minute + tokens/hour tracking (ConcurrentHashMap, zero deps)
+  - `RateLimitExceededException` — not retried by RetryEngine
+- **Conversation History** — multi-turn sessions via `ConversationStore`
+  - `InProcessConversationStore` — ConcurrentHashMap per session, configurable `maxTurns`
+  - `LlmPort.chatWithHistory()` — full conversation-aware LLM calls
+- **MCP Tool Integration** — Model Context Protocol server support via `@McpServer`
+  - `McpToolProvider` SPI + `McpToolDefinition` record
+  - `HttpMcpClient` — HTTP discovery + invocation (no external deps)
+  - MCP tool list auto-injected into agent system prompt
+- **Remote Squad Invocation** — cross-JVM agent calls via `@RemoteSquad`
+  - `SquadClient` — HTTP client: `submit()`, `submitTo()`, `stream()`, `info()`, `health()`
+  - `AgentAuthProvider` SPI: `ApiKeyAuth`, `JwtAuth`, `NoAuth`
+  - `RemoteSquadInvoker.inject()` — standalone field injection (squad-core)
+  - `RemoteSquadInjector` — Spring `BeanPostProcessor` for automatic injection (starter)
+- **Agent HTTP API** — expose agents as REST endpoints via `@AgentAPI`
+  - `AgentApiController` — POST submit, POST submit/{role}, POST submit/stream (SSE), GET info, GET health
+  - `AgentApiRegistrar` — scans registry, registers routes via `RequestMappingHandlerMapping`
+  - Virtual thread per SSE stream (Java 21)
+- **New Annotations**: `@Streaming`, `@Guardrails`, `@DurableAgent`, `@Retry`, `@Pipeline`, `@Step`,
+  `@Condition`, `@RateLimit`, `@McpServer`, `@RemoteSquad`, `@AgentAPI`
+- **Gap Annotations** (defined, engines deferred): `@Timeout`, `@Cache`, `@Observe`, `@PromptTemplate`, `@AgentPool`, `@AgentTest`, `@Checkpoint`
+- **New Exceptions**: `RateLimitExceededException`, `GuardrailException`, `RetryExhaustedException`,
+  `DurableWorkflowException`, `AgentTimeoutException`
+- **squad-spring-boot-starter** new beans:
+  - `GuardrailEngine` (squad.guardrails.enabled=true)
+  - `DurableStore` (squad.durable.enabled=true, store=memory|redis)
+  - `ConversationStore` (squad.conversation.enabled=true)
+  - `McpToolProvider` / `HttpMcpClient` (squad.mcp.enabled=true)
+  - `RateLimitEnforcer` (always active)
+  - `RemoteSquadInjector` BeanPostProcessor (always active)
+  - `AgentApiRegistrar` (squad.agent-api.enabled=true)
+  - `SpringAiEmbeddingAdapter` (squad.memory.enabled=true + EmbeddingModel present)
+- **Phase 21-26 tests** — 114 new tests (DurableStore, GuardrailEngine, RetryEngine, Streaming, Pipeline, ConditionEvaluator)
+### Modules published to Maven Central
+- `io.github.sgpatel:squad-core:3.7.0`
+- `io.github.sgpatel:squad-spring-boot-starter:3.7.0`
+
+## v3.6.0 (2026-04-05) — Remote Squads + MCP Tools
+### Added
+- `remote` package — SquadClient, AgentAuthProvider SPI, ApiKeyAuth / JwtAuth / NoAuth
+- `mcp` package — McpToolProvider, McpToolDefinition, prompt builder
+- `@RemoteSquad` + `@McpServer` annotations
+- `RemoteSquadInvoker` standalone injection helper (squad-core)
+
+## v3.5.0 (2026-03-29) — Conversation + Rate Limiting
+### Added
+- `conversation` package — ConversationStore + InProcessConversationStore
+- `ratelimit` package — RateLimitEnforcer (sliding-window, zero deps)
+- `@RateLimit` annotation; `RateLimitExceededException`
+- `LlmPort.chatWithHistory()` default method
+
 ## v3.4.0 (2026-03-23) — Redis Tracing + Real Token Counts
 ### Added
 - `RedisTraceExporter` — shared trace store for multi-JVM SquadOS deployments

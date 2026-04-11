@@ -3,9 +3,9 @@
 > **Multi-Agent AI Framework for Java.**
 > Spring Boot patterns for AI agents — write one class, get a working squad.
 
-[![Tests](https://img.shields.io/badge/tests-340%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-454%20passing-brightgreen)]()
 [![Java](https://img.shields.io/badge/java-21-blue)]()
-[![Maven Central](https://img.shields.io/badge/Maven%20Central-3.4.0-orange)](https://central.sonatype.com/artifact/io.github.sgpatel/squad-core)
+[![Maven Central](https://img.shields.io/badge/Maven%20Central-3.7.0-orange)](https://central.sonatype.com/artifact/io.github.sgpatel/squad-core)
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
 ## What is SquadOS?
@@ -24,7 +24,7 @@ the same annotation-driven development, but for orchestrating LLM-powered agents
 <dependency>
   <groupId>io.github.sgpatel</groupId>
   <artifactId>squad-spring-boot-starter</artifactId>
-  <version>3.4.0</version>
+  <version>3.7.0</version>
 </dependency>
 ```
 
@@ -55,7 +55,7 @@ squad.security.enabled=false
 <dependency>
   <groupId>io.github.sgpatel</groupId>
   <artifactId>squad-core</artifactId>
-  <version>3.4.0</version>
+  <version>3.7.0</version>
 </dependency>
 ```
 
@@ -87,8 +87,9 @@ AgentResponse response = ctx.submitTo(AgentRole.ANALYST, "What is quantum comput
 System.out.println(response.content());
 ```
 
-## The 15 Annotations
+## The 30 Annotations
 
+### Core Agent Lifecycle
 | Annotation | Purpose |
 |-----------|---------|
 | `@Agent` | Declare an agent with role, name, description |
@@ -96,20 +97,55 @@ System.out.println(response.content());
 | `@PostConstruct` | Lifecycle hook — runs when agent boots |
 | `@OnMessage` | React to messages from other agents |
 | `@MissionProfile` | Activate agent for a named profile |
+
+### Structured Output
+| Annotation | Purpose |
+|-----------|---------|
 | `@SquadPlan` | Typed structured output from LLM |
 | `@Required` | Mark a @SquadPlan field as mandatory |
 | `@SquadTool` | Expose a Java method as an LLM tool |
 | `@ToolParam` | Describe a tool parameter |
+
+### Human-in-the-Loop
+| Annotation | Purpose |
+|-----------|---------|
 | `@AwaitApproval` | Pause execution for human review |
 | `@AutoApproval` | Auto-approve based on a condition expression |
 | `@SquadVote` | Multi-agent consensus voting |
+
+### Orchestration
+| Annotation | Purpose |
+|-----------|---------|
 | `@OnEvent` | Event-driven agent activation |
 | `@Eval` | Quality gate — auto-retry if score below threshold |
 | `@AutoPlan` | Agentic plan-execute-reflect-replan loop |
+| `@Pipeline` | Sequential multi-agent workflow definition |
+| `@Step` | Single step within a @Pipeline |
+| `@Condition` | Skip-condition expression on an agent |
+| `@Delegate` | Dynamic routing to specialist agents |
+
+### Reliability & Safety
+| Annotation | Purpose |
+|-----------|---------|
+| `@Retry` | Exponential backoff retry (maxAttempts, backoffMs, multiplier) |
+| `@Guardrails` | Pluggable safety/compliance filter pipeline |
+| `@RateLimit` | Sliding-window calls/min + tokens/hour enforcement |
+| `@DurableAgent` | Checkpoint-based workflow persistence across JVM restarts |
+
+### Streaming & Integration
+| Annotation | Purpose |
+|-----------|---------|
+| `@Streaming` | Token-by-token LLM output via TokenWriter SPI |
+| `@McpServer` | Connect agent to MCP (Model Context Protocol) tool servers |
+| `@RemoteSquad` | Inject SquadClient for cross-JVM agent invocation (field-level) |
+| `@AgentAPI` | Expose agent squad as REST HTTP endpoints |
+
+### Observability & Learning
+| Annotation | Purpose |
+|-----------|---------|
 | `@Traced` | Observability — record spans with token counts |
 | `@Improve` | Few-shot learning from human feedback |
 | `@SecureAgent` | RBAC + JWT access control |
-| `@Delegate` | Dynamic routing to specialist agents |
 
 ## Typed Outputs with @SquadPlan
 
@@ -264,6 +300,122 @@ cd squad-dashboard && mvn spring-boot:run
 
 Dashboard features: 7 tabs · 8 live charts · Agent health · Vote history · Approval queue · Audit log · Feedback store
 
+## LLM Streaming
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "StreamAgent", description = "You stream your response.")
+@Streaming(writer = StdoutTokenWriter.class)
+public class StreamAgent { }
+
+// In your runner:
+ctx.submitStream("Explain quantum computing", token -> {
+    System.out.print(token.text());  // prints each chunk as it arrives
+    if (token.isLast()) System.out.println();
+});
+```
+
+## Guardrail Filters
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "SafeAgent", description = "...")
+@Guardrails(
+    filters = { PiiDetector.class, PromptInjectionDetector.class, ToxicityFilter.class },
+    inputCheck  = true,
+    outputCheck = true
+)
+public class SafeAgent { }
+```
+
+Available built-in filters: `PiiDetector`, `PromptInjectionDetector`, `ToxicityFilter`,
+`HallucinationDetector`, `GroundingFilter`, `SensitiveTopicFilter`, `RegulatoryComplianceFilter`, `ConfidentialDataFilter`
+
+## Pipeline Orchestration
+
+```java
+@Agent(role = AgentRole.STRATEGIST, name = "Orchestrator", description = "...")
+@Pipeline(name = "research-pipeline", steps = {
+    @Step(role = AgentRole.ANALYST,   name = "research"),
+    @Step(role = AgentRole.REVIEWER,  name = "review",  inputFrom = "research"),
+    @Step(role = AgentRole.WRITER,    name = "summarise", inputFrom = "review",
+          condition = "success")
+})
+public class OrchestratorAgent { }
+
+PipelineResult result = ctx.submitPipeline(AgentRole.STRATEGIST, "AI in healthcare");
+System.out.println(result.finalOutput());   // last successful step output
+System.out.println(result.totalTokens());   // sum across all steps
+```
+
+## Durable Workflows
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "DurableAgent", description = "...")
+@DurableAgent(store = "redis", ttlHours = 48)
+public class DurableWorkflowAgent { }
+
+// Idempotent — same workflowId returns cached result if already COMPLETED:
+AgentResponse r = ctx.submitDurable(AgentRole.ANALYST, "wf-1234", "Process this");
+ctx.pauseWorkflow("wf-1234");
+ctx.resumeWorkflow("wf-1234");
+Optional<WorkflowState> state = ctx.getWorkflowState("wf-1234");
+```
+
+## Rate Limiting
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "RateLimitedAgent", description = "...")
+@RateLimit(callsPerMinute = 10, tokensPerHour = 50_000)
+public class RateLimitedAgent { }
+// Throws RateLimitExceededException (not retried) when window is exceeded
+```
+
+## Retry with Backoff
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "RetryAgent", description = "...")
+@Retry(maxAttempts = 3, backoffMs = 500, multiplier = 2.0f, maxBackoffMs = 10_000)
+public class RetryAgent { }
+// Throws RetryExhaustedException after all attempts fail
+// Not retried: RateLimitExceededException, GuardrailException, AgentSecurityException
+```
+
+## Remote Squad Invocation
+
+```java
+@Agent(role = AgentRole.STRATEGIST, name = "Orchestrator", description = "...")
+public class OrchestratorAgent {
+
+    @RemoteSquad(url = "http://analyst-squad:8080/api/analyst", auth = "api-key")
+    private SquadClient analystSquad;
+
+    // analystSquad.submit("task") → calls the remote squad over HTTP
+}
+```
+
+## Agent HTTP API
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "PublicAgent", description = "...")
+@AgentAPI(path = "/api/analysis", auth = "api-key", version = "1.0")
+public class PublicAgent { }
+```
+
+Automatically registers (when `squad.agent-api.enabled=true`):
+- `POST /api/analysis/submit` — submit task to lead agent
+- `POST /api/analysis/submit/{role}` — submit to specific role
+- `POST /api/analysis/submit/stream` — SSE streaming response
+- `GET  /api/analysis/info` — squad metadata
+- `GET  /api/analysis/health` — health check
+
+## MCP Tool Integration
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "McpAgent", description = "...")
+@McpServer(urls = {"http://tools:8090", "http://search:8091"}, timeoutMs = 3000)
+public class McpAgent { }
+// Tool list auto-discovered and injected into system prompt
+```
+
 ## Spring Boot Starter — application.properties Reference
 
 ```properties
@@ -278,8 +430,7 @@ squad.llm.max-tokens=2048
 
 # Tracing
 squad.tracing.enabled=true
-squad.tracing.exporter=memory        # log | memory | jaeger
-squad.tracing.jaeger-url=http://localhost:14268/api/traces
+squad.tracing.exporter=memory        # log | memory
 
 # Security
 squad.security.enabled=false
@@ -288,6 +439,33 @@ squad.security.audit-log=true
 
 # Approvals
 squad.approval.enabled=true
+
+# Guardrails
+squad.guardrails.enabled=false
+
+# Durable workflows
+squad.durable.enabled=false
+squad.durable.store=memory           # memory | redis
+squad.durable.ttl-hours=24
+
+# Conversation history
+squad.conversation.enabled=false
+squad.conversation.max-turns=20
+
+# MCP tool servers
+squad.mcp.enabled=false
+squad.mcp.timeout-ms=5000
+
+# Agent HTTP API
+squad.agent-api.enabled=false
+
+# Global API key (used by @AgentAPI auth + @RemoteSquad injection)
+squad.api.key=
+
+# Redis (shared by DurableStore, ConversationStore, TraceExporter when store=redis)
+redis.host=localhost
+redis.port=6379
+redis.password=
 ```
 
 ## Version History
@@ -299,7 +477,10 @@ squad.approval.enabled=true
 | 2.1.0 | @SquadPlan typed output |
 | 3.2.0 | All 15 annotations, 340 tests |
 | 3.3.0 | squad-spring-boot-starter, Fraud Detection + Snack Thief examples |
-| **3.4.0** | **RedisTraceExporter, real token tracking, React dashboard** |
+| 3.4.0 | RedisTraceExporter, real token tracking, React dashboard |
+| 3.5.0 | Conversation history, rate limiting |
+| 3.6.0 | Remote squad invocation, MCP tool integration |
+| **3.7.0** | **Streaming, Guardrails, Durable Workflows, Pipeline Orchestration, Agent HTTP API** |
 
 ## Requirements
 
