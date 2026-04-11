@@ -2,7 +2,6 @@ package io.squados.boot;
 
 import io.squados.llm.LlmPort;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -31,7 +30,6 @@ public class LlmPortConfig {
     @Bean
     @ConditionalOnMissingBean(LlmPort.class)
     @ConditionalOnClass(name = "org.springframework.ai.chat.client.ChatClient")
-    @ConditionalOnBean(name = "org.springframework.ai.chat.client.ChatClient$Builder")
     public LlmPort squadLlmPort(
             org.springframework.ai.chat.client.ChatClient.Builder builder) {
         String provider = props.getLlm().getProvider();
