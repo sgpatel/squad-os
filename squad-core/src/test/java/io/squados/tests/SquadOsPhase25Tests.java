@@ -48,7 +48,7 @@ public class SquadOsPhase25Tests {
 
             // Use inner class per role
             Class<?> agentClass = createAgentClass(role);
-            SquadConfig cfg = SquadConfig.builder().name("test").build();
+            SquadConfig cfg = new SquadConfig();
             AgentWrapper wrapper = new AgentWrapper(agentClass, null, cfg, llm);
             reg.register(wrapper);
         }

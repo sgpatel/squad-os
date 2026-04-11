@@ -60,7 +60,7 @@ public class ConditionEvaluator {
         if (expr.equals("failure"))    return !stepSuccess;
 
         if (expr.startsWith("contains("))    return evalStringPred(expr, "contains",    t, false);
-        if (expr.startsWith("notContains(")) return !evalStringPred(expr, "notContains", t, false);
+        if (expr.startsWith("notContains(")) return evalStringPred(expr, "notContains", t, false);
         if (expr.startsWith("startsWith("))  return evalStringPred(expr, "startsWith",  t, true);
         if (expr.startsWith("endsWith("))    return evalStringPred(expr, "endsWith",    t, true);
         if (expr.startsWith("matches("))     return evalRegex(expr, t);
