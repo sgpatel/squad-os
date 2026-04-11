@@ -31,6 +31,30 @@ public interface LlmPort {
     LlmResponse chat(String systemPrompt, String userMessage, LlmOptions options);
 
     /**
+     * Multi-turn chat call with conversation history.
+     * Default implementation falls back to single-turn chat.
+     */
+    default LlmResponse chatWithHistory(String systemPrompt, String userMessage,
+                                        java.util.List<ConversationMessage> history,
+                                        LlmOptions options) {
+        return chat(systemPrompt, userMessage, options);
+    }
+
+    /**
+     * Streaming chat — emits tokens to the provided TokenWriter.
+     * Default implementation calls chat() and emits the full response as one chunk.
+     */
+    default void chatStream(String systemPrompt, String userMessage,
+                            LlmOptions options, TokenWriter writer) {
+        LlmResponse resp = chat(systemPrompt, userMessage, options);
+        if (resp.content() != null) {
+            writer.write(StreamToken.of(resp.content()));
+        }
+        writer.write(StreamToken.last());
+        writer.flush();
+    }
+
+    /**
      * Structured output call — parses the LLM response into a typed POJO.
      * Use when the agent must return a machine-readable result
      * (e.g. SquadPlan, HealPlaybook, AnalysisReport).
