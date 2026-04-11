@@ -3,6 +3,7 @@ package io.squados.context;
 import io.squados.agent.AgentResponse;
 import io.squados.agent.SquadPlanDeserialiser;
 import io.squados.agent.TaskContext;
+import io.squados.annotation.AgentPool;
 import io.squados.annotation.AgentRole;
 import io.squados.annotation.Pipeline;
 import io.squados.bus.AgentMessage;
@@ -14,6 +15,7 @@ import io.squados.durable.DurableEngine;
 import io.squados.durable.DurableStore;
 import io.squados.durable.InProcessDurableStore;
 import io.squados.durable.WorkflowState;
+import io.squados.eval.AgentTestRunner;
 import io.squados.exception.NoAgentFoundException;
 import io.squados.execution.ParallelExecutor;
 import io.squados.execution.SquadResult;
@@ -24,12 +26,18 @@ import io.squados.llm.LlmPort;
 import io.squados.llm.StreamToken;
 import io.squados.mcp.McpToolProvider;
 import io.squados.memory.MemoryManager;
+import io.squados.memory.retrieval.EmbeddingPort;
+import io.squados.metrics.MetricsPort;
 import io.squados.pipeline.PipelineEngine;
 import io.squados.pipeline.PipelineResult;
+import io.squados.pool.AgentPoolManager;
 import io.squados.ratelimit.RateLimitEnforcer;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -74,6 +82,11 @@ public class SquadContext {
     private       McpToolProvider      mcpToolProvider;
     private       DurableStore         durableStore;
     private       GuardrailEngine      guardrailEngine;
+    private       MetricsPort          metricsPort;
+    private       EmbeddingPort        embeddingPort;
+
+    // @AgentPool registry: role name → pool manager
+    private final Map<String, AgentPoolManager> pools = new ConcurrentHashMap<>();
 
     // ── Construction ──────────────────────────────────────────────────
 
@@ -148,6 +161,37 @@ public class SquadContext {
             if (memoryManager      != null) wrapper.setMemoryManager(memoryManager);
             if (conversationStore  != null) wrapper.setConversationStore(conversationStore);
             if (mcpToolProvider    != null) wrapper.setMcpToolProvider(mcpToolProvider);
+            if (metricsPort        != null) wrapper.setMetricsPort(metricsPort);
+            if (embeddingPort      != null) wrapper.setEmbeddingPort(embeddingPort);
+        }
+
+        // Step 5b: @AgentPool — create pools for agents that request multiple instances
+        for (AgentWrapper wrapper : registry.all()) {
+            AgentPool poolAnn = wrapper.getAgentClass().getAnnotation(AgentPool.class);
+            if (poolAnn != null && poolAnn.size() > 1) {
+                List<AgentWrapper> instances = new ArrayList<>();
+                instances.add(wrapper); // first instance already created
+                for (int i = 1; i < poolAnn.size(); i++) {
+                    AgentWrapper extra = new AgentWrapper(
+                        wrapper.getAgentClass(), config.forClass(wrapper.getAgentClass()),
+                        config, llm);
+                    extra.setBreaker(breaker);
+                    if (rateLimitEnforcer != null) extra.setRateLimiter(rateLimitEnforcer);
+                    if (tokenBudget       != null) extra.setTokenBudget(tokenBudget);
+                    if (guardrailEngine   != null) extra.setGuardrailEngine(guardrailEngine);
+                    if (memoryManager     != null) extra.setMemoryManager(memoryManager);
+                    if (conversationStore != null) extra.setConversationStore(conversationStore);
+                    if (mcpToolProvider   != null) extra.setMcpToolProvider(mcpToolProvider);
+                    if (metricsPort       != null) extra.setMetricsPort(metricsPort);
+                    if (embeddingPort     != null) extra.setEmbeddingPort(embeddingPort);
+                    instances.add(extra);
+                }
+                AgentPoolManager pm = new AgentPoolManager(
+                    instances, poolAnn.strategy(), poolAnn.maxQueueSize());
+                pools.put(wrapper.getRole().name(), pm);
+                System.out.printf("[SquadOS] AgentPool: %s × %d (%s)%n",
+                    wrapper.getName(), poolAnn.size(), poolAnn.strategy());
+            }
         }
 
         // Step 6: @OnMessage listeners
@@ -161,6 +205,11 @@ public class SquadContext {
         this.durableStore   = (durableStore != null) ? durableStore : new InProcessDurableStore();
         this.durableEngine  = new DurableEngine(durableStore, registry);
         if (guardrailEngine == null) this.guardrailEngine = new GuardrailEngine();
+
+        // Step 7b: inject DurableStore into all wrappers for @Checkpoint support
+        for (AgentWrapper wrapper : registry.all()) {
+            wrapper.setDurableStore(durableStore);
+        }
 
         printRegistrationSummary();
         booted = true;
@@ -196,12 +245,14 @@ public class SquadContext {
         return response;
     }
 
-    /** Submit a task to a specific agent role. */
+    /** Submit a task to a specific agent role (pool-aware). */
     public AgentResponse submitTo(AgentRole role, String task) {
         ensureBooted();
-        AgentWrapper target = requireAgent(role);
         TaskContext ctx = new TaskContext(task, newSessionId(), config.getProfile());
-        return target.execute(ctx);
+        // Route through AgentPoolManager if a pool exists for this role
+        AgentPoolManager pool = pools.get(role.name());
+        if (pool != null) return pool.execute(ctx);
+        return requireAgent(role).execute(ctx);
     }
 
     /** Execute a SquadTask — runs assigned roles in parallel. */
@@ -306,6 +357,45 @@ public class SquadContext {
     /** Set McpToolProvider before boot() so @McpServer agents discover tools. */
     public void setMcpToolProvider(McpToolProvider provider) {
         this.mcpToolProvider = provider;
+    }
+
+    /** Set MetricsPort before boot() so @Observe agents emit metrics. */
+    public void setMetricsPort(MetricsPort port) {
+        this.metricsPort = port;
+        if (booted) registry.all().forEach(w -> w.setMetricsPort(port));
+    }
+
+    /** Set EmbeddingPort before boot() to enable @Cache SEMANTIC mode. */
+    public void setEmbeddingPort(EmbeddingPort port) {
+        this.embeddingPort = port;
+        if (booted) registry.all().forEach(w -> w.setEmbeddingPort(port));
+    }
+
+    // ── @AgentTest ────────────────────────────────────────────────────────
+
+    /**
+     * Run golden-set tests for all agents annotated with @AgentTest.
+     * Throws EvalFailedException for any agent below its passRateMin threshold.
+     *
+     * Intended for use in test suites or CI pipelines, not production startup.
+     */
+    public void runAgentTests() {
+        ensureBooted();
+        AgentTestRunner runner = new AgentTestRunner();
+        for (AgentWrapper wrapper : registry.all()) {
+            if (wrapper.getAgentClass().isAnnotationPresent(io.squados.annotation.AgentTest.class)) {
+                runner.run(wrapper);
+            }
+        }
+    }
+
+    /**
+     * Run golden-set tests for a specific agent role.
+     */
+    public AgentTestRunner.RunReport runAgentTests(AgentRole role) {
+        ensureBooted();
+        AgentWrapper wrapper = requireAgent(role);
+        return new AgentTestRunner().run(wrapper);
     }
 
     // ── Post-boot setters ─────────────────────────────────────────────────

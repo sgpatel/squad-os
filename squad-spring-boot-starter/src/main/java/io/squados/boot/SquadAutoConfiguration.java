@@ -17,6 +17,8 @@ import io.squados.improve.InProcessFeedbackStore;
 import io.squados.llm.LlmPort;
 import io.squados.mcp.McpToolProvider;
 import io.squados.memory.MemoryManager;
+import io.squados.memory.retrieval.EmbeddingPort;
+import io.squados.metrics.MetricsPort;
 import io.squados.ratelimit.RateLimitEnforcer;
 import io.squados.security.AuditLog;
 import io.squados.security.JwtValidator;
@@ -124,7 +126,9 @@ public class SquadAutoConfiguration {
             ObjectProvider<TokenBudget>       tokenBudgetProvider,
             ObjectProvider<McpToolProvider>   mcpToolProviderProvider,
             ObjectProvider<DurableStore>      durableStoreProvider,
-            ObjectProvider<GuardrailEngine>   guardrailEngineProvider) {
+            ObjectProvider<GuardrailEngine>   guardrailEngineProvider,
+            ObjectProvider<MetricsPort>       metricsPortProvider,
+            ObjectProvider<EmbeddingPort>     embeddingPortProvider) {
 
         System.out.printf("[SquadOS] Booting squad: %s%n", props.getName());
         SquadConfig config = SquadConfigParser.load();
@@ -138,6 +142,8 @@ public class SquadAutoConfiguration {
         mcpToolProviderProvider  .ifAvailable(ctx::setMcpToolProvider);
         durableStoreProvider     .ifAvailable(ctx::setDurableStore);
         guardrailEngineProvider  .ifAvailable(ctx::setGuardrailEngine);
+        metricsPortProvider      .ifAvailable(ctx::setMetricsPort);
+        embeddingPortProvider    .ifAvailable(ctx::setEmbeddingPort);
 
         ctx.boot();
         return ctx;
@@ -314,5 +320,35 @@ public class SquadAutoConfiguration {
             org.springframework.ai.embedding.EmbeddingModel embeddingModel) {
         System.out.println("[SquadOS] EmbeddingPort: Spring AI adapter (semantic memory active)");
         return new SpringAiEmbeddingAdapter(embeddingModel);
+    }
+
+    // ── Metrics Adapter (@Observe — opt-in via Micrometer) ────────────────────
+
+    /**
+     * In-memory MetricsPort — always registered as fallback.
+     * Replaced automatically by MicrometerMetricsAdapter when Micrometer is present.
+     */
+    @Bean
+    @ConditionalOnMissingBean(MetricsPort.class)
+    public io.squados.metrics.InMemoryMetricsCollector squadInMemoryMetrics() {
+        System.out.println("[SquadOS] MetricsPort: in-memory collector (@Observe ready)");
+        return new io.squados.metrics.InMemoryMetricsCollector();
+    }
+
+    /**
+     * Micrometer MetricsPort — registered when spring-boot-actuator (Micrometer) is on the
+     * classpath and a MeterRegistry bean is present. Emits Prometheus-compatible counters
+     * and timers per @Observe-annotated agent call.
+     *
+     * To use: add spring-boot-starter-actuator to your application pom.
+     */
+    @Bean
+    @ConditionalOnMissingBean(MetricsPort.class)
+    @ConditionalOnClass(name = "io.micrometer.core.instrument.MeterRegistry")
+    @ConditionalOnBean(name = "meterRegistry")
+    public MicrometerMetricsAdapter squadMicrometerMetrics(
+            io.micrometer.core.instrument.MeterRegistry meterRegistry) {
+        System.out.println("[SquadOS] MetricsPort: Micrometer adapter (Prometheus metrics active)");
+        return new MicrometerMetricsAdapter(meterRegistry);
     }
 }

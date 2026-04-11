@@ -3,54 +3,69 @@ package io.squados.context;
 import io.squados.agent.AgentResponse;
 import io.squados.agent.TaskContext;
 import io.squados.annotation.*;
+import io.squados.cache.CacheEngine;
+import io.squados.checkpoint.CheckpointEngine;
 import io.squados.config.SquadConfig;
 import io.squados.conversation.ConversationStore;
+import io.squados.durable.DurableStore;
+import io.squados.exception.AgentTimeoutException;
 import io.squados.guardrail.GuardrailEngine;
-import io.squados.guardrail.GuardrailResult;
 import io.squados.health.AgentCircuitBreaker;
 import io.squados.llm.*;
 import io.squados.mcp.McpToolProvider;
 import io.squados.memory.MemoryManager;
+import io.squados.memory.retrieval.EmbeddingPort;
 import io.squados.memory.store.MemoryRecord;
+import io.squados.metrics.MetricsPort;
 import io.squados.pipeline.ConditionEvaluator;
 import io.squados.ratelimit.RateLimitEnforcer;
 import io.squados.retry.RetryEngine;
 import io.squados.trace.AgentSpan;
 import io.squados.trace.SquadTracer;
 
+import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
  * Wraps a single @Agent-annotated class instance.
  *
  * execute(TaskContext) flow:
- *   1. @Condition check — skip if expression evaluates false
- *   2. Circuit breaker check
- *   3. @RateLimit check
- *   4. TokenBudget check
- *   5. @Guardrails input check
- *   6. @AgentMemory injection into system prompt
- *   7. [@Retry wrapper →] callLlm()
- *   8. @Guardrails output check
- *   9. Memory write-back
- *  10. Trace span
- *  11. Circuit breaker feedback
+ *   1.  @Condition check — skip if expression evaluates false
+ *   2.  Circuit breaker check
+ *   3.  @RateLimit check
+ *   4.  TokenBudget check
+ *   5.  @Guardrails input check
+ *   6.  @Cache lookup — return cached response if hit (zero tokens)
+ *   7.  @Checkpoint lookup — skip LLM if checkpoint exists in DurableStore
+ *   8.  Build system prompt (@PromptTemplate, @AgentMemory, @McpServer)
+ *   9.  [@Retry →] callLlm() [wrapped with @Timeout deadline]
+ *  10.  @Cache store
+ *  11.  @Checkpoint save
+ *  12.  @Guardrails output check
+ *  13.  Token budget record
+ *  14.  @Observe metrics emission
+ *  15.  Trace span
+ *  16.  Circuit breaker feedback
  *
- * callLlm() is the unit @Retry wraps — pre-checks are NOT retried.
+ * callLlm() is the unit @Retry wraps — pre-checks (1-7) are NOT retried.
  */
 public class AgentWrapper {
 
-    private final Object               instance;
-    private final Class<?>             agentClass;
-    private final Agent                annotation;
-    private final AgentRole            role;
-    private final String               name;
-    private final LlmOptions           options;
-    private final LlmPort              llm;
-    private final TokenWriter          tokenWriter;   // non-null if @Streaming present
+    private final Object              instance;
+    private final Class<?>            agentClass;
+    private final Agent               annotation;
+    private final AgentRole           role;
+    private final String              name;
+    private final LlmOptions          options;
+    private final LlmPort             llm;
+    private final TokenWriter         tokenWriter;   // non-null if @Streaming present
 
     // Optional injected collaborators (set by SquadContext after boot)
     private AgentCircuitBreaker  breaker;
@@ -60,16 +75,26 @@ public class AgentWrapper {
     private MemoryManager        memoryManager;
     private ConversationStore    conversationStore;
     private McpToolProvider      mcpToolProvider;
+    private MetricsPort          metricsPort;
+    private EmbeddingPort        embeddingPort;    // for @Cache SEMANTIC mode
+    private DurableStore         durableStore;     // for @Checkpoint
 
     // Annotation cache
-    private final Retry       retryAnn;
-    private final RateLimit   rateLimitAnn;
-    private final Guardrails  guardrailsAnn;
-    private final Streaming   streamingAnn;
-    private final AgentMemory agentMemoryAnn;
-    private final Condition   conditionAnn;
-    private final Timeout     timeoutAnn;
-    private final McpServer   mcpServerAnn;
+    private final Retry          retryAnn;
+    private final RateLimit      rateLimitAnn;
+    private final Guardrails     guardrailsAnn;
+    private final Streaming      streamingAnn;
+    private final AgentMemory    agentMemoryAnn;
+    private final Condition      conditionAnn;
+    private final Timeout        timeoutAnn;
+    private final McpServer      mcpServerAnn;
+    private final Cache          cacheAnn;
+    private final Observe        observeAnn;
+    private final PromptTemplate promptTemplateAnn;
+    private final Checkpoint     checkpointAnn;    // class-level @Checkpoint (not used yet)
+
+    // Lazily created CacheEngine (per-instance)
+    private CacheEngine cacheEngine;
 
     // ── Construction ──────────────────────────────────────────────────
 
@@ -84,16 +109,25 @@ public class AgentWrapper {
         this.llm         = llm;
 
         // Cache annotations
-        this.retryAnn        = agentClass.getAnnotation(Retry.class);
-        this.rateLimitAnn    = agentClass.getAnnotation(RateLimit.class);
-        this.guardrailsAnn   = agentClass.getAnnotation(Guardrails.class);
-        this.streamingAnn    = agentClass.getAnnotation(Streaming.class);
-        this.agentMemoryAnn  = agentClass.getAnnotation(AgentMemory.class);
-        this.conditionAnn    = agentClass.getAnnotation(Condition.class);
-        this.timeoutAnn      = agentClass.getAnnotation(Timeout.class);
-        this.mcpServerAnn    = agentClass.getAnnotation(McpServer.class);
+        this.retryAnn          = agentClass.getAnnotation(Retry.class);
+        this.rateLimitAnn      = agentClass.getAnnotation(RateLimit.class);
+        this.guardrailsAnn     = agentClass.getAnnotation(Guardrails.class);
+        this.streamingAnn      = agentClass.getAnnotation(Streaming.class);
+        this.agentMemoryAnn    = agentClass.getAnnotation(AgentMemory.class);
+        this.conditionAnn      = agentClass.getAnnotation(Condition.class);
+        this.timeoutAnn        = agentClass.getAnnotation(Timeout.class);
+        this.mcpServerAnn      = agentClass.getAnnotation(McpServer.class);
+        this.cacheAnn          = agentClass.getAnnotation(Cache.class);
+        this.observeAnn        = agentClass.getAnnotation(Observe.class);
+        this.promptTemplateAnn = agentClass.getAnnotation(PromptTemplate.class);
+        this.checkpointAnn     = agentClass.getAnnotation(Checkpoint.class);
 
-        // Pre-instantiate TokenWriter from @Streaming at construction time
+        // Pre-instantiate CacheEngine if @Cache is present
+        if (cacheAnn != null) {
+            this.cacheEngine = new CacheEngine(cacheAnn.mode(), cacheAnn.minScore());
+        }
+
+        // Pre-instantiate TokenWriter from @Streaming
         this.tokenWriter = resolveTokenWriter();
 
         // Resolve effective LlmOptions: yml overrides > role defaults
@@ -146,10 +180,6 @@ public class AgentWrapper {
 
     /**
      * Full execution flow with all annotations applied.
-     *
-     * Pre-checks (not retried): condition, circuit breaker, rate limit, token budget, guardrails input
-     * Retry wraps: callLlm()
-     * Post-call: guardrails output, memory write-back, trace span, circuit breaker feedback
      */
     public AgentResponse execute(TaskContext ctx) {
         Instant start = Instant.now();
@@ -169,7 +199,7 @@ public class AgentWrapper {
                 "Circuit open — " + name + " unavailable.", start);
         }
 
-        // Step 3: @RateLimit check (pre-call, no token count yet)
+        // Step 3: @RateLimit check
         if (rateLimiter != null && rateLimitAnn != null) {
             rateLimiter.checkAndConsume(role, name, rateLimitAnn, options.maxTokens());
         }
@@ -186,44 +216,95 @@ public class AgentWrapper {
                 ctx.getTaskDescription() != null ? ctx.getTaskDescription() : "", name);
         }
 
-        // Step 6: Build system prompt (with @AgentMemory injection)
+        // Step 6: @Cache lookup — return immediately on hit
+        String cacheKey = null;
+        if (cacheEngine != null) {
+            // Build key before system prompt to keep it stable across retries
+            cacheKey = cacheEngine.buildKey(annotation.description(), ctx.getTaskDescription());
+            Optional<String> cached = cacheEngine.get(cacheKey);
+            if (cached.isPresent()) {
+                return AgentResponse.success(role, name, cached.get());
+            }
+        }
+
+        // Step 7: @Checkpoint lookup — skip LLM if checkpoint was already saved
+        String checkpointName = resolveCheckpointName();
+        if (checkpointName != null && durableStore != null) {
+            CheckpointEngine ce = new CheckpointEngine(durableStore);
+            Optional<String> cp = ce.getCheckpoint(ctx.getTaskId(), name, checkpointName);
+            if (cp.isPresent()) {
+                return AgentResponse.success(role, name, cp.get());
+            }
+        }
+
+        // Step 8: Build system prompt (@PromptTemplate, @AgentMemory, @McpServer)
         String systemPrompt = buildSystemPrompt(ctx);
 
-        // Step 7: [@Retry →] callLlm()
+        // Step 9: [@Retry →] callLlm() [wrapped with @Timeout]
         AgentResponse response;
         try {
             if (retryAnn != null) {
                 LlmResponse raw = RetryEngine.execute(retryAnn, name,
-                    () -> callLlm(systemPrompt, ctx.getTaskDescription()));
+                    () -> callLlmWithTimeout(systemPrompt, ctx.getTaskDescription()));
                 response = AgentResponse.of(raw, role, name, start);
             } else {
-                LlmResponse raw = callLlm(systemPrompt, ctx.getTaskDescription());
+                LlmResponse raw = callLlmWithTimeout(systemPrompt, ctx.getTaskDescription());
                 response = AgentResponse.of(raw, role, name, start);
             }
+        } catch (AgentTimeoutException te) {
+            if (breaker != null) breaker.onFailure(role, te.getMessage());
+            emitErrorMetrics("timeout");
+            return AgentResponse.failure(role, name, te.getMessage(), start);
         } catch (Exception e) {
             if (breaker != null) breaker.onFailure(role, e.getMessage());
+            emitErrorMetrics("llm");
             return AgentResponse.failure(role, name,
                 "Execution failed: " + e.getMessage(), start);
         }
 
-        // Step 8: @Guardrails output check
+        // Step 10: @Cache store
+        if (cacheEngine != null && cacheKey != null && response.isSuccess()
+                && response.content() != null) {
+            cacheEngine.put(cacheKey, response.content(), cacheAnn.ttlSeconds());
+        }
+
+        // Step 11: @Checkpoint save
+        if (checkpointName != null && durableStore != null && response.isSuccess()
+                && response.content() != null) {
+            new CheckpointEngine(durableStore)
+                .saveCheckpoint(ctx.getTaskId(), name, checkpointName, response.content(), role);
+        }
+
+        // Step 12: @Guardrails output check
         if (guardrailEngine != null && guardrailsAnn != null && response.isSuccess()) {
             guardrailEngine.checkOutput(guardrailsAnn,
                 response.content() != null ? response.content() : "", name);
         }
 
-        // Step 9: Token budget record
+        // Step 13: Token budget record
         if (tokenBudget != null) {
             tokenBudget.record(role, response.totalTokens());
         }
 
-        // Step 10: Trace span
+        // Step 14: @Observe — emit metrics
+        if (observeAnn != null && metricsPort != null) {
+            long latencyMs = response.latency() != null ? response.latency().toMillis() : 0L;
+            String status  = response.isSuccess() ? "success" : "error";
+            metricsPort.recordCall(name, role.name(), status, latencyMs,
+                observeAnn.namespace(), observeAnn.tags());
+            metricsPort.recordTokens(name, role.name(), "prompt",
+                response.promptTokens(), observeAnn.namespace(), observeAnn.tags());
+            metricsPort.recordTokens(name, role.name(), "completion",
+                response.completionTokens(), observeAnn.namespace(), observeAnn.tags());
+        }
+
+        // Step 15: Trace span
         recordTrace(ctx, response);
 
-        // Step 11: Circuit breaker feedback
+        // Step 16: Circuit breaker feedback
         if (breaker != null) {
             if (response.isSuccess()) breaker.onSuccess(role, response.latency().toMillis());
-            else breaker.onFailure(role, response.errorMessage());
+            else                      breaker.onFailure(role, response.errorMessage());
         }
 
         return response;
@@ -241,16 +322,47 @@ public class AgentWrapper {
         llm.chatStream(systemPrompt, ctx.getTaskDescription(), options, writer);
     }
 
-    // ── callLlm() — the unit that @Retry wraps ────────────────────────
+    // ── callLlm — the unit @Retry wraps ──────────────────────────────
+
+    /**
+     * Wraps callLlm() with @Timeout enforcement using CompletableFuture.orTimeout().
+     * Falls back to synchronous call if no @Timeout is present.
+     */
+    private LlmResponse callLlmWithTimeout(String systemPrompt, String userMessage) {
+        if (timeoutAnn == null) {
+            return callLlm(systemPrompt, userMessage);
+        }
+        try {
+            return CompletableFuture
+                .supplyAsync(() -> callLlm(systemPrompt, userMessage))
+                .orTimeout(timeoutAnn.timeoutMs(), TimeUnit.MILLISECONDS)
+                .get();
+        } catch (java.util.concurrent.ExecutionException e) {
+            // orTimeout() completes the future exceptionally with TimeoutException
+            // which then surfaces as ExecutionException.getCause()
+            if (e.getCause() instanceof java.util.concurrent.TimeoutException) {
+                if ("fallback".equals(timeoutAnn.action())
+                        && !timeoutAnn.fallbackResponse().isBlank()) {
+                    return new LlmResponse(timeoutAnn.fallbackResponse(), 0, 0, options.model());
+                }
+                throw new AgentTimeoutException(name, timeoutAnn.timeoutMs());
+            }
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException re) throw re;
+            throw new RuntimeException(cause);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AgentTimeoutException(name, timeoutAnn.timeoutMs());
+        }
+    }
 
     private LlmResponse callLlm(String systemPrompt, String userMessage) {
         // Conversation history — load if ConversationStore is wired
         List<ConversationMessage> history = List.of();
         String sessionId = null;
         if (conversationStore != null) {
-            // Use agent name as session key for per-agent history
-            sessionId = name;
-            history = conversationStore.getHistory(sessionId);
+            sessionId = name; // per-agent session key
+            history   = conversationStore.getHistory(sessionId);
         }
 
         LlmResponse response;
@@ -270,10 +382,8 @@ public class AgentWrapper {
 
         // Append turn to conversation history
         if (conversationStore != null && sessionId != null && response.content() != null) {
-            conversationStore.append(sessionId,
-                ConversationMessage.user(userMessage));
-            conversationStore.append(sessionId,
-                ConversationMessage.assistant(response.content()));
+            conversationStore.append(sessionId, ConversationMessage.user(userMessage));
+            conversationStore.append(sessionId, ConversationMessage.assistant(response.content()));
         }
 
         return response;
@@ -282,27 +392,37 @@ public class AgentWrapper {
     // ── System prompt ─────────────────────────────────────────────────
 
     /**
-     * Build the system prompt, optionally injecting @AgentMemory records.
+     * Build the system prompt.
+     * Priority: @PromptTemplate file → default inline prompt.
+     * Always appended: @McpServer tools, @AgentMemory records.
      */
     public String buildSystemPrompt(TaskContext ctx) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("You are ").append(name)
-          .append(", a ").append(role).append(" agent");
+        String base;
 
-        if (!annotation.description().isBlank()) {
-            sb.append(".\n").append(annotation.description());
+        // @PromptTemplate — load from classpath with {{variable}} substitution
+        if (promptTemplateAnn != null) {
+            base = loadAndSubstituteTemplate(promptTemplateAnn, ctx);
         } else {
-            sb.append(".");
+            // Default inline system prompt
+            StringBuilder sb = new StringBuilder();
+            sb.append("You are ").append(name)
+              .append(", a ").append(role).append(" agent");
+            if (!annotation.description().isBlank()) {
+                sb.append(".\n").append(annotation.description());
+            } else {
+                sb.append(".");
+            }
+            if (!annotation.profile().isBlank()
+                    && !annotation.profile().equals("default")) {
+                sb.append("\nActive profile: ").append(annotation.profile()).append(".");
+            }
+            sb.append("\nTask ID: ").append(ctx.getTaskId()).append(".");
+            base = sb.toString();
         }
 
-        if (!annotation.profile().isBlank()
-                && !annotation.profile().equals("default")) {
-            sb.append("\nActive profile: ").append(annotation.profile()).append(".");
-        }
+        StringBuilder sb = new StringBuilder(base);
 
-        sb.append("\nTask ID: ").append(ctx.getTaskId()).append(".");
-
-        // @McpServer — discover tools from all configured URLs and inject into system prompt
+        // @McpServer — discover and inject tool definitions
         if (mcpServerAnn != null && mcpToolProvider != null
                 && mcpServerAnn.urls().length > 0) {
             try {
@@ -313,16 +433,15 @@ public class AgentWrapper {
                 if (!allTools.isEmpty()) {
                     sb.append(mcpToolProvider.buildMcpPrompt(allTools));
                 }
-            } catch (Exception e) {
-                // MCP discovery errors must not break agent execution
+            } catch (Exception ignored) {
+                // MCP errors must not break execution
             }
         }
 
         // @AgentMemory — inject retrieved memories
         if (agentMemoryAnn != null && memoryManager != null) {
             try {
-                // Build a pseudo Memory annotation parameters
-                List<io.squados.memory.store.MemoryRecord> memories =
+                List<MemoryRecord> memories =
                     retrieveMemories(ctx.getTaskDescription(), agentMemoryAnn);
                 if (!memories.isEmpty()) {
                     sb.append("\n\n## Relevant Memories\n");
@@ -330,8 +449,8 @@ public class AgentWrapper {
                         sb.append("- ").append(rec.getContent()).append("\n");
                     }
                 }
-            } catch (Exception e) {
-                // Memory errors must not break agent execution
+            } catch (Exception ignored) {
+                // Memory errors must not break execution
             }
         }
 
@@ -347,6 +466,12 @@ public class AgentWrapper {
     public void setMemoryManager(MemoryManager mm)       { this.memoryManager    = mm; }
     public void setConversationStore(ConversationStore s){ this.conversationStore = s; }
     public void setMcpToolProvider(McpToolProvider p)    { this.mcpToolProvider  = p; }
+    public void setMetricsPort(MetricsPort mp)           { this.metricsPort      = mp; }
+    public void setDurableStore(DurableStore ds)         { this.durableStore     = ds; }
+    public void setEmbeddingPort(EmbeddingPort ep) {
+        this.embeddingPort = ep;
+        if (cacheEngine != null) cacheEngine.setEmbeddingPort(ep);
+    }
 
     public AgentRole  getRole()        { return role; }
     public String     getName()        { return name; }
@@ -358,6 +483,62 @@ public class AgentWrapper {
     public boolean    hasStreaming()   { return streamingAnn != null; }
 
     // ── Helpers ───────────────────────────────────────────────────────
+
+    /**
+     * Find the @Checkpoint name for this agent's first @Checkpoint-annotated method,
+     * or use the class-level @Checkpoint.name() if present.
+     * Returns null if no checkpoint is configured.
+     */
+    private String resolveCheckpointName() {
+        // Class-level @Checkpoint (unusual but supported)
+        if (checkpointAnn != null) return checkpointAnn.name();
+        // First @Checkpoint method (method-level is the primary use case)
+        for (Method m : agentClass.getDeclaredMethods()) {
+            Checkpoint ann = m.getAnnotation(Checkpoint.class);
+            if (ann != null) return ann.name();
+        }
+        return null;
+    }
+
+    /**
+     * Load a @PromptTemplate file from classpath and substitute {{variables}}.
+     * Built-in variables: {{agentName}}, {{role}}, {{description}}, {{profile}}.
+     */
+    private String loadAndSubstituteTemplate(PromptTemplate ann, TaskContext ctx) {
+        try (InputStream is = AgentWrapper.class.getClassLoader()
+                .getResourceAsStream(ann.path())) {
+            if (is == null) {
+                System.err.println("[SquadOS] @PromptTemplate file not found: " + ann.path()
+                    + " — falling back to default system prompt.");
+                return buildDefaultPrompt(ctx);
+            }
+            String template = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            // Substitute built-in variables
+            template = template
+                .replace("{{agentName}}",   name)
+                .replace("{{role}}",        role.name())
+                .replace("{{description}}", annotation.description())
+                .replace("{{profile}}",     annotation.profile())
+                .replace("{{taskId}}",      ctx.getTaskId() != null ? ctx.getTaskId() : "");
+            return template;
+        } catch (Exception e) {
+            System.err.println("[SquadOS] Failed to load @PromptTemplate '" + ann.path()
+                + "': " + e.getMessage() + " — using default prompt.");
+            return buildDefaultPrompt(ctx);
+        }
+    }
+
+    private String buildDefaultPrompt(TaskContext ctx) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are ").append(name).append(", a ").append(role).append(" agent");
+        if (!annotation.description().isBlank()) {
+            sb.append(".\n").append(annotation.description());
+        } else {
+            sb.append(".");
+        }
+        sb.append("\nTask ID: ").append(ctx.getTaskId()).append(".");
+        return sb.toString();
+    }
 
     private TokenWriter resolveTokenWriter() {
         if (streamingAnn == null) return null;
@@ -371,11 +552,8 @@ public class AgentWrapper {
         }
     }
 
-    private List<io.squados.memory.store.MemoryRecord> retrieveMemories(
-            String query, AgentMemory ann) {
+    private List<MemoryRecord> retrieveMemories(String query, AgentMemory ann) {
         if (memoryManager == null || query == null) return List.of();
-        // Use working memory retrieval via MemoryManager
-        // We construct a temporary Memory annotation proxy
         io.squados.memory.annotation.Memory memAnn =
             buildMemoryAnnotation(ann.topK(), ann.minScore(), ann.scope());
         try {
@@ -407,9 +585,16 @@ public class AgentWrapper {
             public io.squados.memory.annotation.Importance importance() {
                 return io.squados.memory.annotation.Importance.MEDIUM;
             }
-            public String[] tags()  { return new String[]{}; }
+            public String[] tags()   { return new String[]{}; }
             public boolean promote() { return false; }
         };
+    }
+
+    private void emitErrorMetrics(String errorType) {
+        if (observeAnn != null && metricsPort != null) {
+            metricsPort.recordError(name, role.name(), errorType,
+                observeAnn.namespace(), observeAnn.tags());
+        }
     }
 
     private void recordTrace(TaskContext ctx, AgentResponse response) {
@@ -418,7 +603,7 @@ public class AgentWrapper {
                 .agentRole(role)
                 .agentName(name)
                 .status(response.isSuccess() ? AgentSpan.Status.OK : AgentSpan.Status.ERROR)
-                .durationMs(response.latency().toMillis())
+                .durationMs(response.latency() != null ? response.latency().toMillis() : 0L)
                 .inputLength(ctx.getTaskDescription() != null
                     ? ctx.getTaskDescription().length() : 0)
                 .outputLength(response.content() != null
@@ -427,7 +612,7 @@ public class AgentWrapper {
                 .completionTokens(response.completionTokens())
                 .build();
             SquadTracer.getExporter().export(span);
-        } catch (Exception e) {
+        } catch (Exception ignored) {
             // Tracer must never break agent execution
         }
     }
