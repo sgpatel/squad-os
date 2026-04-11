@@ -107,20 +107,8 @@ public class SquadAutoConfiguration {
     }
 
     // ── LLM Port ──────────────────────────────────────────────────────────
-    // Activated only when a Spring AI model starter is present (ChatClient.Builder bean).
-    // If absent, SquadContext falls back to MockLlmPort internally.
-
-    @Bean
-    @ConditionalOnMissingBean(LlmPort.class)
-    @ConditionalOnClass(name = "org.springframework.ai.chat.client.ChatClient")
-    @ConditionalOnBean(name = "org.springframework.ai.chat.client.ChatClient$Builder")
-    public LlmPort squadLlmPort(
-            org.springframework.ai.chat.client.ChatClient.Builder builder) {
-        String provider = props.getLlm().getProvider();
-        String model    = props.getLlm().getModel();
-        System.out.printf("[SquadOS] LlmPort: Spring AI %s / %s%n", provider, model);
-        return new SpringAiLlmAdapter(builder, provider);
-    }
+    // Moved to separate LlmPortConfig to avoid early instantiation caused by
+    // squadRemoteSquadInjector BeanPostProcessor.
 
     // ── Squad Context ──────────────────────────────────────────────────────
     // Accepts all optional collaborators via ObjectProvider — no hard wiring required.

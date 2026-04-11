@@ -428,6 +428,11 @@ squad.llm.model=llama3.2
 squad.llm.temperature=0.5
 squad.llm.max-tokens=2048
 
+# Spring AI Ollama configuration (optional fallback defaults)
+# Each agent can override temperature/maxTokens via @Agent role defaults or squad.yml
+spring.ai.ollama.base-url=http://localhost:11434
+spring.ai.ollama.chat.options.model=llama3.2
+
 # Tracing
 squad.tracing.enabled=true
 squad.tracing.exporter=memory        # log | memory

@@ -50,11 +50,22 @@ public class SpringAiLlmAdapter implements LlmPort {
 
     @Override
     public LlmResponse chat(String systemPrompt, String userMessage, LlmOptions opts) {
-        ChatResponse cr = chatClient.prompt()
+        var promptSpec = chatClient.prompt()
             .system(systemPrompt)
-            .user(userMessage)
-            .call()
-            .chatResponse();
+            .user(userMessage);
+        
+        // Apply LlmOptions if provided
+        if (opts != null) {
+            promptSpec = promptSpec.options(
+                org.springframework.ai.chat.prompt.ChatOptions.builder()
+                    .model(opts.model())
+                    .temperature((double) opts.temperature())
+                    .maxTokens(opts.maxTokens())
+                    .build()
+            );
+        }
+        
+        ChatResponse cr = promptSpec.call().chatResponse();
         return toLlmResponse(cr);
     }
 
@@ -75,11 +86,23 @@ public class SpringAiLlmAdapter implements LlmPort {
             enriched.append("\n").append(msg.role()).append(": ").append(msg.content());
         }
         enriched.append("\n--- End of History ---");
-        ChatResponse cr = chatClient.prompt()
+        
+        var promptSpec = chatClient.prompt()
             .system(enriched.toString())
-            .user(userMessage)
-            .call()
-            .chatResponse();
+            .user(userMessage);
+        
+        // Apply LlmOptions if provided
+        if (opts != null) {
+            promptSpec = promptSpec.options(
+                org.springframework.ai.chat.prompt.ChatOptions.builder()
+                    .model(opts.model())
+                    .temperature((double) opts.temperature())
+                    .maxTokens(opts.maxTokens())
+                    .build()
+            );
+        }
+        
+        ChatResponse cr = promptSpec.call().chatResponse();
         return toLlmResponse(cr);
     }
 
@@ -88,11 +111,23 @@ public class SpringAiLlmAdapter implements LlmPort {
     @Override
     public void chatStream(String systemPrompt, String userMessage,
                            LlmOptions opts, TokenWriter writer) {
-        // Spring AI streaming via Flux<String> — blockLast() bridges to sync TokenWriter
-        chatClient.prompt()
+        var promptSpec = chatClient.prompt()
             .system(systemPrompt)
-            .user(userMessage)
-            .stream()
+            .user(userMessage);
+        
+        // Apply LlmOptions if provided
+        if (opts != null) {
+            promptSpec = promptSpec.options(
+                org.springframework.ai.chat.prompt.ChatOptions.builder()
+                    .model(opts.model())
+                    .temperature((double) opts.temperature())
+                    .maxTokens(opts.maxTokens())
+                    .build()
+            );
+        }
+        
+        // Spring AI streaming via Flux<String> — blockLast() bridges to sync TokenWriter
+        promptSpec.stream()
             .content()
             .doOnNext(chunk -> {
                 if (chunk != null && !chunk.isEmpty()) {
@@ -115,11 +150,22 @@ public class SpringAiLlmAdapter implements LlmPort {
     @Override
     public <T> T chatStructured(String systemPrompt, String userMessage,
                                 Class<T> responseType, LlmOptions opts) {
-        return chatClient.prompt()
+        var promptSpec = chatClient.prompt()
             .system(systemPrompt)
-            .user(userMessage)
-            .call()
-            .entity(responseType);
+            .user(userMessage);
+        
+        // Apply LlmOptions if provided
+        if (opts != null) {
+            promptSpec = promptSpec.options(
+                org.springframework.ai.chat.prompt.ChatOptions.builder()
+                    .model(opts.model())
+                    .temperature((double) opts.temperature())
+                    .maxTokens(opts.maxTokens())
+                    .build()
+            );
+        }
+        
+        return promptSpec.call().entity(responseType);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
