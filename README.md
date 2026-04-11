@@ -4,6 +4,7 @@
 > Spring Boot patterns for AI agents — write one class, get a working squad.
 
 [![Tests](https://img.shields.io/badge/tests-454%20passing-brightgreen)]()
+[![Features](https://img.shields.io/badge/annotations-37%20active-blue)]()
 [![Java](https://img.shields.io/badge/java-21-blue)]()
 [![Maven Central](https://img.shields.io/badge/Maven%20Central-3.7.0-orange)](https://central.sonatype.com/artifact/io.github.sgpatel/squad-core)
 [![License](https://img.shields.io/badge/license-MIT-green)]()
@@ -131,6 +132,16 @@ System.out.println(response.content());
 | `@Guardrails` | Pluggable safety/compliance filter pipeline |
 | `@RateLimit` | Sliding-window calls/min + tokens/hour enforcement |
 | `@DurableAgent` | Checkpoint-based workflow persistence across JVM restarts |
+| `@Timeout` | Hard LLM deadline — fail or return fallback on expiry |
+| `@Cache` | In-process response cache — EXACT (hash) or SEMANTIC (cosine) |
+| `@Checkpoint` | Mid-workflow step persistence for `@DurableAgent` classes |
+
+### Performance & Testing
+| Annotation | Purpose |
+|-----------|---------|
+| `@AgentPool` | Multiple instances with ROUND_ROBIN / LEAST_BUSY / RANDOM routing |
+| `@AgentTest` | Golden-set testing with JSON test cases and pass-rate threshold |
+| `@PromptTemplate` | Externalise system prompts to classpath files with `{{variable}}` substitution |
 
 ### Streaming & Integration
 | Annotation | Purpose |
@@ -143,7 +154,8 @@ System.out.println(response.content());
 ### Observability & Learning
 | Annotation | Purpose |
 |-----------|---------|
-| `@Traced` | Observability — record spans with token counts |
+| `@Observe` | Emit Micrometer/Prometheus metrics (calls, latency, tokens, errors) |
+| `@Traced` | Record spans with token counts to any TraceExporter |
 | `@Improve` | Few-shot learning from human feedback |
 | `@SecureAgent` | RBAC + JWT access control |
 
@@ -239,6 +251,108 @@ SquadTracer.configure(exp);
 Redis keys:
 - `squados:traces` — LIST of JSON AgentSpan records (newest first, max 500)
 - `squados:traces:tokens` — STRING cumulative token count (INCRBY)
+
+## Timeout, Cache & Observe
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "FastAnalyst",
+       description = "You are a fast research analyst.")
+@Timeout(timeoutMs = 5000, action = "fallback", fallbackResponse = "Analysis timed out.")
+@Cache(mode = "EXACT", ttlSeconds = 300)
+@Observe(namespace = "myapp", tags = {"env=prod", "team=ai"})
+public class FastAnalystAgent {}
+```
+
+On cache hit: zero tokens, instant response.
+On timeout: returns fallback or throws `AgentTimeoutException`.
+`@Observe` emits Prometheus metrics automatically when `spring-boot-actuator` is on the classpath.
+
+## Prompt Templates
+
+```
+# src/main/resources/prompts/analyst-prompt.txt
+You are {{agentName}}, a specialist {{role}} agent.
+Mission: {{description}}
+Active profile: {{profile}}
+Task reference: {{taskId}}
+```
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "ResearchAnalyst",
+       description = "Deep-dive technical research with citations.")
+@PromptTemplate(path = "prompts/analyst-prompt.txt")
+public class ResearchAnalystAgent {}
+```
+
+## Agent Pools
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "AnalystPool",
+       description = "High-throughput analyst.")
+@AgentPool(size = 5, strategy = "LEAST_BUSY", maxQueueSize = 20)
+public class HighThroughputAnalyst {}
+```
+
+```java
+// Routes automatically across all 5 instances:
+AgentResponse r = ctx.submitTo(AgentRole.ANALYST, "Analyse this dataset...");
+```
+
+## Golden-Set Testing with @AgentTest
+
+```json
+// src/test/resources/tests/analyst-tests.json
+[
+  { "input": "What is 2+2?",           "expectedContains": "4" },
+  { "input": "Capital of France?",     "expectedContains": "Paris" },
+  { "input": "Explain quantum physics", "expectedMinWords": 30 }
+]
+```
+
+```java
+@Agent(role = AgentRole.ANALYST, name = "Analyst")
+@AgentTest(testCasesPath = "tests/analyst-tests.json", passRateMin = 0.9f)
+public class AnalystAgent {}
+
+// In your test suite:
+ctx.runAgentTests();                          // all @AgentTest agents
+ctx.runAgentTests(AgentRole.ANALYST);         // single role
+```
+
+## Checkpoints in Durable Workflows
+
+```java
+@Agent(role = AgentRole.EXECUTOR)
+@DurableAgent
+public class ClaimProcessorAgent {
+
+    @Checkpoint(name = "validation")
+    public String validateClaim(String input) {
+        // Saved to DurableStore after first run.
+        // Skipped and result returned from store on JVM restart.
+        return "validated:" + input;
+    }
+
+    @Checkpoint(name = "enrichment")
+    public String enrichClaim(String validated) {
+        return "enriched:" + validated;
+    }
+}
+```
+
+## Metrics with @Observe (Spring Boot)
+
+```properties
+# application.properties — enable actuator endpoints
+management.endpoints.web.exposure.include=prometheus,health
+```
+
+Prometheus metrics emitted automatically:
+```
+myapp_agent_calls_total{agent="FastAnalyst",role="ANALYST",status="success"} 42
+myapp_agent_latency_seconds{agent="FastAnalyst",role="ANALYST"} 0.231
+myapp_agent_tokens_total{agent="FastAnalyst",role="ANALYST",type="prompt"} 1050
+```
 
 ## Modules
 

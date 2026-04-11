@@ -1,4 +1,4 @@
-## v3.7.0 (2026-04-11) — Streaming, Guardrails, Durable Workflows, Pipeline Orchestration
+## v3.7.0 (2026-04-12) — Full Feature Release: 7 Gap Annotations Implemented
 ### Added
 - **LLM Streaming** — token-by-token output via `@Streaming` annotation
   - `StreamToken` record + `TokenWriter` SPI (`StdoutTokenWriter`, `LoggerTokenWriter`, `NoOpTokenWriter`)
@@ -41,11 +41,46 @@
   - `AgentApiController` — POST submit, POST submit/{role}, POST submit/stream (SSE), GET info, GET health
   - `AgentApiRegistrar` — scans registry, registers routes via `RequestMappingHandlerMapping`
   - Virtual thread per SSE stream (Java 21)
+- **LLM Streaming, Guardrails, Durable Workflows, Pipeline Orchestration, Rate Limiting,
+  Conversation History, MCP Tools, Remote Squads, Agent HTTP API** — see v3.5–v3.6 for details
 - **New Annotations**: `@Streaming`, `@Guardrails`, `@DurableAgent`, `@Retry`, `@Pipeline`, `@Step`,
   `@Condition`, `@RateLimit`, `@McpServer`, `@RemoteSquad`, `@AgentAPI`
-- **Gap Annotations** (defined, engines deferred): `@Timeout`, `@Cache`, `@Observe`, `@PromptTemplate`, `@AgentPool`, `@AgentTest`, `@Checkpoint`
+- **@Timeout** — Hard LLM call deadline via `CompletableFuture.orTimeout()`
+  - `timeoutMs` configurable per agent; `action="fail"` throws `AgentTimeoutException`
+  - `action="fallback"` returns `fallbackResponse` without touching the circuit breaker
+  - Timeout errors counted by circuit breaker and reported via `@Observe`
+- **@Cache** — In-process response cache; zero tokens on cache hit
+  - `mode="EXACT"` — MD5 hash of (systemPrompt + userMessage); O(1) lookup
+  - `mode="SEMANTIC"` — cosine similarity against stored embeddings; requires `EmbeddingPort`
+  - `ttlSeconds` configurable TTL; entries evicted lazily on next access
+  - New package: `io.squados.cache` (`CacheEngine`, `CacheEntry`)
+- **@Observe** — Structured metrics emission per agent call
+  - New `MetricsPort` SPI (`io.squados.metrics`); `InMemoryMetricsCollector` (zero deps)
+  - `MicrometerMetricsAdapter` (starter): Prometheus counters + timers when `spring-boot-actuator` present
+  - Emits: `{ns}_agent_calls_total`, `{ns}_agent_latency_seconds`, `{ns}_agent_tokens_total`, `{ns}_agent_errors_total`
+  - Custom `namespace` + static `tags` per agent
+- **@PromptTemplate** — Externalise system prompts to classpath files
+  - `{{agentName}}`, `{{role}}`, `{{description}}`, `{{profile}}`, `{{taskId}}` substituted at runtime
+  - Falls back gracefully to default inline prompt if file not found
+- **@AgentPool** — High-throughput load balancing across multiple agent instances
+  - `size` instances created at boot; all share the same metadata and `LlmOptions`
+  - Strategies: `ROUND_ROBIN` (default), `LEAST_BUSY` (inflight tracking), `RANDOM`
+  - `maxQueueSize` per instance; overflow falls back to round-robin
+  - New package: `io.squados.pool` (`AgentPoolManager`)
+  - `SquadContext.submitTo()` routes through pool transparently
+- **@AgentTest** — Golden-set testing with JSON test cases
+  - `testCasesPath` — classpath JSON: `[{"input":"...","expectedContains":"...","expectedMinWords":N}]`
+  - `passRateMin` threshold (default 0.80); throws `EvalFailedException` if below
+  - `SquadContext.runAgentTests()` — run all `@AgentTest` agents; `runAgentTests(role)` — targeted
+  - New class: `AgentTestRunner` (`io.squados.eval`); zero-dep JSON parser
+- **@Checkpoint** — Mid-workflow state persistence for `@DurableAgent` classes
+  - Annotate methods with `@Checkpoint(name="step-name")`; return value saved to `DurableStore`
+  - On JVM restart, checkpointed step is skipped and cached result returned
+  - Key format: `chk:{workflowId}:{agentName}:{checkpointName}`
+  - `CheckpointEngine` (`io.squados.checkpoint`) handles save/restore
+  - `DurableStore` now injected into all `AgentWrapper` instances at boot
 - **New Exceptions**: `RateLimitExceededException`, `GuardrailException`, `RetryExhaustedException`,
-  `DurableWorkflowException`, `AgentTimeoutException`
+  `DurableWorkflowException`, `AgentTimeoutException`, `EvalFailedException` (pass-rate form)
 - **squad-spring-boot-starter** new beans:
   - `GuardrailEngine` (squad.guardrails.enabled=true)
   - `DurableStore` (squad.durable.enabled=true, store=memory|redis)
@@ -55,7 +90,17 @@
   - `RemoteSquadInjector` BeanPostProcessor (always active)
   - `AgentApiRegistrar` (squad.agent-api.enabled=true)
   - `SpringAiEmbeddingAdapter` (squad.memory.enabled=true + EmbeddingModel present)
+  - `InMemoryMetricsCollector` (always active fallback)
+  - `MicrometerMetricsAdapter` (when spring-boot-actuator + MeterRegistry present)
+- **LlmPortConfig** — separate `@AutoConfiguration` to fix `BeanPostProcessor` early-instantiation
+  - `RemoteSquadInjector` BeanPostProcessor forced early instantiation of `SquadAutoConfiguration`
+  - Splitting `squadLlmPort` into `LlmPortConfig` ensures `ChatClient.Builder` is available
 - **Phase 21-26 tests** — 114 new tests (DurableStore, GuardrailEngine, RetryEngine, Streaming, Pipeline, ConditionEvaluator)
+### Fixed
+- `LlmPortConfig`: removed incorrect `@ConditionalOnBean(name="ChatClient$Builder")` — `$` inner-class
+  separator never matches Spring's registered bean name; `@ConditionalOnClass` alone is sufficient
+- `pom.xml`: `spring-webmvc` made optional (was forcing Spring Web on all starter consumers)
+- `SpringAiEmbeddingAdapter`: updated for Spring AI 1.0.0 GA — `embed(String)` now returns `float[]`
 ### Modules published to Maven Central
 - `io.github.sgpatel:squad-core:3.7.0`
 - `io.github.sgpatel:squad-spring-boot-starter:3.7.0`
