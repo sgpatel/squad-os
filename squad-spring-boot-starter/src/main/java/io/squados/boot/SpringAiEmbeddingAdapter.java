@@ -22,12 +22,8 @@ public class SpringAiEmbeddingAdapter implements EmbeddingPort {
     @Override
     public float[] embed(String text) {
         if (text == null || text.isBlank()) return new float[0];
-        java.util.List<Double> embedding = embeddingModel.embed(text);
-        float[] result = new float[embedding.size()];
-        for (int i = 0; i < embedding.size(); i++) {
-            result[i] = embedding.get(i).floatValue();
-        }
-        return result;
+        // Spring AI 1.0.0 GA: embed(String) returns float[] directly
+        return embeddingModel.embed(text);
     }
 
     @Override
