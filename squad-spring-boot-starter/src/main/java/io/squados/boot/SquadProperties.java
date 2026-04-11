@@ -9,34 +9,68 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * Reference:
  * <pre>
+ * # ── Squad Identity ────────────────────────────────────────────────────
  * squad.name=my-squad
- * squad.llm.provider=ollama
- * squad.llm.model=llama3.2
+ *
+ * # ── LLM Provider ──────────────────────────────────────────────────────
+ * # Add ONE model starter to your pom.xml (NOT included by this starter):
+ * #   Ollama:     spring-ai-starter-model-ollama
+ * #   OpenAI:     spring-ai-starter-model-openai
+ * #   Anthropic:  spring-ai-starter-model-anthropic
+ * #   Bedrock:    spring-ai-starter-model-bedrock
+ * #   Azure:      spring-ai-starter-model-azure-openai
+ * squad.llm.provider=ollama              # ollama | openai | anthropic | bedrock | azure-openai
+ * squad.llm.model=llama3.2              # model name for chosen provider
  * squad.llm.temperature=0.5
  * squad.llm.max-tokens=2048
+ *
+ * # ── Tracing ───────────────────────────────────────────────────────────
  * squad.tracing.enabled=true
- * squad.tracing.exporter=memory          # memory | redis
- * redis.host=localhost
- * redis.port=6379
+ * squad.tracing.exporter=memory          # memory | log
+ *
+ * # ── Security ──────────────────────────────────────────────────────────
  * squad.security.enabled=false
  * squad.security.jwt-issuer=squados
  * squad.security.audit-log=true
+ *
+ * # ── Approvals ─────────────────────────────────────────────────────────
  * squad.approval.enabled=true
+ *
+ * # ── Memory (semantic retrieval) ───────────────────────────────────────
  * squad.memory.enabled=false
  * squad.memory.store=memory              # memory | redis | pgvector
  * squad.memory.top-k=3
  * squad.memory.min-score=0.72
+ *
+ * # ── Conversation History ──────────────────────────────────────────────
  * squad.conversation.enabled=false
  * squad.conversation.max-turns=20
- * squad.rate-limit.default-token-budget=0
+ *
+ * # ── Rate Limiting ─────────────────────────────────────────────────────
+ * squad.rate-limit.default-token-budget=0   # 0 = unlimited
+ *
+ * # ── MCP Tool Servers ──────────────────────────────────────────────────
  * squad.mcp.enabled=false
  * squad.mcp.timeout-ms=5000
+ *
+ * # ── Durable Workflows ─────────────────────────────────────────────────
  * squad.durable.enabled=false
  * squad.durable.store=memory             # memory | redis
  * squad.durable.ttl-hours=24
+ *
+ * # ── Guardrails ────────────────────────────────────────────────────────
  * squad.guardrails.enabled=false
+ *
+ * # ── Agent HTTP API ────────────────────────────────────────────────────
  * squad.agent-api.enabled=false
- * squad.api.key=                         # required for ApiKeyAuth
+ *
+ * # ── Global API Key ────────────────────────────────────────────────────
+ * squad.api.key=                         # used by @AgentAPI + @RemoteSquad
+ *
+ * # ── Redis (shared by DurableStore, TraceExporter when store=redis) ───
+ * redis.host=localhost
+ * redis.port=6379
+ * redis.password=
  * </pre>
  */
 @ConfigurationProperties(prefix = "squad")

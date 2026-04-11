@@ -1,9 +1,11 @@
 package io.squados.boot;
 
 import io.squados.approval.InProcessApprovalStore;
+import io.squados.config.SquadConfig;
 import io.squados.config.SquadConfigBridge;
+import io.squados.config.SquadConfigParser;
 import io.squados.context.SquadContext;
-import io.squados.context.SquadRunner;
+import io.squados.context.TokenBudget;
 import io.squados.conversation.ConversationStore;
 import io.squados.conversation.InProcessConversationStore;
 import io.squados.durable.DurableStore;
@@ -14,6 +16,7 @@ import io.squados.guardrail.GuardrailEngine;
 import io.squados.improve.InProcessFeedbackStore;
 import io.squados.llm.LlmPort;
 import io.squados.mcp.McpToolProvider;
+import io.squados.memory.MemoryManager;
 import io.squados.ratelimit.RateLimitEnforcer;
 import io.squados.security.AuditLog;
 import io.squados.security.JwtValidator;
@@ -23,10 +26,10 @@ import io.squados.trace.LogTraceExporter;
 import io.squados.trace.SquadTracer;
 import io.squados.trace.TraceExporter;
 
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -36,41 +39,61 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 /**
  * Spring Boot Auto-Configuration for SquadOS.
  *
- * Automatically configures all required beans when squad-spring-boot-starter
- * is on the classpath. Zero boilerplate required.
+ * Automatically wires all SquadOS beans when squad-spring-boot-starter is on
+ * the classpath. Zero boilerplate required in the application.
  *
- * Beans created:
- *   - LlmPort                    (Spring AI adapter — requires spring-ai-starter-model-ollama)
- *   - SquadContext                (main entry point)
- *   - TraceExporter               (log by default, memory if squad.tracing.exporter=memory)
- *   - InProcessApprovalStore
- *   - InProcessEventBus
- *   - InProcessFeedbackStore
- *   - AuditLog + SecurityGuard    (if squad.security.enabled=true)
- *   - JwtValidator                (if squad.security.enabled=true)
- *   - RateLimitEnforcer           (always — agents without @RateLimit are unaffected)
- *   - GuardrailEngine             (if squad.guardrails.enabled=true)
- *   - InProcessDurableStore       (if squad.durable.enabled=true, store=memory)
- *   - RedisDurableStore           (if squad.durable.enabled=true, store=redis)
- *   - InProcessConversationStore  (if squad.conversation.enabled=true)
- *   - HttpMcpClient               (if squad.mcp.enabled=true)
- *   - RemoteSquadInjector         (always — BeanPostProcessor, no-op when no @RemoteSquad fields)
- *   - AgentApiRegistrar           (if squad.agent-api.enabled=true)
- *   - SpringAiEmbeddingAdapter    (if squad.memory.enabled=true and EmbeddingModel present)
+ * ── LLM Provider — MUST be supplied by the application ────────────────────
  *
- * All beans use {@code @ConditionalOnMissingBean} — override any by declaring
- * your own {@code @Bean} in your {@code @SpringBootApplication} class.
+ * squad-spring-boot-starter does NOT include any LLM model dependency.
+ * Add exactly ONE model starter to your application pom.xml:
  *
- * Usage — after (zero boilerplate):
- * <pre>
- * {@literal @}SpringBootApplication
- * {@literal @}SquadApplication
- * public class MyApp {
- *     public static void main(String[] args) {
- *         SpringApplication.run(MyApp.class, args);
- *     }
- * }
- * </pre>
+ *   Ollama (local):     spring-ai-starter-model-ollama
+ *   OpenAI:             spring-ai-starter-model-openai
+ *   Anthropic Claude:   spring-ai-starter-model-anthropic
+ *   AWS Bedrock:        spring-ai-starter-model-bedrock
+ *   Azure OpenAI:       spring-ai-starter-model-azure-openai
+ *
+ * Then configure:
+ *   squad.llm.provider=openai
+ *   squad.llm.model=gpt-4o
+ *
+ * If no Spring AI model is on the classpath, SquadOS boots with MockLlmPort
+ * (deterministic responses — safe for local dev and tests).
+ * ──────────────────────────────────────────────────────────────────────────
+ *
+ * Beans auto-created:
+ *   Always:
+ *     LlmPort (SpringAiLlmAdapter if ChatClient.Builder present, else MockLlmPort)
+ *     SquadContext, TraceExporter, RateLimitEnforcer
+ *     RemoteSquadInjector (BeanPostProcessor for @RemoteSquad)
+ *     InProcessEventBus, InProcessFeedbackStore
+ *
+ *   Conditional (squad.approval.enabled=true, default true):
+ *     InProcessApprovalStore
+ *
+ *   Conditional (squad.security.enabled=true):
+ *     AuditLog, SecurityGuard, JwtValidator
+ *
+ *   Conditional (squad.guardrails.enabled=true):
+ *     GuardrailEngine
+ *
+ *   Conditional (squad.durable.enabled=true):
+ *     DurableStore (InProcess or Redis based on squad.durable.store)
+ *
+ *   Conditional (squad.conversation.enabled=true):
+ *     ConversationStore
+ *
+ *   Conditional (squad.mcp.enabled=true):
+ *     McpToolProvider (HttpMcpClient)
+ *
+ *   Conditional (squad.agent-api.enabled=true + spring-web on classpath):
+ *     AgentApiRegistrar
+ *
+ *   Conditional (squad.memory.enabled=true + EmbeddingModel present):
+ *     SpringAiEmbeddingAdapter (EmbeddingPort)
+ *
+ * All beans are {@code @ConditionalOnMissingBean} — declare your own {@code @Bean}
+ * to override any of them.
  */
 @AutoConfiguration
 @EnableConfigurationProperties(SquadProperties.class)
@@ -83,35 +106,63 @@ public class SquadAutoConfiguration {
         SquadConfigBridge.applyToSystemProperties();
     }
 
-    // ── LLM Port ─────────────────────────────────────────────────────────
+    // ── LLM Port ──────────────────────────────────────────────────────────
+    // Activated only when a Spring AI model starter is present (ChatClient.Builder bean).
+    // If absent, SquadContext falls back to MockLlmPort internally.
 
     @Bean
     @ConditionalOnMissingBean(LlmPort.class)
-    public LlmPort squadLlmPort(ChatClient.Builder builder) {
-        System.out.printf("[SquadOS] LlmPort: Spring AI %s/%s%n",
-            props.getLlm().getProvider(), props.getLlm().getModel());
-        return new SpringAiLlmAdapter(builder);
+    @ConditionalOnClass(name = "org.springframework.ai.chat.client.ChatClient")
+    @ConditionalOnBean(name = "org.springframework.ai.chat.client.ChatClient$Builder")
+    public LlmPort squadLlmPort(
+            org.springframework.ai.chat.client.ChatClient.Builder builder) {
+        String provider = props.getLlm().getProvider();
+        String model    = props.getLlm().getModel();
+        System.out.printf("[SquadOS] LlmPort: Spring AI %s / %s%n", provider, model);
+        return new SpringAiLlmAdapter(builder, provider);
     }
 
-    // ── Squad Context ─────────────────────────────────────────────────────
+    // ── Squad Context ──────────────────────────────────────────────────────
+    // Accepts all optional collaborators via ObjectProvider — no hard wiring required.
+    // Each collaborator is injected only if its bean exists (conditional on own @Bean).
 
     @Bean
     @ConditionalOnMissingBean(SquadContext.class)
-    public SquadContext squadContext(LlmPort llmPort) {
+    public SquadContext squadContext(
+            LlmPort llmPort,
+            ObjectProvider<MemoryManager>     memoryManagerProvider,
+            ObjectProvider<ConversationStore> conversationStoreProvider,
+            ObjectProvider<RateLimitEnforcer> rateLimitEnforcerProvider,
+            ObjectProvider<TokenBudget>       tokenBudgetProvider,
+            ObjectProvider<McpToolProvider>   mcpToolProviderProvider,
+            ObjectProvider<DurableStore>      durableStoreProvider,
+            ObjectProvider<GuardrailEngine>   guardrailEngineProvider) {
+
         System.out.printf("[SquadOS] Booting squad: %s%n", props.getName());
-        Class<?> appClass = findSquadApplicationClass();
-        return SquadRunner.run(appClass, llmPort);
+        SquadConfig config = SquadConfigParser.load();
+        SquadContext ctx = new SquadContext(config, llmPort);
+
+        // Wire optional collaborators before boot() — each no-ops if bean absent
+        memoryManagerProvider    .ifAvailable(ctx::setMemoryManager);
+        conversationStoreProvider.ifAvailable(ctx::setConversationStore);
+        rateLimitEnforcerProvider.ifAvailable(ctx::setRateLimitEnforcer);
+        tokenBudgetProvider      .ifAvailable(ctx::setTokenBudget);
+        mcpToolProviderProvider  .ifAvailable(ctx::setMcpToolProvider);
+        durableStoreProvider     .ifAvailable(ctx::setDurableStore);
+        guardrailEngineProvider  .ifAvailable(ctx::setGuardrailEngine);
+
+        ctx.boot();
+        return ctx;
     }
 
-    // ── Tracing ───────────────────────────────────────────────────────────
+    // ── Tracing ────────────────────────────────────────────────────────────
 
     @Bean
     @ConditionalOnMissingBean(TraceExporter.class)
     @ConditionalOnProperty(prefix = "squad.tracing", name = "enabled",
                            havingValue = "true", matchIfMissing = true)
     public TraceExporter squadTraceExporter() {
-        String exporterType = props.getTracing().getExporter();
-        TraceExporter exporter = switch (exporterType) {
+        TraceExporter exporter = switch (props.getTracing().getExporter()) {
             case "memory" -> {
                 System.out.println("[SquadOS] TraceExporter: in-memory");
                 yield new InMemoryTraceExporter();
@@ -125,7 +176,7 @@ public class SquadAutoConfiguration {
         return exporter;
     }
 
-    // ── Approval ──────────────────────────────────────────────────────────
+    // ── Approval ────────────────────────────────────────────────────────────
 
     @Bean
     @ConditionalOnMissingBean(InProcessApprovalStore.class)
@@ -136,7 +187,7 @@ public class SquadAutoConfiguration {
         return new InProcessApprovalStore();
     }
 
-    // ── Event Bus ─────────────────────────────────────────────────────────
+    // ── Event Bus ────────────────────────────────────────────────────────────
 
     @Bean
     @ConditionalOnMissingBean(InProcessEventBus.class)
@@ -145,7 +196,7 @@ public class SquadAutoConfiguration {
         return new InProcessEventBus();
     }
 
-    // ── Feedback Store ────────────────────────────────────────────────────
+    // ── Feedback Store ───────────────────────────────────────────────────────
 
     @Bean
     @ConditionalOnMissingBean(InProcessFeedbackStore.class)
@@ -154,7 +205,7 @@ public class SquadAutoConfiguration {
         return new InProcessFeedbackStore();
     }
 
-    // ── Security (opt-in) ─────────────────────────────────────────────────
+    // ── Security (opt-in) ────────────────────────────────────────────────────
 
     @Bean
     @ConditionalOnMissingBean(AuditLog.class)
@@ -179,16 +230,16 @@ public class SquadAutoConfiguration {
         return new JwtValidator(props.getSecurity().getJwtIssuer());
     }
 
-    // ── Rate Limiting ─────────────────────────────────────────────────────
+    // ── Rate Limiting (always active — no-op for agents without @RateLimit) ──
 
     @Bean
     @ConditionalOnMissingBean(RateLimitEnforcer.class)
     public RateLimitEnforcer squadRateLimitEnforcer() {
-        System.out.println("[SquadOS] RateLimitEnforcer: sliding-window enabled");
+        System.out.println("[SquadOS] RateLimitEnforcer: sliding-window active");
         return new RateLimitEnforcer();
     }
 
-    // ── Guardrails (opt-in) ───────────────────────────────────────────────
+    // ── Guardrails (opt-in) ──────────────────────────────────────────────────
 
     @Bean
     @ConditionalOnMissingBean(GuardrailEngine.class)
@@ -198,7 +249,7 @@ public class SquadAutoConfiguration {
         return new GuardrailEngine();
     }
 
-    // ── Durable Workflow Store (opt-in) ───────────────────────────────────
+    // ── Durable Store (opt-in) ───────────────────────────────────────────────
 
     @Bean
     @ConditionalOnMissingBean(DurableStore.class)
@@ -217,7 +268,7 @@ public class SquadAutoConfiguration {
         return new InProcessDurableStore();
     }
 
-    // ── Conversation Store (opt-in) ───────────────────────────────────────
+    // ── Conversation Store (opt-in) ──────────────────────────────────────────
 
     @Bean
     @ConditionalOnMissingBean(ConversationStore.class)
@@ -228,7 +279,7 @@ public class SquadAutoConfiguration {
         return new InProcessConversationStore();
     }
 
-    // ── MCP Tool Provider (opt-in) ────────────────────────────────────────
+    // ── MCP Tool Provider (opt-in) ───────────────────────────────────────────
 
     @Bean
     @ConditionalOnMissingBean(McpToolProvider.class)
@@ -239,59 +290,41 @@ public class SquadAutoConfiguration {
         return new HttpMcpClient(props.getMcp().getTimeoutMs());
     }
 
-    // ── Remote Squad Injector (BeanPostProcessor) ─────────────────────────
+    // ── Remote Squad Injector (always active BeanPostProcessor) ──────────────
 
     @Bean
     @ConditionalOnMissingBean(RemoteSquadInjector.class)
     public RemoteSquadInjector squadRemoteSquadInjector() {
-        System.out.println("[SquadOS] RemoteSquadInjector: @RemoteSquad field injection ready");
+        System.out.println("[SquadOS] RemoteSquadInjector: @RemoteSquad field injection active");
         return new RemoteSquadInjector(props.getApi().getKey());
     }
 
-    // ── Agent API HTTP Registrar (opt-in) ─────────────────────────────────
+    // ── Agent API Registrar (opt-in, requires spring-web) ────────────────────
 
     @Bean
     @ConditionalOnMissingBean(AgentApiRegistrar.class)
+    @ConditionalOnClass(name = "org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping")
     @ConditionalOnProperty(prefix = "squad.agent-api", name = "enabled", havingValue = "true")
     public AgentApiRegistrar squadAgentApiRegistrar(
             SquadContext context,
             RequestMappingHandlerMapping handlerMapping) {
-        System.out.println("[SquadOS] AgentApiRegistrar: dynamic @AgentAPI routes enabled");
+        System.out.println("[SquadOS] AgentApiRegistrar: @AgentAPI HTTP routes active");
         AgentApiRegistrar registrar =
             new AgentApiRegistrar(context, handlerMapping, props.getApi().getKey());
         registrar.registerAll();
         return registrar;
     }
 
-    // ── Embedding Adapter (opt-in, requires EmbeddingModel on classpath) ──
+    // ── Embedding Adapter (opt-in — requires EmbeddingModel on classpath) ─────
 
     @Bean
     @ConditionalOnMissingBean(SpringAiEmbeddingAdapter.class)
-    @ConditionalOnBean(EmbeddingModel.class)
+    @ConditionalOnClass(name = "org.springframework.ai.embedding.EmbeddingModel")
+    @ConditionalOnBean(name = "embeddingModel")
     @ConditionalOnProperty(prefix = "squad.memory", name = "enabled", havingValue = "true")
-    public SpringAiEmbeddingAdapter squadEmbeddingAdapter(EmbeddingModel embeddingModel) {
-        System.out.println("[SquadOS] EmbeddingPort: Spring AI adapter (semantic memory enabled)");
+    public SpringAiEmbeddingAdapter squadEmbeddingAdapter(
+            org.springframework.ai.embedding.EmbeddingModel embeddingModel) {
+        System.out.println("[SquadOS] EmbeddingPort: Spring AI adapter (semantic memory active)");
         return new SpringAiEmbeddingAdapter(embeddingModel);
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────
-
-    /**
-     * Walk the call stack to find the class annotated with @SquadApplication.
-     * Falls back to a placeholder class if not found.
-     */
-    private Class<?> findSquadApplicationClass() {
-        try {
-            StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-            for (StackTraceElement el : stack) {
-                try {
-                    Class<?> cls = Class.forName(el.getClassName());
-                    if (cls.isAnnotationPresent(io.squados.annotation.SquadApplication.class)) {
-                        return cls;
-                    }
-                } catch (ClassNotFoundException ignored) {}
-            }
-        } catch (Exception ignored) {}
-        return SquadAutoConfiguration.class; // safe fallback
     }
 }
