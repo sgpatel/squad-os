@@ -7,7 +7,7 @@
   <parent>
     <groupId>io.github.sgpatel</groupId>
     <artifactId>squad-os</artifactId>
-    <version>3.4.0</version>
+    <version>3.7.0</version>
   </parent>
   <artifactId>squad-core</artifactId>
   <name>SquadOS Core</name>
@@ -95,6 +95,24 @@
           </execution>
           <execution><id>phase11-tests</id><phase>test</phase><goals><goal>java</goal></goals>
             <configuration><mainClass>io.squados.tests.SquadOsPhase11Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase21-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase21Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase22-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase22Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase23-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase23Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase24-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase24Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase25-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase25Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase26-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase26Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
         </executions>
       </plugin>

@@ -61,6 +61,23 @@ public class MockLlmPort implements LlmPort {
     }
 
     @Override
+    public void chatStream(String systemPrompt, String userMessage,
+                           LlmOptions options, TokenWriter writer) {
+        String content = resolveResponse(userMessage);
+        callCount.incrementAndGet();
+        calls.add(new CallRecord(systemPrompt, userMessage, options, content));
+        // Split into chunks to simulate streaming
+        int chunkSize = Math.max(1, content.length() / 3);
+        for (int i = 0; i < content.length(); i += chunkSize) {
+            String chunk = content.substring(i, Math.min(i + chunkSize, content.length()));
+            boolean last = (i + chunkSize) >= content.length();
+            writer.write(last ? StreamToken.last(chunk) : StreamToken.of(chunk));
+        }
+        if (content.isEmpty()) writer.write(StreamToken.last());
+        writer.flush();
+    }
+
+    @Override
     public <T> T chatStructured(String systemPrompt, String userMessage,
                                 Class<T> responseType, LlmOptions options) {
         // For tests — return null. Override in test subclass for typed results.
