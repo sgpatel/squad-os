@@ -53,37 +53,55 @@ public class AgentApiRegistrar {
 
             AgentApiController controller = new AgentApiController(context, path, apiKey);
             register(controller);
-            System.out.printf("[SquadOS] @AgentAPI registered: POST %s/submit  GET %s/info%n",
-                path, path);
+            System.out.printf(
+                "[SquadOS] @AgentAPI registered: %s  [submit, submit/{role}, submit/stream, submit/{role}/stream, info, health]%n",
+                path);
         }
     }
 
     private void register(AgentApiController controller) {
         try {
-            // Register POST {path}/submit
-            Method submit = AgentApiController.class.getMethod(
-                "handleSubmit", String.class, String.class);
-            RequestMappingInfo submitInfo = RequestMappingInfo
-                .paths(controller.getPath() + "/submit")
-                .methods(org.springframework.web.bind.annotation.RequestMethod.POST)
-                .build();
-            handlerMapping.registerMapping(submitInfo, controller, submit);
+            String base = controller.getPath();
+            var POST = org.springframework.web.bind.annotation.RequestMethod.POST;
+            var GET  = org.springframework.web.bind.annotation.RequestMethod.GET;
 
-            // Register GET {path}/info
-            Method info = AgentApiController.class.getMethod("handleInfo");
-            RequestMappingInfo infoInfo = RequestMappingInfo
-                .paths(controller.getPath() + "/info")
-                .methods(org.springframework.web.bind.annotation.RequestMethod.GET)
-                .build();
-            handlerMapping.registerMapping(infoInfo, controller, info);
+            // POST {path}/submit
+            handlerMapping.registerMapping(
+                RequestMappingInfo.paths(base + "/submit").methods(POST).build(),
+                controller,
+                AgentApiController.class.getMethod("handleSubmit", String.class, String.class));
 
-            // Register GET {path}/health
-            Method health = AgentApiController.class.getMethod("handleHealth");
-            RequestMappingInfo healthInfo = RequestMappingInfo
-                .paths(controller.getPath() + "/health")
-                .methods(org.springframework.web.bind.annotation.RequestMethod.GET)
-                .build();
-            handlerMapping.registerMapping(healthInfo, controller, health);
+            // POST {path}/submit/{role}
+            handlerMapping.registerMapping(
+                RequestMappingInfo.paths(base + "/submit/{role}").methods(POST).build(),
+                controller,
+                AgentApiController.class.getMethod("handleSubmitToRole",
+                    String.class, String.class, String.class));
+
+            // POST {path}/submit/stream
+            handlerMapping.registerMapping(
+                RequestMappingInfo.paths(base + "/submit/stream").methods(POST).build(),
+                controller,
+                AgentApiController.class.getMethod("handleStream", String.class, String.class));
+
+            // POST {path}/submit/{role}/stream
+            handlerMapping.registerMapping(
+                RequestMappingInfo.paths(base + "/submit/{role}/stream").methods(POST).build(),
+                controller,
+                AgentApiController.class.getMethod("handleStreamToRole",
+                    String.class, String.class, String.class));
+
+            // GET {path}/info
+            handlerMapping.registerMapping(
+                RequestMappingInfo.paths(base + "/info").methods(GET).build(),
+                controller,
+                AgentApiController.class.getMethod("handleInfo"));
+
+            // GET {path}/health
+            handlerMapping.registerMapping(
+                RequestMappingInfo.paths(base + "/health").methods(GET).build(),
+                controller,
+                AgentApiController.class.getMethod("handleHealth"));
 
         } catch (NoSuchMethodException e) {
             throw new RuntimeException("Failed to register @AgentAPI routes: " + e.getMessage(), e);

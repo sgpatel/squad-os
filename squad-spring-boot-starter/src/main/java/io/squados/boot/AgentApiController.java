@@ -88,6 +88,40 @@ public class AgentApiController {
         return emitter;
     }
 
+    /** Handle POST {path}/submit/{role}/stream — SSE streaming to a specific role */
+    public SseEmitter handleStreamToRole(String roleName, String task, String providedKey) {
+        if (!checkAuth(providedKey)) {
+            SseEmitter emitter = new SseEmitter();
+            try { emitter.send("Unauthorized"); } catch (IOException ignored) {}
+            emitter.complete();
+            return emitter;
+        }
+        try {
+            AgentRole role = AgentRole.valueOf(roleName.toUpperCase());
+            SseEmitter emitter = new SseEmitter(60_000L);
+            Thread.startVirtualThread(() -> {
+                try {
+                    context.submitStream(role, task, token -> {
+                        try {
+                            emitter.send(SseEmitter.event().data(token.text()));
+                            if (token.isLast()) emitter.complete();
+                        } catch (IOException e) {
+                            emitter.completeWithError(e);
+                        }
+                    });
+                } catch (Exception e) {
+                    emitter.completeWithError(e);
+                }
+            });
+            return emitter;
+        } catch (IllegalArgumentException e) {
+            SseEmitter emitter = new SseEmitter();
+            try { emitter.send("Unknown role: " + roleName); } catch (IOException ignored) {}
+            emitter.complete();
+            return emitter;
+        }
+    }
+
     /** Handle GET {path}/info */
     public ResponseEntity<Map<String, Object>> handleInfo() {
         List<String> agents = context.getRegistry().all().stream()
