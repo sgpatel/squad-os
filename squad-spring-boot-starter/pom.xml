@@ -11,11 +11,15 @@
   </parent>
   <artifactId>squad-spring-boot-starter</artifactId>
   <name>SquadOS Spring Boot Starter</name>
-  <description>Zero-config Spring Boot auto-configuration for SquadOS.</description>
+  <description>Zero-config Spring Boot auto-configuration for SquadOS.
+    LLM model dependencies are NOT included — add your own model starter.
+  </description>
+
   <properties>
     <spring-boot.version>3.3.0</spring-boot.version>
     <spring-ai.version>1.0.0</spring-ai.version>
   </properties>
+
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -32,34 +36,90 @@
       </dependency>
     </dependencies>
   </dependencyManagement>
+
   <dependencies>
-    <!-- Core framework -->
+
+    <!-- ── SquadOS Core (always required) ─────────────────────────────── -->
     <dependency>
       <groupId>io.github.sgpatel</groupId>
       <artifactId>squad-core</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <!-- Spring Boot autoconfigure -->
+
+    <!-- ── Spring Boot (always required) ──────────────────────────────── -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-autoconfigure</artifactId>
     </dependency>
-    <!-- Spring AI Ollama adapter -->
+
+    <!-- ── Spring AI Core — compile-only; SpringAiLlmAdapter + Embedding ─
+         NO model is included here by design.
+         Add exactly ONE of the following to your application pom:
+
+           Ollama (local):
+             <dependency>
+               <groupId>org.springframework.ai</groupId>
+               <artifactId>spring-ai-starter-model-ollama</artifactId>
+             </dependency>
+
+           OpenAI:
+             <dependency>
+               <groupId>org.springframework.ai</groupId>
+               <artifactId>spring-ai-starter-model-openai</artifactId>
+             </dependency>
+
+           Anthropic Claude:
+             <dependency>
+               <groupId>org.springframework.ai</groupId>
+               <artifactId>spring-ai-starter-model-anthropic</artifactId>
+             </dependency>
+
+           AWS Bedrock:
+             <dependency>
+               <groupId>org.springframework.ai</groupId>
+               <artifactId>spring-ai-starter-model-bedrock</artifactId>
+             </dependency>
+
+           Azure OpenAI:
+             <dependency>
+               <groupId>org.springframework.ai</groupId>
+               <artifactId>spring-ai-starter-model-azure-openai</artifactId>
+             </dependency>
+
+         Then set in application.properties:
+           squad.llm.provider=openai          # or ollama, anthropic, bedrock, azure-openai
+           squad.llm.model=gpt-4o             # model name for the chosen provider
+    ──────────────────────────────────────────────────────────────────── -->
+    <!-- Spring AI — compile-only; no model is included here by design.
+         ChatClient, ChatResponse, Usage, EmbeddingModel are all optional.
+         See pom comment above for which model starter to add. -->
     <dependency>
       <groupId>org.springframework.ai</groupId>
-      <artifactId>spring-ai-starter-model-ollama</artifactId>
+      <artifactId>spring-ai-client-chat</artifactId>
+      <optional>true</optional>
     </dependency>
-    <!-- Spring Web MVC — required for AgentApiRegistrar (RequestMappingHandlerMapping) -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-model</artifactId>
+      <optional>true</optional>
+    </dependency>
+
+    <!-- ── Spring Web MVC — optional; only needed for @AgentAPI HTTP routes ─
+         Activated when squad.agent-api.enabled=true.
+         Add spring-boot-starter-web to your app if not already present.
+    ──────────────────────────────────────────────────────────────────── -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
       <optional>true</optional>
     </dependency>
-    <!-- Annotation processor for config metadata -->
+
+    <!-- ── Config metadata (IDE autocomplete for application.properties) ─ -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-configuration-processor</artifactId>
       <optional>true</optional>
     </dependency>
+
   </dependencies>
 </project>
