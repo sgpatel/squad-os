@@ -7,7 +7,7 @@
   <parent>
     <groupId>io.github.sgpatel</groupId>
     <artifactId>squad-os</artifactId>
-    <version>3.4.0</version>
+    <version>3.7.0</version>
   </parent>
   <artifactId>squad-spring-boot-starter</artifactId>
   <name>SquadOS Spring Boot Starter</name>
@@ -48,6 +48,18 @@
     <dependency>
       <groupId>org.springframework.ai</groupId>
       <artifactId>spring-ai-starter-model-ollama</artifactId>
+    </dependency>
+    <!-- Spring Web MVC — required for AgentApiRegistrar (RequestMappingHandlerMapping) -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <!-- Spring AI Embeddings — optional, only needed for squad.memory.store=pgvector|redis -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-core</artifactId>
+      <optional>true</optional>
     </dependency>
     <!-- Annotation processor for config metadata -->
     <dependency>
