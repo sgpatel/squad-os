@@ -361,6 +361,7 @@ public class AgentWrapper {
                 return io.squados.memory.annotation.Importance.MEDIUM;
             }
             public String[] tags()  { return new String[]{}; }
+            public boolean promote() { return false; }
         };
     }
 

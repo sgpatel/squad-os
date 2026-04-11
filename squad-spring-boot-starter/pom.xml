@@ -55,12 +55,6 @@
       <artifactId>spring-boot-starter-web</artifactId>
       <optional>true</optional>
     </dependency>
-    <!-- Spring AI Embeddings — optional, only needed for squad.memory.store=pgvector|redis -->
-    <dependency>
-      <groupId>org.springframework.ai</groupId>
-      <artifactId>spring-ai-core</artifactId>
-      <optional>true</optional>
-    </dependency>
     <!-- Annotation processor for config metadata -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
