@@ -279,7 +279,34 @@ public class SquadContext {
         return durableEngine.getState(workflowId);
     }
 
-    // ── Post-boot setters ─────────────────────────────────────────────
+    // ── Pre-boot setters (call before boot()) ────────────────────────────
+
+    /** Set MemoryManager before boot() so it is injected into all agents. */
+    public void setMemoryManager(MemoryManager mgr) {
+        this.memoryManager = mgr;
+    }
+
+    /** Set ConversationStore before boot() for multi-turn session support. */
+    public void setConversationStore(ConversationStore store) {
+        this.conversationStore = store;
+    }
+
+    /** Set RateLimitEnforcer before boot() so @RateLimit agents are enforced. */
+    public void setRateLimitEnforcer(RateLimitEnforcer enforcer) {
+        this.rateLimitEnforcer = enforcer;
+    }
+
+    /** Set TokenBudget before boot() to cap per-agent token spend. */
+    public void setTokenBudget(TokenBudget budget) {
+        this.tokenBudget = budget;
+    }
+
+    /** Set McpToolProvider before boot() so @McpServer agents discover tools. */
+    public void setMcpToolProvider(McpToolProvider provider) {
+        this.mcpToolProvider = provider;
+    }
+
+    // ── Post-boot setters ─────────────────────────────────────────────────
 
     public void setDurableStore(DurableStore store) {
         this.durableStore  = store;
