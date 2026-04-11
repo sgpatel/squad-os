@@ -142,10 +142,12 @@ public class SquadContext {
         // Step 5: inject circuit breaker + optional collaborators into each wrapper
         for (AgentWrapper wrapper : registry.all()) {
             wrapper.setBreaker(breaker);
-            if (rateLimitEnforcer != null) wrapper.setRateLimiter(rateLimitEnforcer);
-            if (tokenBudget       != null) wrapper.setTokenBudget(tokenBudget);
-            if (guardrailEngine   != null) wrapper.setGuardrailEngine(guardrailEngine);
-            if (memoryManager     != null) wrapper.setMemoryManager(memoryManager);
+            if (rateLimitEnforcer  != null) wrapper.setRateLimiter(rateLimitEnforcer);
+            if (tokenBudget        != null) wrapper.setTokenBudget(tokenBudget);
+            if (guardrailEngine    != null) wrapper.setGuardrailEngine(guardrailEngine);
+            if (memoryManager      != null) wrapper.setMemoryManager(memoryManager);
+            if (conversationStore  != null) wrapper.setConversationStore(conversationStore);
+            if (mcpToolProvider    != null) wrapper.setMcpToolProvider(mcpToolProvider);
         }
 
         // Step 6: @OnMessage listeners

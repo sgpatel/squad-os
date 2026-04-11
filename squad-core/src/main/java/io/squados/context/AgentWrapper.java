@@ -4,10 +4,12 @@ import io.squados.agent.AgentResponse;
 import io.squados.agent.TaskContext;
 import io.squados.annotation.*;
 import io.squados.config.SquadConfig;
+import io.squados.conversation.ConversationStore;
 import io.squados.guardrail.GuardrailEngine;
 import io.squados.guardrail.GuardrailResult;
 import io.squados.health.AgentCircuitBreaker;
 import io.squados.llm.*;
+import io.squados.mcp.McpToolProvider;
 import io.squados.memory.MemoryManager;
 import io.squados.memory.store.MemoryRecord;
 import io.squados.pipeline.ConditionEvaluator;
@@ -56,6 +58,8 @@ public class AgentWrapper {
     private TokenBudget          tokenBudget;
     private GuardrailEngine      guardrailEngine;
     private MemoryManager        memoryManager;
+    private ConversationStore    conversationStore;
+    private McpToolProvider      mcpToolProvider;
 
     // Annotation cache
     private final Retry       retryAnn;
@@ -65,6 +69,7 @@ public class AgentWrapper {
     private final AgentMemory agentMemoryAnn;
     private final Condition   conditionAnn;
     private final Timeout     timeoutAnn;
+    private final McpServer   mcpServerAnn;
 
     // ── Construction ──────────────────────────────────────────────────
 
@@ -86,6 +91,7 @@ public class AgentWrapper {
         this.agentMemoryAnn  = agentClass.getAnnotation(AgentMemory.class);
         this.conditionAnn    = agentClass.getAnnotation(Condition.class);
         this.timeoutAnn      = agentClass.getAnnotation(Timeout.class);
+        this.mcpServerAnn    = agentClass.getAnnotation(McpServer.class);
 
         // Pre-instantiate TokenWriter from @Streaming at construction time
         this.tokenWriter = resolveTokenWriter();
@@ -238,16 +244,39 @@ public class AgentWrapper {
     // ── callLlm() — the unit that @Retry wraps ────────────────────────
 
     private LlmResponse callLlm(String systemPrompt, String userMessage) {
+        // Conversation history — load if ConversationStore is wired
+        List<ConversationMessage> history = List.of();
+        String sessionId = null;
+        if (conversationStore != null) {
+            // Use agent name as session key for per-agent history
+            sessionId = name;
+            history = conversationStore.getHistory(sessionId);
+        }
+
+        LlmResponse response;
         if (streamingAnn != null && tokenWriter != null) {
             // Collect streamed tokens into a single response
             StringBuilder collected = new StringBuilder();
             llm.chatStream(systemPrompt, userMessage, options, token -> {
                 tokenWriter.write(token);
-                collected.append(token.text());
+                if (!token.isLast()) collected.append(token.text());
             });
-            return new LlmResponse(collected.toString(), 0, collected.length(), options.model());
+            response = new LlmResponse(collected.toString(), 0, collected.length(), options.model());
+        } else if (conversationStore != null && !history.isEmpty()) {
+            response = llm.chatWithHistory(systemPrompt, userMessage, history, options);
+        } else {
+            response = llm.chat(systemPrompt, userMessage, options);
         }
-        return llm.chat(systemPrompt, userMessage, options);
+
+        // Append turn to conversation history
+        if (conversationStore != null && sessionId != null && response.content() != null) {
+            conversationStore.append(sessionId,
+                ConversationMessage.user(userMessage));
+            conversationStore.append(sessionId,
+                ConversationMessage.assistant(response.content()));
+        }
+
+        return response;
     }
 
     // ── System prompt ─────────────────────────────────────────────────
@@ -273,6 +302,22 @@ public class AgentWrapper {
 
         sb.append("\nTask ID: ").append(ctx.getTaskId()).append(".");
 
+        // @McpServer — discover tools from all configured URLs and inject into system prompt
+        if (mcpServerAnn != null && mcpToolProvider != null
+                && mcpServerAnn.urls().length > 0) {
+            try {
+                List<io.squados.mcp.McpToolDefinition> allTools = new java.util.ArrayList<>();
+                for (String url : mcpServerAnn.urls()) {
+                    allTools.addAll(mcpToolProvider.discoverTools(url));
+                }
+                if (!allTools.isEmpty()) {
+                    sb.append(mcpToolProvider.buildMcpPrompt(allTools));
+                }
+            } catch (Exception e) {
+                // MCP discovery errors must not break agent execution
+            }
+        }
+
         // @AgentMemory — inject retrieved memories
         if (agentMemoryAnn != null && memoryManager != null) {
             try {
@@ -295,11 +340,13 @@ public class AgentWrapper {
 
     // ── Accessors ─────────────────────────────────────────────────────
 
-    public void setBreaker(AgentCircuitBreaker b)        { this.breaker        = b; }
-    public void setRateLimiter(RateLimitEnforcer r)      { this.rateLimiter    = r; }
-    public void setTokenBudget(TokenBudget tb)           { this.tokenBudget    = tb; }
-    public void setGuardrailEngine(GuardrailEngine ge)   { this.guardrailEngine= ge; }
-    public void setMemoryManager(MemoryManager mm)       { this.memoryManager  = mm; }
+    public void setBreaker(AgentCircuitBreaker b)        { this.breaker          = b; }
+    public void setRateLimiter(RateLimitEnforcer r)      { this.rateLimiter      = r; }
+    public void setTokenBudget(TokenBudget tb)           { this.tokenBudget      = tb; }
+    public void setGuardrailEngine(GuardrailEngine ge)   { this.guardrailEngine  = ge; }
+    public void setMemoryManager(MemoryManager mm)       { this.memoryManager    = mm; }
+    public void setConversationStore(ConversationStore s){ this.conversationStore = s; }
+    public void setMcpToolProvider(McpToolProvider p)    { this.mcpToolProvider  = p; }
 
     public AgentRole  getRole()        { return role; }
     public String     getName()        { return name; }
