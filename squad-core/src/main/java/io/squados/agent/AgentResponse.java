@@ -21,6 +21,7 @@ public class AgentResponse {
     private final int       completionTokens;
     private final Duration  latency;
     private final boolean   success;
+    private final boolean   skipped;
     private final String    errorMessage;
 
     // ── Constructors ──────────────────────────────────────────────────
@@ -35,6 +36,7 @@ public class AgentResponse {
         this.completionTokens = completionTokens;
         this.latency          = latency;
         this.success          = true;
+        this.skipped          = false;
         this.errorMessage     = null;
     }
 
@@ -48,7 +50,21 @@ public class AgentResponse {
         this.completionTokens = 0;
         this.latency          = latency;
         this.success          = false;
+        this.skipped          = false;
         this.errorMessage     = errorMessage;
+    }
+
+    /** Skipped response — @Condition or @Step condition evaluated to false */
+    private AgentResponse(AgentRole role, String agentName, boolean skipped) {
+        this.content          = null;
+        this.role             = role;
+        this.agentName        = agentName;
+        this.promptTokens     = 0;
+        this.completionTokens = 0;
+        this.latency          = Duration.ZERO;
+        this.success          = false;
+        this.skipped          = true;
+        this.errorMessage     = null;
     }
 
     // ── Factory methods ───────────────────────────────────────────────
@@ -73,6 +89,16 @@ public class AgentResponse {
         );
     }
 
+    /** Pre-computed success — used by DurableEngine returning cached results. */
+    public static AgentResponse success(AgentRole role, String agentName, String content) {
+        return new AgentResponse(content, role, agentName, 0, 0, Duration.ZERO);
+    }
+
+    /** Skipped — @Condition evaluated to false; no LLM call was made. */
+    public static AgentResponse skipped(AgentRole role, String agentName) {
+        return new AgentResponse(role, agentName, true);
+    }
+
     // ── Getters ───────────────────────────────────────────────────────
 
     public String    content()          { return content; }
@@ -83,6 +109,7 @@ public class AgentResponse {
     public int       totalTokens()      { return promptTokens + completionTokens; }
     public Duration  latency()          { return latency; }
     public boolean   isSuccess()        { return success; }
+    public boolean   isSkipped()        { return skipped; }
     public String    errorMessage()     { return errorMessage; }
 
     public boolean hasContent() {
