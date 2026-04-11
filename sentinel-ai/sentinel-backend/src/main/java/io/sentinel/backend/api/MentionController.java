@@ -48,12 +48,13 @@ public class MentionController {
 
     @PostMapping("/mentions/ingest")
     public ResponseEntity<Map<String,String>> ingestMention(@RequestBody Map<String,Object> body) {
-        String text    = (String) body.get("text");
-        String author  = (String) body.getOrDefault("author", "test_user");
-        long followers = body.containsKey("followers") ? Long.parseLong(body.get("followers").toString()) : 100L;
+        String text      = (String) body.get("text");
+        String author    = (String) body.getOrDefault("author", "test_user");
+        long followers   = body.containsKey("followers") ? Long.parseLong(body.get("followers").toString()) : 100L;
+        String platform  = (String) body.getOrDefault("platform", "TWITTER");
         if (text == null || text.isBlank())
             return ResponseEntity.badRequest().body(Map.of("error", "text is required"));
-        ingestion.ingestCustomMention(text, author, followers);
+        ingestion.ingestCustomMention(text, author, followers, platform);
         return ResponseEntity.ok(Map.of("status","ingested","message","Processing in background"));
     }
 

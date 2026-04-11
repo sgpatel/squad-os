@@ -1,0 +1,397 @@
+SquadOS Codebase Context — v3.7.0
+Module Structure
+squad-os/                          (root pom, version 3.7.0)
+├── squad-core/                    Maven Central ✅ — zero runtime deps
+├── squad-spring-boot-starter/     Maven Central ✅ — Spring Boot auto-config
+├── squad-dashboard-api/           Local only — React + Spring Boot monitoring
+├── squad-cli/                     Local only — fat jar CLI (NEW in this session)
+└── sentinel-ai/                   Local only — demo app (7 agents)
+    ├── sentinel-shared/
+    ├── sentinel-backend/
+    └── sentinel-frontend/
+
+Copy
+squad-core — 183 classes, 26 packages
+Packages and key classes:
+
+Package	Key Classes
+annotation	30 annotations (see full list below)
+agent	AgentResponse, TaskContext, SquadPlanDeserialiser, SquadPlanRetryEngine
+context	SquadContext, AgentWrapper, AgentRegistry, AgentScanner, TokenBudget
+config	SquadConfig, SquadConfigParser, SquadConfigBridge
+execution	ParallelExecutor, SquadTask, SquadResult
+pipeline	PipelineEngine, PipelineResult, ConditionEvaluator ← NEW
+durable	DurableEngine, DurableStore, InProcessDurableStore, RedisDurableStore, WorkflowState, WorkflowStatus, WorkflowStep
+guardrail	GuardrailEngine, GuardrailFilter, GuardrailResult, GuardrailAuditLog, FilterContext, FilterResult, GuardrailViolation
+guardrail.filter	PiiDetector, PromptInjectionDetector, ToxicityFilter, HallucinationDetector, GroundingFilter, SensitiveTopicFilter, RegulatoryComplianceFilter, ConfidentialDataFilter
+retry	RetryEngine
+remote	SquadClient, RemoteSquadInvoker, RemoteSquadInfo, AgentAuthProvider, ApiKeyAuth, JwtAuth, NoAuth, RemoteSquadException
+health	AgentCircuitBreaker, AgentHealth, RedisCircuitBreakerStore
+trace	SquadTracer, AgentSpan, TraceExporter, InMemoryTraceExporter, RedisTraceExporter, LogTraceExporter
+llm	LlmPort, LlmResponse, LlmOptions, StreamToken, TokenWriter, StdoutTokenWriter, LoggerTokenWriter, NoOpTokenWriter, ConversationMessage, MockLlmPort
+memory	MemoryManager, MemoryRecord, MemoryStore, InProcessMemoryStore, RedisWorkingStore, PgVectorEpisodicStore, MemoryDecayService, EmbeddingPort, MockEmbeddingPort
+approval	ApprovalEngine, ApprovalStore, InProcessApprovalStore, ApprovalRequest
+vote	VoteCollector, Vote, VoteResult
+improve	ImproveEngine, FeedbackStore, InProcessFeedbackStore, FeedbackExample
+security	SecurityGuard, AuditLog, JwtValidator, SecurityContext, AgentIdentity
+bus	AgentMessageBus, AgentMessage, MessageType, RedisAgentBus
+event	EventRouter, InProcessEventBus, SquadEvent, EventSource
+conversation	ConversationStore, InProcessConversationStore
+ratelimit	RateLimitEnforcer
+mcp	McpToolProvider, McpToolDefinition
+tool	SquadToolRegistry, SquadToolExecutor, SquadToolDefinition
+delegate	DelegateRouter, DelegationDecision
+eval	EvalRunner, EvalJudge, EvalScore
+plan	AutoPlanEngine, AutoPlanResult, PlanIteration
+exception	11 typed exceptions
+All 30 Annotations
+Annotation	Package	Purpose
+@Agent	annotation	Declare agent with role, name, description
+@SquadApplication	annotation	Spring Boot entry point marker
+@PostConstruct	annotation	Lifecycle hook on boot
+@OnMessage	annotation	React to messages from other agents
+@OnEvent	annotation	Event-driven activation
+@MissionProfile	annotation	Activate for named profile
+@SquadPlan	annotation	Typed structured LLM output with auto-retry
+@Required	annotation	Mark @SquadPlan field as mandatory
+@SquadTool	annotation	Expose Java method as LLM tool
+@ToolParam	annotation	Describe tool parameter
+@AwaitApproval	annotation	Pause for human review
+@AutoApproval	annotation	Auto-approve on condition expression
+@SquadVote	annotation	Multi-agent consensus voting
+@Eval	annotation	Quality gate with auto-retry
+@AutoPlan	annotation	Plan-execute-reflect-replan loop
+@Traced	annotation	Record spans with token counts
+@Improve	annotation	Few-shot learning from feedback
+@SecureAgent	annotation	RBAC + JWT access control
+@Delegate	annotation	Dynamic routing to specialist agents
+@AgentMemory	annotation	Auto-inject memories into system prompt
+@Streaming	annotation	Token-by-token streaming with TokenWriter + chunkSize
+@RateLimit	annotation	Per-agent calls/min and tokens/hour
+@McpServer	annotation	Connect to external MCP tool servers
+@DurableAgent	annotation	Persist workflow state, survive JVM restarts
+@Guardrails	annotation	Pluggable compliance + safety filter pipeline
+@AgentAPI	annotation	Expose squad as callable HTTP endpoints
+@RemoteSquad	annotation	Inject SquadClient proxy for remote @AgentAPI squad
+@Retry	annotation	Transient failure retry with exponential backoff
+@Pipeline	annotation	Sequential multi-agent orchestration ← NEW
+@Step	annotation	One step in a @Pipeline (role, name, inputFrom, failFast, condition) ← NEW
+Key Class Details
+SquadContext — central container, analogous to Spring ApplicationContext
+
+// Construction
+new SquadContext(config, llm)
+new SquadContext(config, llm, memoryManager, conversationStore,
+                 rateLimitEnforcer, tokenBudget, mcpToolProvider, durableStore)
+
+// Lifecycle
+ctx.boot()                                          // scan → instantiate → init → register
+
+// Submission
+ctx.submit(String task)                             // → lead agent
+ctx.submitTo(AgentRole, String task)                // → specific role
+ctx.submit(String, Class<T>)                        // → typed @SquadPlan output
+ctx.submitTo(AgentRole, String, Class<T>)           // → typed output to role
+ctx.execute(SquadTask)                              // → parallel multi-role execution
+ctx.submitStream(String, Consumer<StreamToken>)     // → streaming to lead
+ctx.submitStream(AgentRole, String, Consumer<>)     // → streaming to role
+ctx.submitDurable(AgentRole, String workflowId, String input)  // → durable workflow
+ctx.submitPipeline(AgentRole, String input)         // → @Pipeline execution ← NEW
+ctx.pauseWorkflow(String workflowId)
+ctx.resumeWorkflow(String workflowId)
+ctx.getWorkflowState(String workflowId)             // → Optional<WorkflowState>
+
+// Setters (post-boot injection)
+ctx.setDurableStore(DurableStore)
+ctx.setGuardrailEngine(GuardrailEngine)
+
+// Accessors
+ctx.getRegistry()    ctx.getBus()    ctx.getBreaker()
+ctx.getConfig()      ctx.isBooted()
+
+
+Copy
+java
+AgentWrapper — wraps one @Agent class, execution heart
+
+Pre-instantiates TokenWriter from @Streaming at construction
+
+callLlm() is the unit @Retry wraps — pre-checks (circuit breaker, rate limit, guardrails input) are NOT retried
+
+execute(TaskContext) flow: circuit breaker → rate limit → token budget → guardrails input → [retry wrapper →] callLlm → guardrails output → memory write-back → trace span → circuit breaker feedback
+
+buildSystemPrompt(TaskContext) injects memories from @AgentMemory
+
+AgentResponse — result of agent execution
+
+// Factory methods
+AgentResponse.of(LlmResponse, role, name, startedAt)   // from LLM
+AgentResponse.failure(role, name, errorMsg, startedAt)
+AgentResponse.success(role, name, content)              // pre-computed
+AgentResponse.skipped(role, name)                       // @Condition false ← NEW
+
+// Key fields
+resp.content()           resp.isSuccess()
+resp.isSkipped()         // ← NEW — @Condition evaluated to false
+resp.totalTokens()       resp.latency()
+resp.agentName()         resp.role()
+resp.errorMessage()
+
+Copy
+java
+@Pipeline + @Step ← NEW
+
+@Agent(role = AgentRole.STRATEGIST, name = "MentionPipeline", description = "...")
+@Pipeline(
+    name     = "mention-analysis",
+    failFast = true,
+    steps    = {
+        @Step(role = AgentRole.ANALYST,  name = "sentiment"),
+        @Step(role = AgentRole.CRITIC,   name = "escalation"),
+        @Step(role = AgentRole.SUPPORT,  name = "ticket",
+              inputFrom = "escalation",
+              condition = "contains(\"P1\") || contains(\"P2\")"),
+        @Step(role = AgentRole.WRITER,   name = "reply",
+              inputFrom = "sentiment",
+              condition = "success && contains(\"NEGATIVE\")")
+    }
+)
+public class MentionPipelineAgent {}
+
+PipelineResult result = ctx.submitPipeline(AgentRole.STRATEGIST, "mention text");
+result.get("sentiment").content()   // per-step output by name
+result.finalOutput()                // last executed step's content
+result.succeeded()                  // all steps passed (skipped ≠ failed)
+result.failedStep()                 // name of failed step or null
+result.skippedSteps()               // List<String> of skipped step names
+result.totalTokens()                // sum across all steps
+result.wallClockMs()
+
+
+Copy
+java
+ConditionEvaluator ← NEW — evaluates @Step.condition() expressions
+
+Predicates:   contains("x")  notContains("x")  startsWith("x")  endsWith("x")
+              matches("regex")  isEmpty  isNotEmpty  success  failure
+Compound:     expr1 || expr2    expr1 && expr2   (left-to-right, short-circuit)
+
+Copy
+PipelineEngine ← NEW — sequential step executor
+
+Step 0 always receives original input
+
+Step N (no inputFrom) receives output of step N-1
+
+Step N (inputFrom="name") receives output of named prior step (fallback: original input)
+
+Condition false → AgentResponse.skipped() recorded, pipeline continues
+
+failFast=true + step failure → PipelineResult.failure() returned immediately
+
+DurableEngine — checkpoints after every step
+
+ctx.submitDurable(AgentRole.ANALYST, "claim-2024-9821", input)
+// JVM restart → call again with same workflowId → resumes from last completed step
+// COMPLETED workflows return cached result immediately (idempotent)
+
+Copy
+java
+RetryEngine — wraps callLlm() only
+
+Non-retryable: RateLimitExceededException, GuardrailException, AgentSecurityException
+
+Circuit breaker onFailure() called only after ALL retries exhausted
+
+RetryExhaustedException carries agentName, attempts, totalElapsedMs, last cause
+
+GuardrailEngine — pluggable filter SPI
+
+// Custom filter
+public class CompetitorFilter implements GuardrailFilter {
+    public FilterResult apply(FilterContext ctx) {
+        if (ctx.text().contains("RivalBank"))
+            return FilterResult.violation("Competitor mention", "RivalBank",
+                1.0f, GuardrailAction.BLOCK_AND_LOG);
+        return FilterResult.pass(ctx.text());
+    }
+}
+
+Copy
+java
+AgentCircuitBreaker — per-role health tracking
+
+States: HEALTHY → DEGRADED → CIRCUIT_OPEN
+
+allowCall(role) → false when CIRCUIT_OPEN
+
+onSuccess(role, latencyMs) / onFailure(role, errorMsg)
+
+Exposed via /api/health in dashboard
+
+SquadTracer — static singleton, auto-records spans in AgentWrapper.execute()
+
+// Dev (in-memory)
+SquadTracer.configure(new InMemoryTraceExporter());
+
+// Prod (Redis, shared across JVMs)
+SquadTracer.configure(new RedisTraceExporter("localhost", 6379, null, "my-squad"));
+
+Copy
+java
+Redis keys: squados:traces:{squadName} (LIST, max 500), squados:traces:tokens:{squadName} (STRING), squados:squads (SET)
+
+squad-spring-boot-starter — 8 classes
+Class	Purpose
+SquadAutoConfiguration	Main @Configuration — wires all beans
+SquadProperties	application.properties binding (squad.*)
+AgentApiRegistrar	Scans @AgentAPI agents, registers dynamic Spring MVC routes
+AgentApiController	Handles POST /submit, POST /submit/{role}, GET /info, GET /health, SSE streaming
+RemoteSquadInjector	BeanPostProcessor — injects SquadClient proxy into @RemoteSquad fields
+SpringAiLlmAdapter	Bridges Spring AI ChatClient → LlmPort
+SpringAiEmbeddingAdapter	Bridges Spring AI EmbeddingModel → EmbeddingPort
+HttpMcpClient	HTTP client for @McpServer tool discovery
+application.properties reference:
+
+squad.name=my-squad
+squad.llm.provider=ollama
+squad.llm.model=llama3.2
+squad.llm.temperature=0.5
+squad.llm.max-tokens=2048
+squad.tracing.enabled=true
+squad.tracing.exporter=memory          # memory | redis
+redis.host=localhost
+redis.port=6379
+squad.security.enabled=false
+squad.security.jwt-issuer=squados
+squad.security.audit-log=true
+squad.approval.enabled=true
+squad.memory.enabled=false
+squad.memory.store=memory              # memory | redis | pgvector
+squad.memory.top-k=3
+squad.memory.min-score=0.72
+squad.conversation.enabled=false
+squad.conversation.max-turns=20
+squad.rate-limit.default-token-budget=0
+squad.mcp.enabled=false
+squad.mcp.timeout-ms=5000
+squad.durable.enabled=false
+squad.durable.store=memory             # memory | redis
+squad.durable.ttl-hours=24
+squad.guardrails.enabled=false
+squad.agent-api.enabled=false
+squad.api.key=                         # required for ApiKeyAuth
+
+
+Copy
+properties
+@AgentAPI endpoints registered per annotated agent:
+
+Method	Path	Description
+POST	{path}/submit	Submit to lead agent
+POST	{path}/submit/{role}	Submit to specific role
+POST	{path}/submit/stream	SSE streaming to lead
+POST	{path}/submit/{role}/stream	SSE streaming to role
+GET	{path}/info	Squad metadata (name, agents, roles, version)
+GET	{path}/health	Health check {"status":"UP"}
+squad-dashboard-api — 7 classes
+Class	Purpose
+DashboardApiApp	Spring Boot entry point, wires all beans
+DashboardController	20 REST endpoints
+DashboardState	Holds all optional service references
+TraceSource	Interface — getSpans(squadName), getTokenCount(squadName), getSquadNames()
+MemoryTraceSource	In-process implementation
+RedisTraceSource	Redis implementation (reads squados:traces:{squadName})
+MonitorAgent	Dummy @Agent for dashboard's own SquadContext
+Dashboard endpoints:
+
+GET  /api/squads                    All registered squad names
+GET  /api/status?squad=             Health summary — spans, tokens, latency, errors
+GET  /api/agents                    Registered agents with full annotation map
+GET  /api/traces?squad=             Recent spans (last 50, newest first)
+GET  /api/traces/summary?squad=     Token + latency summary
+GET  /api/votes                     Vote history
+GET  /api/approvals                 Approval queue
+POST /api/approvals/{id}/approve    Approve pending request
+POST /api/approvals/{id}/reject     Reject pending request
+GET  /api/feedback                  @Improve feedback examples
+GET  /api/audit                     @SecureAgent audit log
+GET  /api/activity                  Live activity feed (auto-synced from spans every 3s)
+GET  /api/health                    Circuit breaker status per agent
+GET  /api/workflows/all             All durable workflow states
+GET  /api/guardrails/audit          Guardrail violation log
+
+Copy
+Modes:
+
+squad.tracing.exporter=memory   # in-process, no Redis (default)
+squad.tracing.exporter=redis    # shared multi-JVM, multi-squad
+
+Copy
+properties
+Run:
+
+# Memory mode
+cd squad-dashboard-api && mvn spring-boot:run
+
+# Redis mode (multi-squad)
+mvn spring-boot:run -Dspring-boot.run.arguments="--squad.tracing.exporter=redis"
+# Open http://localhost:8080
+
+Copy
+bash
+squad-cli — 3 classes, fat jar
+Class	Purpose
+SquadCli	Main entry point, command dispatcher
+CliArgs	Parses argv → structured args object
+CliPrinter	Formatted terminal output (ANSI colours, tables, key-value)
+Commands:
+
+Command	HTTP call	Description
+submit <task>	POST {url}/submit	Submit to lead agent
+submit-to <role> <task>	POST {url}/submit/{role}	Submit to specific role
+stream <task>	POST {url}/submit/stream	SSE streaming to lead
+stream-to <role> <task>	POST {url}/submit/{role}/stream	SSE streaming to role
+agents	GET {url}/info	List agents in table
+health	GET {url}/health	Health check, exit 0/1
+info	GET {url}/info	Squad metadata key-value
+workflow <id>	GET {url}/workflows/{id}	Durable workflow state
+workflows	GET {url}/workflows	All workflows
+Options: --url (required), --api-key, --timeout <ms>, --raw, --no-colour
+
+Env vars: SQUAD_API_KEY (fallback for --api-key), NO_COLOR (disable ANSI)
+
+Build & install:
+
+# From squad-cli/ directory
+cd squad-cli && mvn package -DskipTests
+
+# Or from root
+cd squad-os && mvn package -pl squad-cli -am -DskipTests
+
+# Alias
+alias squad='java -jar /path/to/squad-cli/target/squad-cli-3.7.0.jar'
+
+Copy
+bash
+Test Phases (26 total, all passing)
+Phase	Tests	Coverage
+1–10	~200	Core framework: agents, config, LLM, memory, tracing, voting, approvals, security, eval, AutoPlan
+11–20	~72	Conversation, rate limit, MCP, streaming basics, durable, guardrails, retry, @AgentAPI, @RemoteSquad
+21	18	@DurableAgent — workflow lifecycle, resume, pause, step checkpointing
+22	18	@Guardrails — all 8 built-in filters, custom filter SPI, audit log
+23	16	@Retry — backoff, non-retryable exceptions, circuit breaker integration
+24	17	@Streaming — TokenWriter implementations, chunkSize buffering
+25	20	@Pipeline — step ordering, output chaining, inputFrom, failFast
+26	25	@Condition — all predicates, ||/&& compounds, skip behaviour, pipeline integration
+Total: ~386 tests, all passing
+
+Remaining Features from Gap Analysis
+Priority	Feature	Description
+1	@Timeout	Hard deadline per agent call via CompletableFuture.orTimeout()
+2	@Cache	Semantic response caching — EXACT (hash) or SEMANTIC (cosine similarity)
+3	@Observe	Micrometer/Prometheus metrics — squados_agent_calls_total, latency histograms
+4	@PromptTemplate	Externalise agent descriptions to classpath files with {{variable}} substitution
+5	@AgentPool	Multiple instances of same role for high-throughput load balancing
+6	@AgentTest	Golden-set testing annotation with JSON test cases and pass rate threshold
+7	@Checkpoint	Mid-method state saving within a single @DurableAgent step

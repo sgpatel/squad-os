@@ -33,7 +33,9 @@ public class MockMentionIngestionService {
         String[] mock = MOCK_MENTIONS[rnd.nextInt(MOCK_MENTIONS.length)];
         MentionEntity m = new MentionEntity();
         m.id              = "MOCK-" + UUID.randomUUID().toString().substring(0,8);
-        m.platform        = "TWITTER";
+        // Randomly select platform: Twitter, Facebook, Instagram, or LinkedIn
+        String[] platforms = {"TWITTER", "FACEBOOK", "INSTAGRAM", "LINKEDIN"};
+        m.platform        = platforms[rnd.nextInt(platforms.length)];
         m.handle          = handle;
         m.authorUsername  = mock[2];
         m.authorName      = mock[2].replace("_", " ");
@@ -41,17 +43,25 @@ public class MockMentionIngestionService {
         m.text            = mock[1];
         m.language        = "en";
         m.postedAt        = Instant.now().minusSeconds(rnd.nextInt(300));
-        m.url             = "https://twitter.com/" + mock[2] + "/status/" + System.currentTimeMillis();
+        // Build platform-specific URLs
+        String url = switch(m.platform) {
+            case "TWITTER" -> "https://twitter.com/" + mock[2] + "/status/" + System.currentTimeMillis();
+            case "FACEBOOK" -> "https://facebook.com/" + mock[2] + "/posts/" + System.currentTimeMillis();
+            case "INSTAGRAM" -> "https://instagram.com/p/" + UUID.randomUUID().toString().substring(0, 11);
+            case "LINKEDIN" -> "https://linkedin.com/feed/update/urn:li:activity:" + System.currentTimeMillis();
+            default -> "https://example.com/post/" + System.currentTimeMillis();
+        };
+        m.url             = url;
         m.likeCount       = rnd.nextInt(50);
         m.retweetCount    = rnd.nextInt(20);
         m.processingStatus = "NEW";
-        System.out.println("[MockIngestion] Ingesting: " + m.text.substring(0, Math.min(60, m.text.length())) + "...");
+        System.out.println("[MockIngestion] Ingesting from " + m.platform + ": " + m.text.substring(0, Math.min(60, m.text.length())) + "...");
         new Thread(() -> processor.process(m)).start();
     }
-    public void ingestCustomMention(String text, String author, long followers) {
+    public void ingestCustomMention(String text, String author, long followers, String platform) {
         MentionEntity m = new MentionEntity();
         m.id = "CUSTOM-" + UUID.randomUUID().toString().substring(0,8);
-        m.platform = "TWITTER"; m.handle = handle;
+        m.platform = platform; m.handle = handle;
         m.authorUsername = author; m.authorName = author;
         m.authorFollowers = followers;
         m.text = text;

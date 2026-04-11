@@ -179,10 +179,10 @@ export async function resolveTicket(id: string, resolution: string) {
     body: JSON.stringify({ resolution }),
   });
 }
-export async function ingestMention(text: string, author: string, followers: number) {
+export async function ingestMention(text: string, author: string, followers: number, platform = "TWITTER") {
   return authFetch(`${API}/api/mentions/ingest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, author, followers }),
+    body: JSON.stringify({ text, author, followers, platform }),
   });
 }
