@@ -360,7 +360,8 @@ myapp_agent_tokens_total{agent="FastAnalyst",role="ANALYST",type="prompt"} 1050
 |--------|-------------|-----------|
 | `squad-core` | Framework core — zero runtime deps | ✅ Maven Central |
 | `squad-spring-boot-starter` | Zero-config Spring Boot auto-configuration | ✅ Maven Central |
-| `squad-dashboard` | React + Recharts live monitoring dashboard | Local only |
+| `squad-dashboard-api` | Spring Boot REST + SSE monitoring backend (port 8090) | Local only |
+| `squad-dashboard-ui` | React + Recharts monitoring UI (port 5173) | Local only |
 | `squad-examples/fraud-detection` | All 15 annotations — payment fraud detection | Local only |
 | `squad-examples/snack-thief` | All 15 annotations — Karen stole the pizza 🍕 | Local only |
 | `squad-examples/daily-planner` | @SquadPlan typed output demo | Local only |
@@ -399,20 +400,37 @@ mvn spring-boot:run
 ```
 
 ### Live Dashboard
+
+The dashboard is split into two independent modules:
+
+- **`squad-dashboard-api`** — Spring Boot REST + SSE backend (port 8090)
+- **`squad-dashboard-ui`** — React + Recharts monitoring UI (port 5173)
+
 ```bash
-# Start Redis first:
+# Option A — Simulation mode (no Redis required):
+cd squad-dashboard-api && mvn spring-boot:run   # → http://localhost:8090
+cd squad-dashboard-ui  && npm install && npm run dev  # → http://localhost:5173
+
+# Option B — Live Redis mode (reads real SquadOS agent data):
 docker run -d -p 6379:6379 redis:7-alpine
 
-# Run fraud-detection (writes spans to Redis):
-cd squad-examples/fraud-detection && mvn spring-boot:run
+# In your SquadOS app (application.properties):
+#   squad.tracing.exporter=redis
+#   squad.durable.enabled=true
+#   squad.durable.store=redis
 
-# Run dashboard (reads from same Redis):
-cd squad-dashboard && mvn spring-boot:run
+# In squad-dashboard-api/src/main/resources/application.properties:
+#   squad.redis.enabled=true
 
-# Open http://localhost:8080
+cd squad-dashboard-api && mvn spring-boot:run
+cd squad-dashboard-ui  && npm run dev
 ```
 
-Dashboard features: 7 tabs · 8 live charts · Agent health · Vote history · Approval queue · Audit log · Feedback store
+Dashboard tabs: **Overview** · **Agents** · **Traces** · **Metrics** · **Workflows** · **Security** · **Live Activity**
+
+Data sources from Redis: `squados:traces` (agent spans) · `squados:traces:tokens` (token count) · `squados:durable:*` (workflow states)
+
+Falls back to simulation mode automatically when Redis is unreachable. The top bar shows a **⬢ Redis** or **◎ Simulation** badge so the data source is always visible.
 
 ## LLM Streaming
 
@@ -599,7 +617,8 @@ redis.password=
 | 3.4.0 | RedisTraceExporter, real token tracking, React dashboard |
 | 3.5.0 | Conversation history, rate limiting |
 | 3.6.0 | Remote squad invocation, MCP tool integration |
-| **3.7.0** | **Streaming, Guardrails, Durable Workflows, Pipeline Orchestration, Agent HTTP API** |
+| 3.7.0 | Streaming, Guardrails, Durable Workflows, Pipeline Orchestration, Agent HTTP API |
+| **3.8.0** | **squad-dashboard-api + squad-dashboard-ui — dedicated monitoring dashboard** |
 
 ## Requirements
 

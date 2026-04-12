@@ -1,3 +1,42 @@
+## v3.8.0 (2026-04-12) — Dedicated Monitoring Dashboard (squad-dashboard-api + squad-dashboard-ui)
+### Added
+- **`squad-dashboard-api`** — standalone Spring Boot REST + SSE monitoring backend (port 8090)
+  - `GET /api/v1/agents` — all registered agents with aggregated metrics (calls, errors, tokens, latency)
+  - `GET /api/v1/traces` — up to 500 agent spans, filterable by agent/status
+  - `GET /api/v1/metrics` — aggregate snapshot: totals, p95/p99 latency, per-agent breakdown, 60-min time-series
+  - `GET /api/v1/workflows` — durable workflow states, filterable by RUNNING/PAUSED/COMPLETED/FAILED
+  - `GET /api/v1/security` — security/audit events, filterable by severity and type
+  - `GET /api/v1/health` — JVM heap, thread count, uptime, Redis/simulation mode, active agent count
+  - `GET /api/v1/activity/stream` — SSE event stream (real-time fan-out to all connected UI clients)
+  - `GET /api/v1/activity` — last 200 activity events (ring-buffer)
+  - `GET /api/v1/ping` — health check with data source mode
+  - Two data source modes — auto-selected at startup:
+    - **Redis mode** (`squad.redis.enabled=true`): reads `squados:traces` (LIST), `squados:traces:tokens` (STRING), `squados:durable:*` (SCAN) — the exact keys written by `RedisTraceExporter` and `RedisDurableStore`; refreshes every 5s
+    - **Simulation mode** (default): realistic synthetic data updated by `@Scheduled` tick every 3s; auto-fallback if Redis ping fails
+  - `RedisDataReader` — zero-Jackson span/workflow parser matching `RedisTraceExporter` JSON and `RedisDurableStore` pipe-delimited format
+  - `DashboardDataService` — derives per-agent metrics by aggregating real spans; rebuilds 60-min time-series buckets from span timestamps
+  - `ActivityEventService` — thread-safe SSE fan-out with 200-event ring-buffer for late-joining clients
+  - `CorsConfig` — CORS for React dev server (Vite proxy)
+  - Compiler flag `-parameters` enabled — fixes Spring 6 `@RequestParam` name resolution without explicit `name=`
+- **`squad-dashboard-ui`** — React 18 + TypeScript + Vite monitoring frontend (port 5173)
+  - 7 tabs: **Overview**, **Agents**, **Traces**, **Metrics**, **Workflows**, **Security**, **Live Activity**
+  - Overview: 8 KPI stat cards, calls/tokens/latency AreaCharts, error PieChart, top-5 agents BarChart
+  - Agents: searchable list with success-rate progress bar, per-agent RadarChart performance profile
+  - Traces: 200-row span table with agent/status filter, full detail side panel
+  - Metrics: per-agent calls vs errors BarChart, token usage, latency BarCharts, 60-min call-rate LineChart, error breakdown
+  - Workflows: state-filtered list (RUNNING/PAUSED/COMPLETED/FAILED), checkpoint step timeline, error display
+  - Security: severity/type filters, PieChart + BarChart breakdown, event log
+  - Activity: live SSE event stream with animated connection indicator (green/red pulse)
+  - Top bar shows **⬢ Redis** or **◎ Simulation** badge — always visible data source indicator
+  - `useSSE` hook — native `EventSource`, auto-reconnect, 200-event in-memory buffer
+  - `useApi` hook — polling with configurable interval, loading/error state
+  - Pure monitoring — no write operations (approval actions, agent control removed)
+### Removed
+- `squad-dashboard` — old monolithic Spring Boot + vanilla JS dashboard replaced by the split api/ui architecture
+### Modules
+- `io.github.sgpatel:squad-dashboard-api:3.8.0` (local, not published to Maven Central)
+- `squad-dashboard-ui` (local Vite app, `npm run build` → `dist/`)
+
 ## v3.7.0 (2026-04-12) — Full Feature Release: 7 Gap Annotations Implemented
 ### Added
 - **LLM Streaming** — token-by-token output via `@Streaming` annotation
