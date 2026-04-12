@@ -28,10 +28,17 @@ import io.squados.mcp.McpToolProvider;
 import io.squados.memory.MemoryManager;
 import io.squados.memory.retrieval.EmbeddingPort;
 import io.squados.metrics.MetricsPort;
+import io.squados.cost.CostAwareLlmPort;
+import io.squados.cost.CostTracker;
 import io.squados.pipeline.PipelineEngine;
 import io.squados.pipeline.PipelineResult;
 import io.squados.pool.AgentPoolManager;
 import io.squados.ratelimit.RateLimitEnforcer;
+import io.squados.reflexion.ReflexionEngine;
+import io.squados.router.SemanticRouteResult;
+import io.squados.router.SemanticRouterEngine;
+import io.squados.topology.TopologyEngine;
+import io.squados.topology.TopologyResult;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -72,6 +79,10 @@ public class SquadContext {
     private       ParallelExecutor     executor;
     private       PipelineEngine       pipelineEngine;
     private       DurableEngine        durableEngine;
+    private       ReflexionEngine      reflexionEngine;
+    private       SemanticRouterEngine semanticRouter;
+    private       TopologyEngine       topologyEngine;
+    private       CostTracker          costTracker;
     private       boolean              booted    = false;
 
     // Optional collaborators
@@ -163,6 +174,8 @@ public class SquadContext {
             if (mcpToolProvider    != null) wrapper.setMcpToolProvider(mcpToolProvider);
             if (metricsPort        != null) wrapper.setMetricsPort(metricsPort);
             if (embeddingPort      != null) wrapper.setEmbeddingPort(embeddingPort);
+            if (reflexionEngine    != null) wrapper.setReflexionEngine(reflexionEngine);
+            wrapper.setCostTracker(costTracker);
         }
 
         // Step 5b: @AgentPool — create pools for agents that request multiple instances
@@ -200,11 +213,48 @@ public class SquadContext {
         }
 
         // Step 7: initialise engines
-        this.executor       = new ParallelExecutor(registry);
-        this.pipelineEngine = new PipelineEngine(registry);
-        this.durableStore   = (durableStore != null) ? durableStore : new InProcessDurableStore();
-        this.durableEngine  = new DurableEngine(durableStore, registry);
+        this.executor        = new ParallelExecutor(registry);
+        this.pipelineEngine  = new PipelineEngine(registry);
+        this.durableStore    = (durableStore != null) ? durableStore : new InProcessDurableStore();
+        this.durableEngine   = new DurableEngine(durableStore, registry);
         if (guardrailEngine == null) this.guardrailEngine = new GuardrailEngine();
+
+        // Step 7b (new): Reflexion, SemanticRouter, Topology, CostTracker
+        this.costTracker      = new CostTracker();
+        this.reflexionEngine  = new ReflexionEngine(llm);
+
+        // SemanticRouter — init only if EmbeddingPort is wired and an agent carries @SemanticRouter
+        if (embeddingPort != null) {
+            for (AgentWrapper wrapper : registry.all()) {
+                io.squados.annotation.SemanticRouter srAnn =
+                    wrapper.getAgentClass().getAnnotation(io.squados.annotation.SemanticRouter.class);
+                if (srAnn != null) {
+                    this.semanticRouter = new SemanticRouterEngine(registry, embeddingPort);
+                    this.semanticRouter.init(srAnn);
+                    break;
+                }
+            }
+        }
+
+        // Topology — load and validate any agent carrying @Topology
+        for (AgentWrapper wrapper : registry.all()) {
+            io.squados.annotation.Topology topoAnn =
+                wrapper.getAgentClass().getAnnotation(io.squados.annotation.Topology.class);
+            if (topoAnn != null) {
+                this.topologyEngine = new TopologyEngine(registry);
+                this.topologyEngine.load(topoAnn);
+                this.topologyEngine.validate();
+                break;
+            }
+        }
+
+        // Apply CostAwareLlmPort wrapping for agents with @CostPolicy
+        for (AgentWrapper wrapper : registry.all()) {
+            io.squados.annotation.CostPolicy cpAnn = wrapper.getCostPolicyAnn();
+            if (cpAnn != null) {
+                wrapper.applyCostPolicy(cpAnn, costTracker, llm);
+            }
+        }
 
         // Step 7b: inject DurableStore into all wrappers for @Checkpoint support
         for (AgentWrapper wrapper : registry.all()) {
@@ -314,6 +364,36 @@ public class SquadContext {
         return pipelineEngine.execute(pipeline, input, newSessionId());
     }
 
+    /**
+     * Route a task semantically to the best-matching agent, then execute.
+     * Requires {@link io.squados.memory.retrieval.EmbeddingPort} and a
+     * {@code @SemanticRouter}-annotated agent to be present.
+     */
+    public AgentResponse submitSemantic(String task) {
+        ensureBooted();
+        if (semanticRouter == null) {
+            throw new IllegalStateException(
+                "[SquadOS] SemanticRouter not initialised. "
+                + "Ensure EmbeddingPort is wired and an agent is annotated with @SemanticRouter.");
+        }
+        SemanticRouteResult route = semanticRouter.route(task);
+        return submitTo(route.role(), task);
+    }
+
+    /**
+     * Execute an agent graph topology and return per-step outputs.
+     * Requires a {@code @Topology}-annotated agent to be registered.
+     */
+    public TopologyResult submitTopology(String input) {
+        ensureBooted();
+        if (topologyEngine == null) {
+            throw new IllegalStateException(
+                "[SquadOS] TopologyEngine not initialised. "
+                + "Ensure at least one agent is annotated with @Topology.");
+        }
+        return topologyEngine.execute(input, newSessionId());
+    }
+
     /** Pause a durable workflow. */
     public void pauseWorkflow(String workflowId) {
         ensureBooted();
@@ -414,12 +494,15 @@ public class SquadContext {
 
     // ── Accessors ─────────────────────────────────────────────────────
 
-    public AgentMessageBus     getBus()            { ensureBooted(); return bus; }
-    public AgentCircuitBreaker getBreaker()        { ensureBooted(); return breaker; }
-    public AgentRegistry       getRegistry()       { ensureBooted(); return registry; }
-    public SquadConfig         getConfig()         { return config; }
-    public boolean             isBooted()          { return booted; }
-    public GuardrailEngine     getGuardrailEngine(){ return guardrailEngine; }
+    public AgentMessageBus     getBus()             { ensureBooted(); return bus; }
+    public AgentCircuitBreaker getBreaker()         { ensureBooted(); return breaker; }
+    public AgentRegistry       getRegistry()        { ensureBooted(); return registry; }
+    public SquadConfig         getConfig()          { return config; }
+    public boolean             isBooted()           { return booted; }
+    public GuardrailEngine     getGuardrailEngine() { return guardrailEngine; }
+    public CostTracker         getCostTracker()     { ensureBooted(); return costTracker; }
+    public SemanticRouterEngine getSemanticRouter() { return semanticRouter; }
+    public TopologyEngine      getTopologyEngine()  { return topologyEngine; }
 
     // ── Internals ─────────────────────────────────────────────────────
 

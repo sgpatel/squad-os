@@ -7,7 +7,7 @@
   <parent>
     <groupId>io.github.sgpatel</groupId>
     <artifactId>squad-os</artifactId>
-    <version>3.8.0</version>
+    <version>3.9.0</version>
   </parent>
   <artifactId>squad-core</artifactId>
   <name>SquadOS Core</name>
@@ -113,6 +113,18 @@
           </execution>
           <execution><id>phase26-tests</id><phase>test</phase><goals><goal>java</goal></goals>
             <configuration><mainClass>io.squados.tests.SquadOsPhase26Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase27-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase27Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase28-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase28Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase29-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase29Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase30-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase30Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
         </executions>
       </plugin>

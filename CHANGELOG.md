@@ -1,3 +1,42 @@
+## v3.9.0 (2026-04-13) — 5 AI Framework Innovations
+### Added
+- **Reflexion Engine** (`@Reflexion`) — self-improving agents via score-critique-retry loops
+  - `ReflexionEngine` scores agent output with `EvalJudge`, generates critique, re-runs LLM with enriched prompt
+  - `ReflexionResult` — full iteration history, per-iteration `EvalScore`, `bestScore()`, `thresholdReached()`
+  - `@Reflexion(maxIterations=3, scoreThreshold=0.80, criteria={FAITHFULNESS,COMPLETENESS,RELEVANCE})`
+  - Integrated at step 9b in `AgentWrapper.execute()` — pre-checks (rate-limit, circuit-breaker) apply only once
+  - Phase 27 tests: 10 passing
+- **Agent Graph Topology** (`@Topology`, `@AgentEdge`) — formal typed multi-agent wiring
+  - `TopologyGraph` — directed adjacency-list graph with BFS, DFS, Kahn topological sort, cycle detection
+  - `TopologyEngine` — validates at boot, executes in topological order for DAGs, BFS rounds for cyclic layouts
+  - `TopologyResult` — per-step `AgentResponse` map, execution order, elapsed time, final output
+  - `EdgeType` enum: `DELEGATES`, `INFORMS`, `APPROVES`, `NOTIFIES`, `COMPETES`
+  - `TopologyLayout` enum: `PIPELINE`, `STAR`, `HIERARCHY`, `MESH`, `RING`
+  - `SquadContext.submitTopology(input)` — new entry point for graph execution
+  - Phase 28 tests: 12 passing
+- **Semantic Router** (`@SemanticRouter`) — embedding-based intelligent agent dispatch
+  - `SemanticRouterEngine` — pre-computes agent description embeddings at boot; cosine-similarity routing at runtime
+  - `CosineSimilarity` — pure-Java dot-product similarity utility (no external deps)
+  - `SemanticRouteResult` — agent name, role, confidence score, fallback flag
+  - `SquadContext.submitSemantic(task)` — new entry point for semantic routing
+  - `AgentRegistry.getByName(String)` — new lookup method used by Topology and Semantic Router
+  - `SquadConfig.forTesting(List<Class<?>>)` — test factory method, enables unit-testing SquadContext directly
+  - Phase 29 tests: 10 passing
+- **Cost-Aware Model Routing** (`@CostPolicy`) — automatic budget-based model degradation
+  - `ModelPricingTable` — USD cents per 1K tokens for 16 models; loads `model-pricing.properties` from classpath
+  - `CostTracker` — sliding-window per-agent cost accounting (thread-safe, purges stale entries)
+  - `CostAwareLlmPort` — wraps any `LlmPort`; switches `primaryModel` → `fallbackModel` when spend ≥ `degradeAt × budget`
+  - `@CostPolicy(primaryModel="gpt-4o", fallbackModel="gpt-4o-mini", budgetCentsPerHour=5.0, degradeAt=0.80)`
+  - Wired via `AgentWrapper.applyCostPolicy()` called from `SquadContext.boot()`
+  - Phase 30 tests: 10 passing
+### Stats
+- `squad-core-3.9.0.jar`: 262 classes (+22 vs 3.8.0)
+- `squad-spring-boot-starter-3.9.0.jar`: 23 classes (unchanged)
+- All 30 test phases passing (42 new tests across phases 27–30)
+- 5 new annotations: `@Reflexion`, `@Topology`, `@AgentEdge`, `@SemanticRouter`, `@CostPolicy`
+- 2 new enums: `EdgeType`, `TopologyLayout`
+- 4 new packages: `reflexion`, `topology`, `router`, `cost`
+
 ## v3.8.0 (2026-04-12) — Dedicated Monitoring Dashboard (squad-dashboard-api + squad-dashboard-ui)
 ### Added
 - **`squad-dashboard-api`** — standalone Spring Boot REST + SSE monitoring backend (port 8090)

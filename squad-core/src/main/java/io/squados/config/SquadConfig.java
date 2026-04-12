@@ -49,6 +49,29 @@ public class SquadConfig {
                 .orElse(null);
     }
 
+    /**
+     * Create a minimal SquadConfig from a list of agent classes for unit tests.
+     * Sets provider to "mock", model to "mock-model", and populates the agents
+     * list from the given classes.
+     */
+    public static SquadConfig forTesting(java.util.List<Class<?>> agentClasses) {
+        SquadConfig cfg = new SquadConfig();
+        cfg.setName("test-squad");
+        cfg.setProfile("test");
+        LlmConfig llm = new LlmConfig();
+        llm.setProvider("mock");
+        llm.setModel("mock-model");
+        cfg.setLlm(llm);
+        java.util.List<AgentConfig> agentCfgs = new java.util.ArrayList<>();
+        for (Class<?> cls : agentClasses) {
+            AgentConfig ac = new AgentConfig();
+            ac.setClassName(cls.getName());
+            agentCfgs.add(ac);
+        }
+        cfg.setAgents(agentCfgs);
+        return cfg;
+    }
+
     @Override
     public String toString() {
         return "SquadConfig{name='" + name + "', profile='" + profile

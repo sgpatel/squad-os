@@ -7,6 +7,8 @@ import io.squados.cache.CacheEngine;
 import io.squados.checkpoint.CheckpointEngine;
 import io.squados.config.SquadConfig;
 import io.squados.conversation.ConversationStore;
+import io.squados.cost.CostAwareLlmPort;
+import io.squados.cost.CostTracker;
 import io.squados.durable.DurableStore;
 import io.squados.exception.AgentTimeoutException;
 import io.squados.guardrail.GuardrailEngine;
@@ -19,6 +21,8 @@ import io.squados.memory.store.MemoryRecord;
 import io.squados.metrics.MetricsPort;
 import io.squados.pipeline.ConditionEvaluator;
 import io.squados.ratelimit.RateLimitEnforcer;
+import io.squados.reflexion.ReflexionEngine;
+import io.squados.reflexion.ReflexionResult;
 import io.squados.retry.RetryEngine;
 import io.squados.trace.AgentSpan;
 import io.squados.trace.SquadTracer;
@@ -78,6 +82,9 @@ public class AgentWrapper {
     private MetricsPort          metricsPort;
     private EmbeddingPort        embeddingPort;    // for @Cache SEMANTIC mode
     private DurableStore         durableStore;     // for @Checkpoint
+    private ReflexionEngine      reflexionEngine;  // for @Reflexion
+    private CostTracker          costTracker;      // for @CostPolicy
+    private CostAwareLlmPort     costAwareLlm;     // set by applyCostPolicy()
 
     // Annotation cache
     private final Retry          retryAnn;
@@ -92,6 +99,8 @@ public class AgentWrapper {
     private final Observe        observeAnn;
     private final PromptTemplate promptTemplateAnn;
     private final Checkpoint     checkpointAnn;    // class-level @Checkpoint (not used yet)
+    private final Reflexion      reflexionAnn;
+    private final CostPolicy     costPolicyAnn;
 
     // Lazily created CacheEngine (per-instance)
     private CacheEngine cacheEngine;
@@ -121,6 +130,8 @@ public class AgentWrapper {
         this.observeAnn        = agentClass.getAnnotation(Observe.class);
         this.promptTemplateAnn = agentClass.getAnnotation(PromptTemplate.class);
         this.checkpointAnn     = agentClass.getAnnotation(Checkpoint.class);
+        this.reflexionAnn      = agentClass.getAnnotation(Reflexion.class);
+        this.costPolicyAnn     = agentClass.getAnnotation(CostPolicy.class);
 
         // Pre-instantiate CacheEngine if @Cache is present
         if (cacheAnn != null) {
@@ -262,6 +273,20 @@ public class AgentWrapper {
                 "Execution failed: " + e.getMessage(), start);
         }
 
+        // Step 9b: @Reflexion — score, critique, and optionally iterate
+        if (reflexionAnn != null && reflexionEngine != null && response.isSuccess()
+                && response.content() != null) {
+            try {
+                ReflexionResult reflexionResult = reflexionEngine.run(
+                    reflexionAnn, response.content(), systemPrompt, ctx.getTaskDescription());
+                // Replace response content with the best Reflexion output
+                response = AgentResponse.success(role, name, reflexionResult.finalOutput());
+            } catch (Exception e) {
+                // Reflexion errors must not break execution
+                System.err.println("[SquadOS] Reflexion failed for " + name + ": " + e.getMessage());
+            }
+        }
+
         // Step 10: @Cache store
         if (cacheEngine != null && cacheKey != null && response.isSuccess()
                 && response.content() != null) {
@@ -365,19 +390,20 @@ public class AgentWrapper {
             history   = conversationStore.getHistory(sessionId);
         }
 
+        LlmPort activeLlm = effectiveLlm();
         LlmResponse response;
         if (streamingAnn != null && tokenWriter != null) {
             // Collect streamed tokens into a single response
             StringBuilder collected = new StringBuilder();
-            llm.chatStream(systemPrompt, userMessage, options, token -> {
+            activeLlm.chatStream(systemPrompt, userMessage, options, token -> {
                 tokenWriter.write(token);
                 if (!token.isLast()) collected.append(token.text());
             });
             response = new LlmResponse(collected.toString(), 0, collected.length(), options.model());
         } else if (conversationStore != null && !history.isEmpty()) {
-            response = llm.chatWithHistory(systemPrompt, userMessage, history, options);
+            response = activeLlm.chatWithHistory(systemPrompt, userMessage, history, options);
         } else {
-            response = llm.chat(systemPrompt, userMessage, options);
+            response = activeLlm.chat(systemPrompt, userMessage, options);
         }
 
         // Append turn to conversation history
@@ -471,6 +497,35 @@ public class AgentWrapper {
     public void setEmbeddingPort(EmbeddingPort ep) {
         this.embeddingPort = ep;
         if (cacheEngine != null) cacheEngine.setEmbeddingPort(ep);
+    }
+    public void setReflexionEngine(ReflexionEngine re)   { this.reflexionEngine  = re; }
+
+    /**
+     * Inject a {@link CostTracker} and wrap the agent's LlmPort with
+     * {@link CostAwareLlmPort} if {@code @CostPolicy} is present.
+     * No-op if neither {@code @CostPolicy} nor a fallback model is configured.
+     */
+    public void setCostTracker(CostTracker ct) {
+        this.costTracker = ct;
+        // CostPolicy wrapping is applied to the LlmPort in the AgentWrapper constructor
+        // after all setters have been called — nothing more needed here.
+    }
+
+    public CostPolicy getCostPolicyAnn()                 { return costPolicyAnn; }
+
+    /**
+     * Wrap this agent's LlmPort with a {@link CostAwareLlmPort}.
+     * Called by SquadContext.boot() after all wrappers are fully constructed.
+     * The AgentWrapper.llm field is final — wrapping is applied by reassigning
+     * the effective LLM used in callLlm() via a stored override.
+     */
+    public void applyCostPolicy(CostPolicy policy, CostTracker tracker, LlmPort baseLlm) {
+        this.costAwareLlm = new CostAwareLlmPort(baseLlm, tracker, policy, name);
+    }
+
+    /** Returns the effective LlmPort to use — cost-aware if @CostPolicy is present. */
+    private LlmPort effectiveLlm() {
+        return costAwareLlm != null ? costAwareLlm : llm;
     }
 
     public AgentRole  getRole()        { return role; }

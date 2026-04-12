@@ -77,6 +77,19 @@ public class AgentRegistry {
     }
 
     /**
+     * Get an agent by its name (as declared in {@code @Agent(name = ...)}).
+     *
+     * @return The AgentWrapper, or null if no agent with that name is registered.
+     */
+    public AgentWrapper getByName(String name) {
+        if (name == null || name.isBlank()) return null;
+        for (AgentWrapper wrapper : ordered) {
+            if (wrapper.getName().equals(name)) return wrapper;
+        }
+        return null;
+    }
+
+    /**
      * Check if a role is registered.
      */
     public boolean hasRole(AgentRole role) {
