@@ -6,7 +6,7 @@
 [![Tests](https://img.shields.io/badge/tests-454%20passing-brightgreen)]()
 [![Features](https://img.shields.io/badge/annotations-37%20active-blue)]()
 [![Java](https://img.shields.io/badge/java-21-blue)]()
-[![Maven Central](https://img.shields.io/badge/Maven%20Central-3.7.0-orange)](https://central.sonatype.com/artifact/io.github.sgpatel/squad-core)
+[![Maven Central](https://img.shields.io/badge/Maven%20Central-3.8.0-orange)](https://central.sonatype.com/artifact/io.github.sgpatel/squad-core)
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
 ## What is SquadOS?
@@ -25,7 +25,7 @@ the same annotation-driven development, but for orchestrating LLM-powered agents
 <dependency>
   <groupId>io.github.sgpatel</groupId>
   <artifactId>squad-spring-boot-starter</artifactId>
-  <version>3.7.0</version>
+  <version>3.8.0</version>
 </dependency>
 ```
 
@@ -56,7 +56,7 @@ squad.security.enabled=false
 <dependency>
   <groupId>io.github.sgpatel</groupId>
   <artifactId>squad-core</artifactId>
-  <version>3.7.0</version>
+  <version>3.8.0</version>
 </dependency>
 ```
 
