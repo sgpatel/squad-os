@@ -72,6 +72,16 @@ public class SquadConfig {
         return cfg;
     }
 
+    /** Fluent builder — convenience for tests and programmatic construction. */
+    public static Builder builder() { return new Builder(); }
+
+    public static final class Builder {
+        private final SquadConfig cfg = new SquadConfig();
+        public Builder name(String name)       { cfg.setName(name); return this; }
+        public Builder profile(String profile) { cfg.setProfile(profile); return this; }
+        public SquadConfig build()             { return cfg; }
+    }
+
     @Override
     public String toString() {
         return "SquadConfig{name='" + name + "', profile='" + profile

@@ -126,6 +126,9 @@
           <execution><id>phase30-tests</id><phase>test</phase><goals><goal>java</goal></goals>
             <configuration><mainClass>io.squados.tests.SquadOsPhase30Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
+          <execution><id>phase31-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.InnovationsIntegrationTest</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>
