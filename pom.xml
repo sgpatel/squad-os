@@ -15,6 +15,7 @@
   <modules>
     <module>squad-core</module>
     <module>squad-spring-boot-starter</module>
+    <module>squad-test</module>
     <module>squad-dashboard-api</module>
   </modules>
 

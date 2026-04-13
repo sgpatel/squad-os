@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.sgpatel</groupId>
+    <artifactId>squad-os</artifactId>
+    <version>3.9.0</version>
+  </parent>
+
+  <artifactId>squad-test</artifactId>
+  <name>SquadOS Test Kit</name>
+  <description>
+    Zero-dependency test utilities for SquadOS agent applications.
+    Provides AgentTestHarness (one-liner context boot), SquadAssertions
+    (typed assertions for AgentResponse / TopologyResult / SemanticRouteResult),
+    ScenarioBuilder (multi-step DSL), and ResponseCaptor (output capture).
+
+    Add to your application test scope:
+      &lt;dependency&gt;
+        &lt;groupId&gt;io.github.sgpatel&lt;/groupId&gt;
+        &lt;artifactId&gt;squad-test&lt;/artifactId&gt;
+        &lt;version&gt;3.9.0&lt;/version&gt;
+        &lt;scope&gt;test&lt;/scope&gt;
+      &lt;/dependency&gt;
+  </description>
+
+  <dependencies>
+
+    <!-- ── SquadOS Core (compile — provides LlmPort, SquadContext, etc.) ─ -->
+    <dependency>
+      <groupId>io.github.sgpatel</groupId>
+      <artifactId>squad-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.2.0</version>
+        <executions>
+          <execution><id>phase32-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase32Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>
