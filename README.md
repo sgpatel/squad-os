@@ -354,12 +354,134 @@ myapp_agent_latency_seconds{agent="FastAnalyst",role="ANALYST"} 0.231
 myapp_agent_tokens_total{agent="FastAnalyst",role="ANALYST",type="prompt"} 1050
 ```
 
+## Tier 2 — Capability Features
+
+### `@StructuredOutput` — Type-Safe LLM Responses
+```java
+@Agent(role = AgentRole.ANALYST, name = "SentimentAgent", description = "...")
+@StructuredOutput(schema = SentimentReport.class, retryOnMalformed = true, maxRetries = 2)
+class SentimentAgent {}
+
+// POJO with field-level schema hints
+class SentimentReport {
+    @OutputField(description = "sentiment label", example = "POSITIVE", required = true)
+    public String sentiment;
+    @OutputField(description = "confidence 0.0-1.0", example = "0.92")
+    public double confidence;
+}
+
+AgentResponse r = ctx.submit("Analyse: 'Great product!'");
+SentimentReport report = r.structuredOutput(SentimentReport.class);
+// report.sentiment → "POSITIVE", report.confidence → 0.97
+```
+
+### `@Benchmark` — Golden Dataset Evaluation
+```java
+@Agent(role = AgentRole.ANALYST, name = "SentimentAnalyser", description = "...")
+@Benchmark(dataset = "classpath:benchmarks/sentiment.json", minScore = 0.70f, version = "3.9.0")
+class SentimentAnalyserAgent {}
+
+BenchmarkRunner runner = new BenchmarkRunner(ctx, llm);
+BenchmarkReport report = runner.run(SentimentAnalyserAgent.class);
+System.out.printf("Pass rate: %.0f%% (%d/%d cases)%n",
+    report.passRate() * 100, report.passedCases(), report.totalCases());
+report.setBaseline(previousReport);
+if (report.isRegression()) throw new RuntimeException("Quality regression detected!");
+```
+
+### `@OptimizePrompt` — Automated Prompt Optimisation
+```java
+@Agent(role = AgentRole.ANALYST, name = "SentimentOpt", description = "...")
+@OptimizePrompt(scoreThreshold = 0.85f, maxIterations = 5,
+                criteria = {EvalCriteria.FAITHFULNESS, EvalCriteria.CORRECTNESS})
+class SentimentOptAgent {}
+
+PromptOptimizerEngine optimizer = new PromptOptimizerEngine(ctx, llm);
+PromptOptimizationResult result = optimizer.optimize(SentimentOptAgent.class, trainingExamples);
+System.out.printf("Improved from %.2f → %.2f in %d iterations%n",
+    result.initialScore(), result.bestScore(), result.iterations());
+```
+
+### `@Debate` — Multi-Agent Debate Protocol
+```java
+@Agent(role = AgentRole.EXECUTOR, name = "EthicsCommittee", description = "...")
+@Debate(participants = {"EthicsAgent", "LegalAgent", "SafetyAgent"},
+        rounds = 3, voteRule = VoteRule.MAJORITY, convergenceThreshold = 0.85f)
+class EthicsCommitteeAgent {}
+
+DebateEngine engine = new DebateEngine(ctx.getRegistry(), llm);
+DebateResult result = engine.run(EthicsCommitteeAgent.class, "Should we deploy model X?");
+System.out.println("Consensus: " + result.consensus());
+System.out.println("Vote: " + result.voteResult().getOutcome());
+```
+
+### `OtelSpanExporter` — OpenTelemetry Trace Export
+```yaml
+# application.yml
+squad:
+  otel:
+    enabled: true
+    endpoint: http://jaeger:4318   # or OTEL_EXPORTER_OTLP_ENDPOINT env var
+    service-name: my-squad-app
+```
+Every agent call is exported as an OTLP span to Jaeger, Grafana Tempo, or any OTLP-compatible backend. No OTEL SDK required.
+
+---
+
+## Tier 3 — Ecosystem / Platform
+
+### `squad-mcp-server` — Expose Agents as MCP Tools
+```java
+// Standalone: start in one line
+McpServer server = McpServer.start(
+    McpServerConfig.builder().port(3000).build(),
+    List.of(ResearchAgent.class, SummaryAgent.class),
+    llm
+);
+// → Claude Desktop can now call your agents as tools at http://localhost:3000/mcp
+```
+
+```yaml
+# Spring Boot: auto-configuration
+squad:
+  mcp:
+    server:
+      enabled: true
+      port: 3000
+```
+
+Add to `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "my-squad": {
+      "command": "curl",
+      "args": ["-X", "POST", "http://localhost:3000/mcp"]
+    }
+  }
+}
+```
+
+### GraalVM Native Image
+```bash
+# Native compilation — all reflection hints included out of the box
+native-image -jar squad-core.jar
+
+# Or with Maven
+mvn -Pnative native:compile
+```
+`reflect-config.json` covers all 61 annotations, 21 records, and all key execution classes. No manual hint registration needed.
+
+---
+
 ## Modules
 
 | Module | Description | Published |
 |--------|-------------|-----------|
 | `squad-core` | Framework core — zero runtime deps | ✅ Maven Central |
 | `squad-spring-boot-starter` | Zero-config Spring Boot auto-configuration | ✅ Maven Central |
+| `squad-mcp-server` | Expose agents as MCP tools (Claude Desktop compatible) | ✅ Maven Central |
+| `squad-test` | First-class agent testing library (`AgentTestHarness`, `SquadAssertions`) | ✅ Maven Central |
 | `squad-dashboard-api` | Spring Boot REST + SSE monitoring backend (port 8090) | Local only |
 | `squad-dashboard-ui` | React + Recharts monitoring UI (port 5173) | Local only |
 | `squad-examples/fraud-detection` | All 15 annotations — payment fraud detection | Local only |

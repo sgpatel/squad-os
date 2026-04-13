@@ -84,12 +84,16 @@ public class SquadProperties {
     private Memory      memory       = new Memory();
     private Conversation conversation = new Conversation();
     private RateLimit   rateLimit    = new RateLimit();
-    private Mcp         mcp          = new Mcp();
-    private Durable     durable      = new Durable();
-    private Guardrails  guardrails   = new Guardrails();
-    private AgentApi    agentApi     = new AgentApi();
-    private Api         api          = new Api();
-    private Redis       redis        = new Redis();
+    private Mcp              mcp              = new Mcp();
+    private Durable          durable          = new Durable();
+    private Guardrails       guardrails       = new Guardrails();
+    private AgentApi         agentApi         = new AgentApi();
+    private Api              api              = new Api();
+    private Redis            redis            = new Redis();
+    private Otel             otel             = new Otel();
+    private Benchmark        benchmark        = new Benchmark();
+    private Optimize         optimize         = new Optimize();
+    private Debate           debate           = new Debate();
 
     public String       getName()        { return name; }
     public void         setName(String v){ this.name = v; }
@@ -100,10 +104,14 @@ public class SquadProperties {
     public Memory       getMemory()      { return memory; }
     public Conversation getConversation(){ return conversation; }
     public RateLimit    getRateLimit()   { return rateLimit; }
-    public Mcp          getMcp()         { return mcp; }
-    public Durable      getDurable()     { return durable; }
-    public Guardrails   getGuardrails()  { return guardrails; }
-    public AgentApi     getAgentApi()    { return agentApi; }
+    public Mcp          getMcp()          { return mcp; }
+    public Durable      getDurable()      { return durable; }
+    public Guardrails   getGuardrails()   { return guardrails; }
+    public AgentApi     getAgentApi()     { return agentApi; }
+    public Otel         getOtel()         { return otel; }
+    public Benchmark    getBenchmark()    { return benchmark; }
+    public Optimize     getOptimize()     { return optimize; }
+    public Debate       getDebate()       { return debate; }
     public Api          getApi()         { return api; }
     public Redis        getRedis()       { return redis; }
 
@@ -189,13 +197,19 @@ public class SquadProperties {
     }
 
     public static class Mcp {
-        private boolean enabled   = false;
-        private int     timeoutMs = 5000;
+        private boolean enabled    = false;
+        private int     timeoutMs  = 5000;
+        private boolean serverEnabled = false;
+        private int     serverPort = 3000;
 
-        public boolean isEnabled()           { return enabled; }
-        public void    setEnabled(boolean v) { enabled = v; }
-        public int     getTimeoutMs()        { return timeoutMs; }
-        public void    setTimeoutMs(int v)   { timeoutMs = v; }
+        public boolean isEnabled()              { return enabled; }
+        public void    setEnabled(boolean v)    { enabled = v; }
+        public int     getTimeoutMs()           { return timeoutMs; }
+        public void    setTimeoutMs(int v)      { timeoutMs = v; }
+        public boolean isServerEnabled()        { return serverEnabled; }
+        public void    setServerEnabled(boolean v){ serverEnabled = v; }
+        public int     getServerPort()          { return serverPort; }
+        public void    setServerPort(int v)     { serverPort = v; }
     }
 
     public static class Durable {
@@ -243,5 +257,55 @@ public class SquadProperties {
         public void   setPort(int v)         { port = v; }
         public String getPassword()          { return password; }
         public void   setPassword(String v)  { password = v; }
+    }
+
+    /** squad.otel.* — OpenTelemetry OTLP export settings */
+    public static class Otel {
+        private boolean enabled     = false;
+        private String  endpoint;
+        private String  serviceName;
+        private int     timeoutMs   = 5000;
+
+        public boolean isEnabled()             { return enabled; }
+        public void    setEnabled(boolean v)   { enabled = v; }
+        public String  getEndpoint()           { return endpoint; }
+        public void    setEndpoint(String v)   { endpoint = v; }
+        public String  getServiceName()        { return serviceName; }
+        public void    setServiceName(String v){ serviceName = v; }
+        public int     getTimeoutMs()          { return timeoutMs; }
+        public void    setTimeoutMs(int v)     { timeoutMs = v; }
+    }
+
+    /** squad.benchmark.* — Agent benchmarking settings */
+    public static class Benchmark {
+        private boolean enabled = false;
+
+        public boolean isEnabled()           { return enabled; }
+        public void    setEnabled(boolean v) { enabled = v; }
+    }
+
+    /** squad.optimize.* — Prompt optimizer settings */
+    public static class Optimize {
+        private boolean enabled       = false;
+        private float   scoreThreshold = 0.80f;
+        private int     maxIterations  = 5;
+
+        public boolean isEnabled()                  { return enabled; }
+        public void    setEnabled(boolean v)        { enabled = v; }
+        public float   getScoreThreshold()          { return scoreThreshold; }
+        public void    setScoreThreshold(float v)   { scoreThreshold = v; }
+        public int     getMaxIterations()           { return maxIterations; }
+        public void    setMaxIterations(int v)      { maxIterations = v; }
+    }
+
+    /** squad.debate.* — Multi-agent debate settings */
+    public static class Debate {
+        private boolean enabled = false;
+        private int     rounds  = 3;
+
+        public boolean isEnabled()           { return enabled; }
+        public void    setEnabled(boolean v) { enabled = v; }
+        public int     getRounds()           { return rounds; }
+        public void    setRounds(int v)      { rounds = v; }
     }
 }

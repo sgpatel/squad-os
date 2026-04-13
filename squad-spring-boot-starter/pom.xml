@@ -46,6 +46,14 @@
       <version>${project.version}</version>
     </dependency>
 
+    <!-- ── SquadOS MCP Server (optional — for @McpServer exposure) ──────── -->
+    <dependency>
+      <groupId>io.github.sgpatel</groupId>
+      <artifactId>squad-mcp-server</artifactId>
+      <version>${project.version}</version>
+      <optional>true</optional>
+    </dependency>
+
     <!-- ── Spring Boot (always required) ──────────────────────────────── -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

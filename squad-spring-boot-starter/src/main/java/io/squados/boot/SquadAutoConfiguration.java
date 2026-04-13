@@ -351,4 +351,120 @@ public class SquadAutoConfiguration {
         System.out.println("[SquadOS] MetricsPort: Micrometer adapter (Prometheus metrics active)");
         return new MicrometerMetricsAdapter(meterRegistry);
     }
+
+    // ── Tier 2: @Benchmark ────────────────────────────────────────────────────
+
+    /**
+     * BenchmarkRunner — evaluate agent quality against golden datasets.
+     * Requires SquadContext to be present.
+     */
+    @Bean
+    @ConditionalOnMissingBean(io.squados.benchmark.BenchmarkRunner.class)
+    @ConditionalOnProperty(prefix = "squad.benchmark", name = "enabled",
+                           havingValue = "true", matchIfMissing = false)
+    public io.squados.benchmark.BenchmarkRunner squadBenchmarkRunner(
+            SquadContext squadContext, LlmPort llmPort) {
+        System.out.println("[SquadOS] BenchmarkRunner: ready (@Benchmark active)");
+        return new io.squados.benchmark.BenchmarkRunner(squadContext, llmPort);
+    }
+
+    // ── Tier 2: @OptimizePrompt ───────────────────────────────────────────────
+
+    /**
+     * PromptOptimizerEngine — DSPy-style automated prompt optimization.
+     */
+    @Bean
+    @ConditionalOnMissingBean(io.squados.optimize.PromptOptimizerEngine.class)
+    @ConditionalOnProperty(prefix = "squad.optimize", name = "enabled",
+                           havingValue = "true", matchIfMissing = false)
+    public io.squados.optimize.PromptOptimizerEngine squadPromptOptimizer(
+            SquadContext squadContext, LlmPort llmPort) {
+        System.out.println("[SquadOS] PromptOptimizerEngine: ready (@OptimizePrompt active)");
+        return new io.squados.optimize.PromptOptimizerEngine(squadContext, llmPort);
+    }
+
+    /**
+     * PromptVersionStore — in-process history of optimized prompt versions.
+     * Always created when optimize is enabled; shared between PromptOptimizerEngine instances.
+     */
+    @Bean
+    @ConditionalOnMissingBean(io.squados.optimize.PromptVersionStore.class)
+    @ConditionalOnProperty(prefix = "squad.optimize", name = "enabled",
+                           havingValue = "true", matchIfMissing = false)
+    public io.squados.optimize.PromptVersionStore squadPromptVersionStore() {
+        return new io.squados.optimize.PromptVersionStore();
+    }
+
+    // ── Tier 2: @Debate ───────────────────────────────────────────────────────
+
+    /**
+     * DebateEngine — multi-agent debate protocol with convergence detection and voting.
+     */
+    @Bean
+    @ConditionalOnMissingBean(io.squados.debate.DebateEngine.class)
+    @ConditionalOnProperty(prefix = "squad.debate", name = "enabled",
+                           havingValue = "true", matchIfMissing = false)
+    public io.squados.debate.DebateEngine squadDebateEngine(
+            SquadContext squadContext,
+            LlmPort llmPort) {
+        System.out.println("[SquadOS] DebateEngine: ready (@Debate active)");
+        return new io.squados.debate.DebateEngine(squadContext.getRegistry(), llmPort);
+    }
+
+    // ── Tier 2: OtelSpanExporter ──────────────────────────────────────────────
+
+    /**
+     * OtelSpanExporter — async OTLP/HTTP trace export to Jaeger, Grafana Tempo, etc.
+     * Activated by squad.otel.enabled=true; endpoint configured via squad.otel.endpoint
+     * or the standard OTEL_EXPORTER_OTLP_ENDPOINT environment variable.
+     */
+    @Bean
+    @ConditionalOnMissingBean(io.squados.otel.OtelSpanExporter.class)
+    @ConditionalOnProperty(prefix = "squad.otel", name = "enabled", havingValue = "true")
+    public io.squados.otel.OtelSpanExporter squadOtelExporter(SquadProperties props) {
+        String endpoint = props.getOtel().getEndpoint();
+        String service  = props.getOtel().getServiceName();
+        io.squados.otel.OtelExporterConfig config = io.squados.otel.OtelExporterConfig.builder()
+            .endpoint(endpoint != null ? endpoint : io.squados.otel.OtelExporterConfig.fromEnv().endpoint())
+            .serviceName(service != null ? service : io.squados.otel.OtelExporterConfig.fromEnv().serviceName())
+            .timeoutMs(props.getOtel().getTimeoutMs())
+            .build();
+        System.out.println("[SquadOS] OtelSpanExporter: exporting to " + config.traceEndpoint());
+        return new io.squados.otel.OtelSpanExporter(config);
+    }
+
+    // ── Tier 3: squad-mcp-server ──────────────────────────────────────────────
+
+    /**
+     * McpServer — exposes @Agent classes as MCP tools for Claude Desktop and MCP clients.
+     * Activated by squad.mcp.server.enabled=true.
+     * Configure port via squad.mcp.server.port (default: 3000).
+     */
+    @Bean(destroyMethod = "stop")
+    @ConditionalOnMissingBean(io.squados.mcp.server.McpServer.class)
+    @ConditionalOnClass(name = "io.squados.mcp.server.McpServer")
+    @ConditionalOnProperty(prefix = "squad.mcp.server", name = "enabled", havingValue = "true")
+    public io.squados.mcp.server.McpServer squadMcpServer(
+            SquadContext squadContext,
+            LlmPort llmPort,
+            SquadProperties props) {
+        int port = props.getMcp().getServerPort();
+        io.squados.mcp.server.McpServerConfig config =
+            io.squados.mcp.server.McpServerConfig.builder()
+                .port(port)
+                .serverName("squad-mcp-server")
+                .build();
+        java.util.List<Class<?>> agentClasses = squadContext.getRegistry().all().stream()
+            .map(io.squados.context.AgentWrapper::getAgentClass)
+            .collect(java.util.stream.Collectors.toList());
+        try {
+            io.squados.mcp.server.McpServer server =
+                io.squados.mcp.server.McpServer.start(config, agentClasses, llmPort);
+            System.out.println("[SquadOS] McpServer: listening on port " + server.port()
+                + " (" + agentClasses.size() + " agent tools)");
+            return server;
+        } catch (java.io.IOException e) {
+            throw new RuntimeException("Failed to start McpServer on port " + port, e);
+        }
+    }
 }

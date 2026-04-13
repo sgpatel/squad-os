@@ -1,4 +1,72 @@
-## v3.9.0 (2026-04-13) — 5 AI Framework Innovations
+## v3.9.0 (2026-04-13) — Tier 1/2/3 Feature Complete
+
+### Tier 3 — Ecosystem / Platform
+- **`squad-mcp-server`** — Expose any `@Agent` class as an MCP tool for Claude Desktop, Cursor, and any MCP client
+  - JSON-RPC 2.0 over HTTP via JDK built-in `com.sun.net.httpserver` (zero external deps)
+  - `McpServer.start(config, agents, llm)` — boots in one line; supports port=0 for ephemeral
+  - `McpToolExporter` — auto-discovers `@Agent(name, description)` → MCP `tools/list` entries
+  - `McpJsonRpc` — pure-Java JSON-RPC parsing/building
+  - Spring Boot: `squad.mcp.server.enabled=true` + `squad.mcp.server.port=3000`
+  - Phase 38 tests: 10 passing
+- **GraalVM Native Image** — compile SquadOS apps to native binaries
+  - `reflect-config.json` — 156 entries: all 61 annotations, 21 records, key execution/filter/exception classes
+  - `resource-config.json` — classpath resources (properties, services)
+  - `native-image.properties` — build-time/run-time initialisation directives
+  - Located at `META-INF/native-image/io.github.sgpatel/squad-core/`
+  - Phase 39 tests: 10 passing
+
+### Tier 2 — Capability Gaps
+- **`@StructuredOutput`** + `@OutputField` — type-safe LLM output parsing
+  - `JsonSchemaGenerator` builds JSON schema prompts from annotated POJOs (pure reflection, no Jackson)
+  - `StructuredOutputParser` extracts JSON from prose, populates fields via reflection, retries on malformed
+  - Integrated at Step 9c in `AgentWrapper.execute()` — `AgentResponse.structuredOutput(Class<T>)` accessor
+  - Phase 33 tests: 10 passing
+- **`@Benchmark`** — golden dataset evaluation
+  - `BenchmarkDataset` — inline builder, classpath JSON/CSV loading (pure Java)
+  - `BenchmarkRunner` — runs agent on each case via `ctx.submit()`, scores with `EvalJudge`
+  - `BenchmarkReport` — `passRate()`, `perCriteriaAverage()`, `isRegression()` with baseline comparison
+  - `BenchmarkRegressionException` — thrown when `passRate < minScore && failOnRegression=true`
+  - Phase 34 tests: 10 passing
+- **`@OptimizePrompt`** — DSPy-style automated prompt optimisation
+  - `PromptOptimizerEngine` — evaluate → collect failures → proposeRewrite → evaluate candidate → accept/reject
+  - `PromptVersionStore` — in-process per-agent prompt version history (`best()`, `latest()`, `all()`)
+  - `PromptVersion` record — iteration, prompt, score, changeRationale, createdAt
+  - Phase 35 tests: 10 passing
+- **`@Debate`** — multi-agent debate protocol
+  - `DebateEngine` — initial positions → cross-critique → revision → word-overlap convergence check → VoteCollector → LLM consensus
+  - `DebateResult` — all rounds, `voteResult()`, `consensus()`, `converged()`
+  - Phase 36 tests: 10 passing
+- **`OtelSpanExporter`** — async OTLP/HTTP trace export (Jaeger, Grafana Tempo, etc.)
+  - Zero OTEL SDK dependency — hand-built OTLP JSON
+  - `OtelTraceContext` — W3C traceparent format (`00-{traceId32}-{spanId16}-01`)
+  - `OtelExporterConfig.fromEnv()` reads `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`
+  - Spring Boot: `squad.otel.enabled=true` + `squad.otel.endpoint=http://jaeger:4318`
+  - Phase 37 tests: 10 passing
+
+### Tier 2 — Dedicated Test Phases (implementations existed; coverage added)
+- **`@Guardrails`** (Phase 40): 10 tests — `PiiDetector`, `PromptInjectionDetector`, `ToxicityFilter`, `GuardrailEngine` pipeline, `SquadContext` wiring. Fix: `AgentWrapper` now catches `GuardrailException` at Step 5 → `AgentResponse.failure()`
+- **`@AgentMemory`** (Phase 41): 10 tests — `MemoryRecord`, `InProcessMemoryStore`, `MemoryRouter`, `MockEmbeddingPort` determinism, `MemoryManager` read/write/closeSession
+- **`@SquadTool`** (Phase 42): 10 tests — `SquadToolRegistry` discovery, `SquadToolDefinition` schema prompt, `SquadToolExecutor` tool-call loop, `TOOL_RESULT` feedback
+- **`@AutoPlan`** (Phase 43): 10 tests — `AutoPlanEngine` loop, stop-condition, `RETURN_BEST`/`THROW` policies, `PlanIteration`
+- **`@RemoteSquad`** (Phase 44): 10 tests — `NoAuth`/`ApiKeyAuth`/`JwtAuth`, `RemoteSquadInvoker` field injection, `SquadClient` HTTP POST/health/error handling
+
+### squad-spring-boot-starter
+- Added `@Bean` auto-configuration for all Tier 2/3 features:
+  - `BenchmarkRunner` (`squad.benchmark.enabled=true`)
+  - `PromptOptimizerEngine` + `PromptVersionStore` (`squad.optimize.enabled=true`)
+  - `DebateEngine` (`squad.debate.enabled=true`)
+  - `OtelSpanExporter` (`squad.otel.enabled=true`)
+  - `McpServer` (`squad.mcp.server.enabled=true`)
+- Added `SquadProperties` nested classes: `Otel`, `Benchmark`, `Optimize`, `Debate`; extended `Mcp` with `serverEnabled` + `serverPort`
+- Added optional `squad-mcp-server` dependency
+
+### Stats
+- Test phases: 44 phases, 440+ test assertions, all passing
+- New annotations (Tier 2): `@StructuredOutput`, `@OutputField`, `@Benchmark`, `@OptimizePrompt`, `@Debate`
+- New modules: `squad-mcp-server`, `squad-test`
+- New packages: `structured`, `benchmark`, `optimize`, `debate`, `otel`, `mcp/server`
+
+## v3.9.0 (2026-04-13) — 5 AI Framework Innovations (Tier 1)
 ### Added
 - **Reflexion Engine** (`@Reflexion`) — self-improving agents via score-critique-retry loops
   - `ReflexionEngine` scores agent output with `EvalJudge`, generates critique, re-runs LLM with enriched prompt
