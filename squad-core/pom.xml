@@ -144,6 +144,9 @@
           <execution><id>phase37-tests</id><phase>test</phase><goals><goal>java</goal></goals>
             <configuration><mainClass>io.squados.tests.SquadOsPhase37Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
+          <execution><id>phase39-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase39Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>

@@ -17,6 +17,7 @@
     <module>squad-spring-boot-starter</module>
     <module>squad-test</module>
     <module>squad-dashboard-api</module>
+    <module>squad-mcp-server</module>
   </modules>
 
   <properties>

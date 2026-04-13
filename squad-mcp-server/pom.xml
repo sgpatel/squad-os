@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.sgpatel</groupId>
+    <artifactId>squad-os</artifactId>
+    <version>3.9.0</version>
+  </parent>
+
+  <artifactId>squad-mcp-server</artifactId>
+  <name>SquadOS MCP Server</name>
+  <description>
+    Exposes any SquadOS @Agent-annotated class as an MCP (Model Context Protocol) server.
+    Allows Claude Desktop and other MCP clients to call SquadOS agents as tools
+    via JSON-RPC 2.0 over HTTP.
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.sgpatel</groupId>
+      <artifactId>squad-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.11.0</version>
+        <configuration>
+          <source>21</source>
+          <target>21</target>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.2.0</version>
+        <executions>
+          <execution>
+            <id>phase38-tests</id>
+            <phase>test</phase>
+            <goals><goal>java</goal></goals>
+            <configuration>
+              <mainClass>io.squados.tests.SquadOsPhase38Tests</mainClass>
+              <classpathScope>test</classpathScope>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>
