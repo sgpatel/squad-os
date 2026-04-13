@@ -32,6 +32,8 @@ public class EvalScore {
     }
 
     public Map<EvalCriteria, Float> getScores()      { return scores; }
+    /** Alias for getScores() — cleaner API for benchmark/report code. */
+    public Map<EvalCriteria, Float> perCriteria()   { return scores; }
     public String                   getFeedback()    { return feedback; }
     public int                      getAttempt()     { return attempt; }
     public String                   getAgentOutput() { return agentOutput; }

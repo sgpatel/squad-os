@@ -24,6 +24,9 @@ import io.squados.ratelimit.RateLimitEnforcer;
 import io.squados.reflexion.ReflexionEngine;
 import io.squados.reflexion.ReflexionResult;
 import io.squados.retry.RetryEngine;
+import io.squados.structured.JsonSchemaGenerator;
+import io.squados.structured.StructuredOutputParser;
+import io.squados.structured.StructuredOutputResult;
 import io.squados.trace.AgentSpan;
 import io.squados.trace.SquadTracer;
 
@@ -99,8 +102,9 @@ public class AgentWrapper {
     private final Observe        observeAnn;
     private final PromptTemplate promptTemplateAnn;
     private final Checkpoint     checkpointAnn;    // class-level @Checkpoint (not used yet)
-    private final Reflexion      reflexionAnn;
-    private final CostPolicy     costPolicyAnn;
+    private final Reflexion        reflexionAnn;
+    private final CostPolicy       costPolicyAnn;
+    private final StructuredOutput structuredOutputAnn;
 
     // Lazily created CacheEngine (per-instance)
     private CacheEngine cacheEngine;
@@ -130,8 +134,9 @@ public class AgentWrapper {
         this.observeAnn        = agentClass.getAnnotation(Observe.class);
         this.promptTemplateAnn = agentClass.getAnnotation(PromptTemplate.class);
         this.checkpointAnn     = agentClass.getAnnotation(Checkpoint.class);
-        this.reflexionAnn      = agentClass.getAnnotation(Reflexion.class);
-        this.costPolicyAnn     = agentClass.getAnnotation(CostPolicy.class);
+        this.reflexionAnn        = agentClass.getAnnotation(Reflexion.class);
+        this.costPolicyAnn       = agentClass.getAnnotation(CostPolicy.class);
+        this.structuredOutputAnn = agentClass.getAnnotation(StructuredOutput.class);
 
         // Pre-instantiate CacheEngine if @Cache is present
         if (cacheAnn != null) {
@@ -284,6 +289,25 @@ public class AgentWrapper {
             } catch (Exception e) {
                 // Reflexion errors must not break execution
                 System.err.println("[SquadOS] Reflexion failed for " + name + ": " + e.getMessage());
+            }
+        }
+
+        // Step 9c: @StructuredOutput — parse LLM text into typed POJO
+        if (structuredOutputAnn != null && response.isSuccess() && response.content() != null) {
+            try {
+                StructuredOutputResult<?> parsed = StructuredOutputParser.parse(
+                    response.content(),
+                    structuredOutputAnn.schema(),
+                    structuredOutputAnn.retryOnMalformed(),
+                    structuredOutputAnn.maxRetries(),
+                    systemPrompt,
+                    effectiveLlm(),
+                    options);
+                response = response.withStructuredOutput(parsed);
+            } catch (Exception e) {
+                System.err.println("[SquadOS] StructuredOutput parse failed for " + name + ": " + e.getMessage());
+                return AgentResponse.failure(role, name,
+                    "StructuredOutput parse failed: " + e.getMessage(), start);
             }
         }
 
@@ -477,6 +501,16 @@ public class AgentWrapper {
                 }
             } catch (Exception ignored) {
                 // Memory errors must not break execution
+            }
+        }
+
+        // @StructuredOutput — append JSON schema instructions
+        if (structuredOutputAnn != null) {
+            String schemaPrompt = JsonSchemaGenerator.buildSchemaPrompt(structuredOutputAnn.schema());
+            if (structuredOutputAnn.inject() == StructuredOutput.SchemaInjection.PREPEND) {
+                sb.insert(0, schemaPrompt);
+            } else {
+                sb.append(schemaPrompt);
             }
         }
 

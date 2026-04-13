@@ -2,6 +2,7 @@ package io.squados.agent;
 
 import io.squados.annotation.AgentRole;
 import io.squados.llm.LlmResponse;
+import io.squados.structured.StructuredOutputResult;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -23,6 +24,7 @@ public class AgentResponse {
     private final boolean   success;
     private final boolean   skipped;
     private final String    errorMessage;
+    private StructuredOutputResult<?> structuredOutput; // set post-construction by AgentWrapper
 
     // ── Constructors ──────────────────────────────────────────────────
 
@@ -114,6 +116,26 @@ public class AgentResponse {
 
     public boolean hasContent() {
         return content != null && !content.isBlank();
+    }
+
+    /**
+     * Returns the parsed structured output cast to {@code type}, or null if
+     * {@code @StructuredOutput} was not active for this agent.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T structuredOutput(Class<T> type) {
+        if (structuredOutput == null) return null;
+        Object val = structuredOutput.value();
+        return type.isInstance(val) ? (T) val : null;
+    }
+
+    /** Returns the raw StructuredOutputResult for inspection (attempts, raw response). */
+    public StructuredOutputResult<?> structuredOutputResult() { return structuredOutput; }
+
+    /** Called by AgentWrapper after parsing. */
+    public AgentResponse withStructuredOutput(StructuredOutputResult<?> result) {
+        this.structuredOutput = result;
+        return this;
     }
 
     @Override
