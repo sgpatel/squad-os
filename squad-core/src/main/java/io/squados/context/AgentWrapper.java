@@ -228,8 +228,12 @@ public class AgentWrapper {
 
         // Step 5: @Guardrails input check
         if (guardrailEngine != null && guardrailsAnn != null) {
-            guardrailEngine.checkInput(guardrailsAnn,
-                ctx.getTaskDescription() != null ? ctx.getTaskDescription() : "", name);
+            try {
+                guardrailEngine.checkInput(guardrailsAnn,
+                    ctx.getTaskDescription() != null ? ctx.getTaskDescription() : "", name);
+            } catch (io.squados.exception.GuardrailException ge) {
+                return AgentResponse.failure(role, name, ge.getMessage(), start);
+            }
         }
 
         // Step 6: @Cache lookup — return immediately on hit

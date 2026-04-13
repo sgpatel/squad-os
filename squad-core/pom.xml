@@ -147,6 +147,21 @@
           <execution><id>phase39-tests</id><phase>test</phase><goals><goal>java</goal></goals>
             <configuration><mainClass>io.squados.tests.SquadOsPhase39Tests</mainClass><classpathScope>test</classpathScope></configuration>
           </execution>
+          <execution><id>phase40-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase40Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase41-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase41Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase42-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase42Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase43-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase43Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
+          <execution><id>phase44-tests</id><phase>test</phase><goals><goal>java</goal></goals>
+            <configuration><mainClass>io.squados.tests.SquadOsPhase44Tests</mainClass><classpathScope>test</classpathScope></configuration>
+          </execution>
         </executions>
       </plugin>
     </plugins>
