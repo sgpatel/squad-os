@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.squados.examples</groupId>
+    <artifactId>tutor-os-parent</artifactId>
+    <version>1.0.0</version>
+  </parent>
+
+  <artifactId>tutor-api</artifactId>
+  <name>TutorOS API — Spring Boot REST + WebSocket</name>
+
+  <dependencies>
+
+    <!-- TutorOS core (agents + pipeline) -->
+    <dependency>
+      <groupId>io.squados.examples</groupId>
+      <artifactId>tutor-core</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+
+    <!-- SquadOS Spring Boot Starter — wires all beans automatically -->
+    <dependency>
+      <groupId>io.github.sgpatel</groupId>
+      <artifactId>squad-spring-boot-starter</artifactId>
+      <version>${squad-os.version}</version>
+    </dependency>
+
+    <!-- squad-mcp-server — exposes TutorOS agents as MCP tools -->
+    <dependency>
+      <groupId>io.github.sgpatel</groupId>
+      <artifactId>squad-mcp-server</artifactId>
+      <version>${squad-os.version}</version>
+    </dependency>
+
+    <!-- Spring Boot Web + WebSocket -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-websocket</artifactId>
+    </dependency>
+
+    <!-- LLM provider (Ollama for local dev) -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-starter-model-ollama</artifactId>
+    </dependency>
+
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>${spring-boot.version}</version>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>
