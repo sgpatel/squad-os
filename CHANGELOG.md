@@ -1,3 +1,52 @@
+## v3.9.0 (2026-04-14) — Tier 1/2/3 Feature Complete + TutorOS Reference App
+
+### TutorOS — Personalised AI Tutoring System (`examples/tutor-os`)
+Complete reference application demonstrating all 14 SquadOS v3.9.0 features end-to-end.
+
+**Modules:** `tutor-core` (domain, agents, pipeline) + `tutor-api` (Spring Boot REST API)
+
+**Models (8):** `LearnerProfile`, `StudyPlan`, `PracticeQuestion`, `AssessmentFeedback`,
+  `SessionSummary`, `Quiz`, `TodoList`, `VisualAsset` — all `@StructuredOutput`-compatible
+
+**Agents (13):**
+- `GuardianAgent` — `@Guardrails` PII/injection/toxicity on every turn + `@RateLimit`
+- `DiagnosticAgent` — 5-question adaptive diagnostic → typed `LearnerProfile` via `@StructuredOutput` + `@AgentMemory`
+- `CurriculumPlannerAgent` — gap-coverage `@AutoPlan` loop + `@DurableAgent` (168h) + `@RemoteSquad` LMS
+- `ContentAgent` — 5 `@SquadTool` methods (Khan Academy, Wolfram Alpha, Wikipedia, Analogy, Visualisation) + `@Retry`
+- `SocraticTutorAgent` — `@Debate` participant + `@OptimizePrompt` (mastery-gain signal) + `@AgentMemory`
+- `DirectTutorAgent` — `@Streaming` (WebSocket) + `@Benchmark` + `@OptimizePrompt` + `@Debate` participant
+- `PracticeAgent` — ZPD-calibrated questions one Bloom's level above current mastery + `@Benchmark`
+- `AssessmentAgent` — attempt-aware grading with hint depth progression + `@Benchmark`
+- `ProgressAgent` — mastery tracking, plateau detection, readiness-to-advance + `@DurableAgent` (720h)
+- `EscalationAgent` — `@AwaitApproval` human teacher handoff + `@RemoteSquad` teacher portal
+- `VisualisationAgent` — SVG / D3.js / Manim auto-selection by concept type + `@RemoteSquad` Manim service
+- `TodoAgent` — effort-calibrated todo generation with `@AutoPlan` + completion-rate adaptation
+- `QuizAgent` — 60/30/10 gap/recent/mastered distribution + `@Benchmark` quality gate
+
+**Pipeline:** `TutoringPipeline` — 10-step `@Pipeline` + `@DurableAgent` (72h) + `@Traced` (all spans)
+**Sealed result type:** `PipelineResult` — 7 subtypes with Java 21 pattern-matching routing
+**Session lifecycle:** `SessionManager` — start/resume/message/end with burnout protection (90 min max)
+
+**REST API (22 endpoints):**
+- `SessionController` — `/session/*` (start, message, answer, quiz, end)
+- `PlanController` — `/plan/{l}/{s}/*` (CRUD + chapter navigation + chapter detail)
+- `ProgressController` — `/progress/{l}/{s}/*` (9 analytics endpoints including streak, Bloom's timeline, teacher report)
+- `QuizController` — `/quiz/{l}/{s}/*` (generate, submit, history, single result)
+
+**WebSocket:** `TutoringWebSocketHandler` at `ws://localhost:8080/ws/session/{id}/stream`
+  — token-by-token streaming powered by `@Streaming` on `DirectTutorAgent`
+
+**Benchmark datasets (4):** `tutor-explanation-golden.json`, `practice-question-golden.json`,
+  `assessment-grading-golden.json`, `quiz-golden.json` — loaded at startup, gates prompt changes
+
+**Frontend:** 7-screen SPA (static HTML, no build step) — onboarding wizard, dashboard,
+  chat with agent activity log, quiz screen, progress analytics, chapter navigator, todos
+
+**Learner profiles:** 6 levels × 5 learning styles × 6 Bloom's levels × 5 goals = highly personalised
+**Visualisation roadmap:** SVG (current) → D3.js (interactive) → Manim (mathematical animations) → Three.js (3D)
+
+---
+
 ## v3.9.0 (2026-04-13) — Tier 1/2/3 Feature Complete
 
 ### Tier 3 — Ecosystem / Platform

@@ -488,6 +488,7 @@ mvn -Pnative native:compile
 | `squad-examples/snack-thief` | All 15 annotations — Karen stole the pizza 🍕 | Local only |
 | `squad-examples/daily-planner` | @SquadPlan typed output demo | Local only |
 | `squad-examples/multi-node` | Redis Pub/Sub multi-JVM demo | Local only |
+| `examples/tutor-os` | **TutorOS** — Personalised AI Tutoring System (all 14 v3.9.0 features) | Local only |
 
 ## Examples
 
@@ -520,6 +521,47 @@ cd squad-examples/snack-thief
 mvn spring-boot:run
 # Verdict: Karen is guilty (4-1)
 ```
+
+### TutorOS — Personalised AI Tutoring System ⭐
+
+The complete SquadOS v3.9.0 reference application. Every annotation. Every feature. One product.
+
+```bash
+ollama pull llama3.2
+cd examples/tutor-os
+mvn clean install -DskipTests
+mvn -pl tutor-api spring-boot:run    # → http://localhost:8080
+# Open examples/tutor-os/tutor-ui/src/index.html in your browser
+```
+
+**13 agents across a full teaching pipeline:**
+
+| Agent | Features |
+|-------|----------|
+| GuardianAgent | `@Guardrails` `@RateLimit` |
+| DiagnosticAgent | `@StructuredOutput` `@AgentMemory` `@Traced` |
+| CurriculumPlannerAgent | `@AutoPlan` `@DurableAgent` `@RemoteSquad` |
+| ContentAgent | 5× `@SquadTool` `@Retry` |
+| SocraticTutorAgent | `@Debate` `@OptimizePrompt` `@AgentMemory` |
+| DirectTutorAgent | `@Streaming` `@Benchmark` `@OptimizePrompt` `@Debate` |
+| PracticeAgent | `@StructuredOutput` `@Benchmark` `@AgentMemory` |
+| AssessmentAgent | `@StructuredOutput` `@Benchmark` |
+| ProgressAgent | `@DurableAgent` `@AgentMemory` |
+| EscalationAgent | `@AwaitApproval` `@RemoteSquad` |
+| VisualisationAgent | `@StructuredOutput` `@Retry` `@RemoteSquad` (SVG/D3/Manim) |
+| TodoAgent | `@AutoPlan` `@StructuredOutput` |
+| QuizAgent | `@StructuredOutput` `@Benchmark` |
+
+**22 REST endpoints** — session management, curriculum planning, progress analytics,
+quiz generation and scoring, plus WebSocket streaming for token-by-token tutor responses.
+
+**Learner profiles** — adapts to 6 levels (Primary → Professional) × 5 learning styles
+× Bloom's taxonomy progression (REMEMBER → CREATE).
+
+Full documentation: [`examples/tutor-os/README.md`](examples/tutor-os/README.md)
+Agent prompts reference: [`examples/tutor-os/PROMPTS.md`](examples/tutor-os/PROMPTS.md)
+
+---
 
 ### Live Dashboard
 
@@ -740,7 +782,7 @@ redis.password=
 | 3.5.0 | Conversation history, rate limiting |
 | 3.6.0 | Remote squad invocation, MCP tool integration |
 | 3.7.0 | Streaming, Guardrails, Durable Workflows, Pipeline Orchestration, Agent HTTP API |
-| **3.9.0** | **5 innovations: Reflexion Engine, Agent Graph Topology, Semantic Router, Cost-Aware Routing, squad-test** |
+| **3.9.0** | **5 innovations: Reflexion Engine, Agent Graph Topology, Semantic Router, Cost-Aware Routing, squad-test + TutorOS reference app** |
 | **3.8.0** | **squad-dashboard-api + squad-dashboard-ui — dedicated monitoring dashboard** |
 
 ## Requirements

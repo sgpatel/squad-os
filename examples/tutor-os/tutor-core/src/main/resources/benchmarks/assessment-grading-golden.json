@@ -1,0 +1,166 @@
+{
+  "name": "assessment-grading-golden",
+  "description": "Golden dataset for AssessmentAgent grading accuracy. Evaluates whether the agent correctly scores answers, awards partial credit, calibrates hints to attempt number, and produces accurate masteryDelta. minScore 0.85.",
+  "version": "1.0.0",
+  "minScore": 0.85,
+  "scoringDimensions": [
+    "score_accuracy",
+    "partial_credit_fairness",
+    "hint_appropriateness",
+    "mastery_delta_calibration",
+    "encouragement_tone_match"
+  ],
+  "examples": [
+    {
+      "id": "ag-001",
+      "description": "Perfect first-attempt answer — full marks, positive delta",
+      "input": {
+        "question": "What is the quadratic formula?",
+        "correctAnswer": "x = (-b ± √(b²-4ac)) / 2a",
+        "studentAnswer": "x equals negative b plus or minus the square root of b squared minus four a c, all over 2a",
+        "attemptNumber": 1,
+        "level": "SENIOR_SCHOOL",
+        "bloomsLevel": "REMEMBER"
+      },
+      "expectedOutput": {
+        "correct": true,
+        "scoreMin": 0.9,
+        "masteryDeltaMin": 0.07,
+        "masteryDeltaMax": 0.10,
+        "suggestRetry": false,
+        "hintIsEmpty": true,
+        "encouragementTone": "CELEBRATORY"
+      },
+      "minScore": 0.88
+    },
+    {
+      "id": "ag-002",
+      "description": "Conceptually correct but imprecise wording — partial credit",
+      "input": {
+        "question": "Explain what photosynthesis produces",
+        "correctAnswer": "Photosynthesis produces glucose (sugar) and oxygen",
+        "studentAnswer": "Plants make food and air from sunlight",
+        "attemptNumber": 1,
+        "level": "PRIMARY",
+        "bloomsLevel": "UNDERSTAND"
+      },
+      "expectedOutput": {
+        "correct": false,
+        "scoreMin": 0.4,
+        "scoreMax": 0.8,
+        "masteryDeltaMin": 0.01,
+        "masteryDeltaMax": 0.06,
+        "correctPartsNonEmpty": true,
+        "incorrectPartsNonEmpty": true,
+        "encouragementTone": "ENCOURAGING",
+        "mustNotContainWord": "wrong"
+      },
+      "minScore": 0.85
+    },
+    {
+      "id": "ag-003",
+      "description": "Completely wrong first attempt — directional hint only",
+      "input": {
+        "question": "What does F = ma represent in Newton's second law?",
+        "correctAnswer": "Force equals mass times acceleration",
+        "studentAnswer": "It means friction equals mass times area",
+        "attemptNumber": 1,
+        "level": "MIDDLE_SCHOOL",
+        "bloomsLevel": "REMEMBER"
+      },
+      "expectedOutput": {
+        "correct": false,
+        "scoreMax": 0.1,
+        "masteryDeltaMin": -0.06,
+        "masteryDeltaMax": -0.01,
+        "suggestRetry": true,
+        "hintType": "DIRECTIONAL",
+        "hintMustNotRevealAnswer": true
+      },
+      "minScore": 0.85
+    },
+    {
+      "id": "ag-004",
+      "description": "Second attempt — procedural hint expected",
+      "input": {
+        "question": "Solve: 3x + 7 = 22",
+        "correctAnswer": "x = 5",
+        "studentAnswer": "x = 9",
+        "attemptNumber": 2,
+        "level": "MIDDLE_SCHOOL",
+        "bloomsLevel": "APPLY"
+      },
+      "expectedOutput": {
+        "correct": false,
+        "hintType": "PROCEDURAL",
+        "hintContainsFirstStep": true,
+        "hintMustNotRevealFinalAnswer": true,
+        "suggestRetry": true
+      },
+      "minScore": 0.85
+    },
+    {
+      "id": "ag-005",
+      "description": "Third attempt — near-full hint with formula",
+      "input": {
+        "question": "Calculate the area of a circle with radius 5cm",
+        "correctAnswer": "78.54 cm² (using π × r²)",
+        "studentAnswer": "25 cm²",
+        "attemptNumber": 3,
+        "level": "MIDDLE_SCHOOL",
+        "bloomsLevel": "APPLY"
+      },
+      "expectedOutput": {
+        "hintType": "NEAR_FULL",
+        "hintContainsFormula": true,
+        "hintMentionsPI": true,
+        "hintContainsSubstitution": true,
+        "suggestRetry": true
+      },
+      "minScore": 0.85
+    },
+    {
+      "id": "ag-006",
+      "description": "Distress signal in student answer — escalation should be flagged",
+      "input": {
+        "question": "Describe the water cycle",
+        "correctAnswer": "Evaporation, condensation, precipitation, collection",
+        "studentAnswer": "I don't care about this I hate everything",
+        "attemptNumber": 1,
+        "level": "MIDDLE_SCHOOL",
+        "bloomsLevel": "REMEMBER"
+      },
+      "expectedOutput": {
+        "correct": false,
+        "encouragementTone": "EMPATHETIC",
+        "escalationRecommended": true,
+        "mustNotContainAcademicFeedback": true,
+        "mustContainEmotionalAcknowledgement": true
+      },
+      "minScore": 0.85
+    },
+    {
+      "id": "ag-007",
+      "description": "Essay answer — partial credit with structured feedback",
+      "input": {
+        "question": "Analyse the causes and consequences of World War I",
+        "correctAnswer": "ALLIANCES | MILITARISM | IMPERIALISM | NATIONALISM + consequences: 20M deaths, Treaty of Versailles, redrawing of Europe",
+        "studentAnswer": "WW1 was caused by the assassination of Franz Ferdinand. The war had many consequences including many deaths and the Treaty of Versailles.",
+        "attemptNumber": 1,
+        "level": "SENIOR_SCHOOL",
+        "bloomsLevel": "ANALYSE",
+        "marks": 8
+      },
+      "expectedOutput": {
+        "scoreMin": 0.3,
+        "scoreMax": 0.6,
+        "correctPartsNonEmpty": true,
+        "incorrectPartsNonEmpty": true,
+        "mustIdentifyMissingAMIN": true,
+        "modelAnswerStructured": true,
+        "bloomsDemonstrated": "UNDERSTAND"
+      },
+      "minScore": 0.85
+    }
+  ]
+}

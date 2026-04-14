@@ -3,6 +3,7 @@ package io.squados.examples.tutoros.config;
 import io.squados.context.SquadContext;
 import io.squados.examples.tutoros.agent.*;
 import io.squados.examples.tutoros.pipeline.*;
+import io.squados.examples.tutoros.websocket.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -123,6 +124,28 @@ public class TutorBeansConfig {
             practiceAgent, assessmentAgent, progressAgent,
             escalationAgent, visualisationAgent, todoAgent, quizAgent
         );
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────────────────
+
+    /**
+     * TutoringWebSocketHandler — Spring @Component (via @Component on the class
+     * itself) but declared here for explicit visibility.  It is the hub that
+     * receives broadcastToken() calls from WebSocketTokenWriter.
+     */
+    @Bean
+    public TutoringWebSocketHandler tutoringWebSocketHandler() {
+        return new TutoringWebSocketHandler();
+    }
+
+    /**
+     * WebSocketTokenWriter — implements SquadOS TokenWriter interface.
+     * Passed to DirectTutorAgent via @Streaming(writer=WebSocketTokenWriter.class).
+     * Bridges LLM token stream → WebSocket broadcast.
+     */
+    @Bean
+    public WebSocketTokenWriter webSocketTokenWriter(TutoringWebSocketHandler wsHandler) {
+        return new WebSocketTokenWriter(wsHandler);
     }
 
     // ── Session manager ───────────────────────────────────────────────────────

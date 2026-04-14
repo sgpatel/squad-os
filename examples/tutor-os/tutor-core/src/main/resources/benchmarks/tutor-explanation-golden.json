@@ -1,0 +1,173 @@
+{
+  "name": "tutor-explanation-golden",
+  "description": "Golden dataset for DirectTutorAgent explanation quality evaluation. Each entry defines an input context and the minimum expected quality signals in the output. SquadOS @Benchmark evaluates explanations against these examples and fails if minScore < 0.80.",
+  "version": "1.0.0",
+  "minScore": 0.80,
+  "scoringDimensions": [
+    "clarity",
+    "level_appropriateness",
+    "analogy_quality",
+    "bloom_target_hit",
+    "engagement"
+  ],
+  "examples": [
+    {
+      "id": "exp-001",
+      "description": "PRIMARY level explanation of photosynthesis",
+      "input": {
+        "level": "PRIMARY",
+        "bloomsTarget": "UNDERSTAND",
+        "concept": "photosynthesis",
+        "learningStyle": "VISUAL",
+        "analogyDomain": "cooking"
+      },
+      "expectedSignals": {
+        "maxSentenceLength": 15,
+        "mustContainAnalogy": true,
+        "analogyDomain": "cooking",
+        "mustNotContainJargon": ["chlorophyll absorption spectrum", "photophosphorylation", "Calvin cycle"],
+        "mustContainCheckQuestion": true,
+        "toneKeywords": ["great", "let's", "try", "can you"],
+        "minBloomsLevel": "UNDERSTAND",
+        "minScore": 0.82
+      }
+    },
+    {
+      "id": "exp-002",
+      "description": "SENIOR_SCHOOL exam-prep explanation of quadratic formula",
+      "input": {
+        "level": "SENIOR_SCHOOL",
+        "bloomsTarget": "APPLY",
+        "concept": "quadratic formula",
+        "learningStyle": "ANALYTICAL",
+        "goal": "EXAM_PREP"
+      },
+      "expectedSignals": {
+        "mustContainWorkedExample": true,
+        "mustContainMarkSchemeLanguage": true,
+        "examPhrases": ["in an exam", "show your working", "marks for method"],
+        "mustContainFormula": "x = (-b ± √(b²-4ac)) / 2a",
+        "mustContainCommonMistakes": true,
+        "minBloomsLevel": "APPLY",
+        "minScore": 0.85
+      }
+    },
+    {
+      "id": "exp-003",
+      "description": "UNIVERSITY peer-level explanation of gradient descent",
+      "input": {
+        "level": "UNIVERSITY",
+        "bloomsTarget": "ANALYSE",
+        "concept": "gradient descent",
+        "learningStyle": "ANALYTICAL",
+        "goal": "DEEP_MASTERY"
+      },
+      "expectedSignals": {
+        "mustContainMathNotation": true,
+        "technicalTermsExpected": ["learning rate", "loss function", "local minima", "convergence"],
+        "mustDiscussEdgeCases": true,
+        "mustChallengeAssumptions": true,
+        "minBloomsLevel": "ANALYSE",
+        "minScore": 0.80
+      }
+    },
+    {
+      "id": "exp-004",
+      "description": "PROFESSIONAL ROI-focused explanation of REST API design",
+      "input": {
+        "level": "PROFESSIONAL",
+        "bloomsTarget": "APPLY",
+        "concept": "REST API design principles",
+        "learningStyle": "HANDS_ON",
+        "profession": "software engineer",
+        "goal": "PROFESSIONAL_USE"
+      },
+      "expectedSignals": {
+        "mustLeadWithApplication": true,
+        "tldrPresent": true,
+        "codeExamplePresent": true,
+        "mustNotContainTheoryFirst": true,
+        "minBloomsLevel": "APPLY",
+        "minScore": 0.80
+      }
+    },
+    {
+      "id": "exp-005",
+      "description": "MIDDLE_SCHOOL relatable explanation of Newton's laws",
+      "input": {
+        "level": "MIDDLE_SCHOOL",
+        "bloomsTarget": "UNDERSTAND",
+        "concept": "Newton's three laws of motion",
+        "learningStyle": "NARRATIVE",
+        "analogyDomain": "sports"
+      },
+      "expectedSignals": {
+        "mustContainAnalogy": true,
+        "analogyDomain": "sports",
+        "conversationalTone": true,
+        "mustValidateConfusion": true,
+        "forbiddenPhrases": ["as you should already know", "obviously", "trivially"],
+        "minBloomsLevel": "UNDERSTAND",
+        "minScore": 0.81
+      }
+    },
+    {
+      "id": "exp-006",
+      "description": "EDUCATOR pedagogical framing of Bloom's taxonomy itself",
+      "input": {
+        "level": "EDUCATOR",
+        "bloomsTarget": "EVALUATE",
+        "concept": "Bloom's taxonomy in lesson design",
+        "learningStyle": "ANALYTICAL",
+        "goal": "TEACH_OTHERS"
+      },
+      "expectedSignals": {
+        "mustReferenceBloomsTaxonomy": true,
+        "mustSuggestClassroomActivity": true,
+        "mustDiscussAssessmentStrategies": true,
+        "mustConsiderDiverseLearners": true,
+        "pedagogicalTermsExpected": ["learning outcome", "differentiation", "formative assessment"],
+        "minBloomsLevel": "EVALUATE",
+        "minScore": 0.83
+      }
+    },
+    {
+      "id": "exp-007",
+      "description": "SOCRATIC style explanation of supply and demand",
+      "input": {
+        "level": "SENIOR_SCHOOL",
+        "bloomsTarget": "ANALYSE",
+        "concept": "supply and demand equilibrium",
+        "teachingStyle": "SOCRATIC",
+        "learningStyle": "SOCRATIC"
+      },
+      "expectedSignals": {
+        "mustContainQuestions": true,
+        "minQuestionCount": 2,
+        "mustNotGiveDirectAnswer": true,
+        "socraticPhrases": ["what do you think", "what would happen if", "why do you think"],
+        "minBloomsLevel": "ANALYSE",
+        "minScore": 0.80
+      }
+    },
+    {
+      "id": "exp-008",
+      "description": "D3.js visualisation prompt for scatter plot explanation",
+      "input": {
+        "level": "UNIVERSITY",
+        "bloomsTarget": "APPLY",
+        "concept": "linear regression",
+        "learningStyle": "VISUAL",
+        "renderType": "D3JS"
+      },
+      "expectedSignals": {
+        "mustContainD3Code": true,
+        "mustHaveTooltips": true,
+        "mustBeResponsive": true,
+        "mustHaveTransitions": true,
+        "minBloomsLevel": "APPLY",
+        "minScore": 0.80
+      }
+    }
+  ]
+}
