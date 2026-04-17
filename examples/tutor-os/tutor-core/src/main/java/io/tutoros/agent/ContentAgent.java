@@ -1,8 +1,8 @@
-package io.squados.examples.tutoros.agent;
+package io.tutoros.agent;
 
 import io.squados.annotation.*;
-import io.squados.examples.tutoros.model.LearnerProfile;
-import io.squados.examples.tutoros.model.VisualAsset;
+import io.tutoros.model.LearnerProfile;
+import io.tutoros.model.VisualAsset;
 
 /**
  * Content Agent — fetches real-world examples, diagrams, and worked problems

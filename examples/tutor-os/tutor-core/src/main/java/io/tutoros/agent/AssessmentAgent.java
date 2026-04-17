@@ -1,8 +1,8 @@
-package io.squados.examples.tutoros.agent;
+package io.tutoros.agent;
 
 import io.squados.annotation.*;
-import io.squados.examples.tutoros.model.AssessmentFeedback;
-import io.squados.examples.tutoros.model.PracticeQuestion;
+import io.tutoros.model.AssessmentFeedback;
+import io.tutoros.model.PracticeQuestion;
 
 /**
  * Assessment Agent — grades the student's answer and produces a typed

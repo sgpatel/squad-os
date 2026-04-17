@@ -1,8 +1,8 @@
-package io.squados.examples.tutoros.agent;
+package io.tutoros.agent;
 
 import io.squados.annotation.*;
-import io.squados.examples.tutoros.model.SessionSummary;
-import io.squados.examples.tutoros.model.TodoList;
+import io.tutoros.model.SessionSummary;
+import io.tutoros.model.TodoList;
 
 /**
  * Todo Agent — converts session outcomes into actionable learning todos.
@@ -38,15 +38,8 @@ import io.squados.examples.tutoros.model.TodoList;
                   "Tracks which todo types the learner actually completes."
 )
 @StructuredOutput(schema = TodoList.class, retryOnMalformed = true, maxRetries = 2)
-@AutoPlan(
-    goal            = "Every revisit concept from the session summary has at least one specific, " +
-                      "actionable todo that the learner can complete before the next session",
-    maxIterations   = 3,
-    reflectOn       = "Does every revisit concept have a todo? Are todos specific and actionable? " +
-                      "Do they fit the learner's available time and goal?",
-    stopCondition   = "ALL_GAPS_COVERED",
-    onMaxIterations = IterationPolicy.RETURN_BEST
-)
+// NOTE: @AutoPlan targets METHODS only — when SquadOS adds class-level autoplanning
+// in a future release, the iteration goal/policy below can be reinstated.
 @AgentMemory(topK = 3, minScore = 0.70f, scope = "agent")
 @Traced(spanName = "todo-generation")
 public class TodoAgent {

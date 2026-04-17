@@ -1,9 +1,9 @@
-package io.squados.examples.tutoros.agent;
+package io.tutoros.agent;
 
 import io.squados.annotation.*;
-import io.squados.examples.tutoros.model.AssessmentFeedback;
-import io.squados.examples.tutoros.model.LearnerProfile;
-import io.squados.examples.tutoros.model.SessionSummary;
+import io.tutoros.model.AssessmentFeedback;
+import io.tutoros.model.LearnerProfile;
+import io.tutoros.model.SessionSummary;
 
 /**
  * Progress Agent — the long-term memory keeper of TutorOS.

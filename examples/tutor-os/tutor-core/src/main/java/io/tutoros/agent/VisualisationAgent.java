@@ -1,7 +1,7 @@
-package io.squados.examples.tutoros.agent;
+package io.tutoros.agent;
 
 import io.squados.annotation.*;
-import io.squados.examples.tutoros.model.VisualAsset;
+import io.tutoros.model.VisualAsset;
 import io.squados.remote.SquadClient;
 
 /**

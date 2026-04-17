@@ -1,8 +1,10 @@
-package io.squados.examples.tutoros.api;
+package io.tutoros.api;
 
-import io.squados.examples.tutoros.model.AssessmentFeedback;
-import io.squados.examples.tutoros.model.Quiz;
-import io.squados.examples.tutoros.pipeline.SessionManager;
+import io.tutoros.model.AssessmentFeedback;
+import io.tutoros.model.PracticeQuestion;
+import io.tutoros.model.Quiz;
+import io.tutoros.pipeline.PipelineResult;
+import io.tutoros.pipeline.SessionManager;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,10 +19,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * SessionController) or independently here for standalone quiz mode.
  *
  * Endpoints:
- *   POST /quiz/{learnerId}/{subject}/generate   — generate a fresh quiz
- *   POST /quiz/{learnerId}/{subject}/{quizId}/submit — grade all answers
- *   GET  /quiz/{learnerId}/{subject}/history    — all past results
- *   GET  /quiz/{learnerId}/{subject}/{quizId}   — single quiz detail
+ *   POST /quiz/{learnerId}/{subject}/generate          — generate a fresh quiz
+ *   POST /quiz/{learnerId}/{subject}/{quizId}/submit   — grade all answers
+ *   GET  /quiz/{learnerId}/{subject}/history           — all past results
+ *   GET  /quiz/{learnerId}/{subject}/{quizId}          — single quiz detail
  */
 @RestController
 @RequestMapping("/quiz")
@@ -55,27 +57,28 @@ public class QuizController {
 
         String sessionId = learnerId + ":" + subject;
 
-        Quiz quiz = sessionManager.generateQuiz(
-            sessionId,
-            req.difficulty() == null ? "MEDIUM" : req.difficulty(),
-            req.questionCount() <= 0 ? 5 : req.questionCount()
-        );
+        String topic      = req.topic()      == null || req.topic().isBlank() ? subject : req.topic();
+        String difficulty = req.difficulty() == null || req.difficulty().isBlank() ? "MEDIUM" : req.difficulty();
+        int    count      = req.questionCount() <= 0 ? 5 : req.questionCount();
+
+        Quiz quiz = sessionManager.quiz(sessionId, topic, count, difficulty);
 
         // Store as active
-        activeQuizStore.put(quiz.quizId(), new ActiveQuiz(quiz, learnerId, subject, Instant.now().toString()));
+        activeQuizStore.put(quiz.quizId,
+            new ActiveQuiz(quiz, learnerId, subject, Instant.now().toString()));
 
         return ResponseEntity.ok(new QuizGenerateResponse(
-            quiz.quizId(),
-            quiz.subject(),
-            quiz.topic(),
-            quiz.difficulty(),
-            quiz.questionCount(),
-            quiz.timeLimitMinutes(),
-            quiz.totalMarks(),
-            quiz.bloomsLevelsCovered(),
-            quiz.targetGaps(),
-            quiz.questionsJson(),
-            "Quiz ready — good luck! ⏱️"
+            quiz.quizId,
+            quiz.subject,
+            quiz.topic,
+            quiz.difficulty,
+            quiz.questionCount,
+            quiz.timeLimitMinutes,
+            quiz.totalMarks,
+            quiz.bloomsLevelsCovered,
+            quiz.targetGaps,
+            quiz.questionsJson,
+            "Quiz ready — good luck!"
         ));
     }
 
@@ -102,40 +105,59 @@ public class QuizController {
         String sessionId = learnerId + ":" + subject;
         List<QuestionResult> questionResults = new ArrayList<>();
         int totalScore = 0;
-        int maxScore = 0;
+        int maxScore   = 0;
         List<String> masteredConcepts = new ArrayList<>();
-        List<String> revisitConcepts = new ArrayList<>();
+        List<String> revisitConcepts  = new ArrayList<>();
         Map<String, String> bloomsBreakdown = new LinkedHashMap<>();
 
         for (AnswerEntry entry : req.answers()) {
-            AssessmentFeedback feedback = sessionManager.gradeAnswer(
-                sessionId, entry.question(), entry.answer(), entry.studentAnswer(), 1
-            );
+            // Build a PracticeQuestion stub from the submitted answer entry —
+            // SessionManager.submitAnswer needs the question metadata to grade.
+            PracticeQuestion q = new PracticeQuestion();
+            q.question    = entry.question();
+            q.answer      = entry.correctAnswer();
+            q.conceptTag  = entry.conceptTag();
+            q.type        = "SHORT_ANSWER";
+            q.difficulty  = active.quiz().difficulty;
+            q.bloomsLevel = "APPLY";
+            q.marks       = 1;
 
-            int earned = feedback.score() >= 0.9 ? 1 : (feedback.score() >= 0.5 ? 1 : 0);
+            PipelineResult pr = sessionManager.submitAnswer(sessionId, q, entry.studentAnswer(), 1);
+
+            // Only FeedbackResult carries the AssessmentFeedback we need
+            if (!(pr instanceof PipelineResult.FeedbackResult fr)) {
+                // Skip blocked / safe / etc — count as 0 score, no feedback row
+                maxScore += 1;
+                continue;
+            }
+            AssessmentFeedback feedback = fr.feedback();
+
+            // score is 0–100 (int); award full mark above 50, partial above 25
+            int earned = feedback.score >= 75 ? 1 : (feedback.score >= 50 ? 1 : 0);
             totalScore += earned;
-            maxScore += 1;
+            maxScore   += 1;
 
             questionResults.add(new QuestionResult(
                 entry.question(),
-                entry.answer(),
+                entry.correctAnswer(),
                 entry.studentAnswer(),
-                feedback.score(),
-                feedback.correct(),
-                feedback.correctParts(),
-                feedback.incorrectParts(),
-                feedback.modelAnswer(),
-                feedback.bloomsDemonstrated(),
-                feedback.encouragement()
+                feedback.score,
+                feedback.correct,
+                feedback.correctParts,
+                feedback.incorrectParts,
+                feedback.modelAnswer,
+                feedback.bloomsDemonstrated,
+                feedback.encouragement
             ));
 
-            if (feedback.masteryDelta() > 0.05) {
+            if (feedback.masteryDelta > 0.05) {
                 masteredConcepts.add(entry.conceptTag());
-            } else if (feedback.masteryDelta() < -0.02) {
+            } else if (feedback.masteryDelta < -0.02) {
                 revisitConcepts.add(entry.conceptTag());
             }
 
-            bloomsBreakdown.merge(feedback.bloomsDemonstrated(), "1",
+            String bloom = feedback.bloomsDemonstrated == null ? "UNKNOWN" : feedback.bloomsDemonstrated;
+            bloomsBreakdown.merge(bloom, "1",
                 (a, b) -> String.valueOf(Integer.parseInt(a) + 1));
         }
 
@@ -150,8 +172,8 @@ public class QuizController {
 
         // Persist result
         QuizResult result = new QuizResult(
-            quizId, subject, active.quiz().topic(), active.quiz().difficulty(),
-            active.quiz().questionCount(), totalScore, maxScore,
+            quizId, subject, active.quiz().topic, active.quiz().difficulty,
+            active.quiz().questionCount, totalScore, maxScore,
             Math.round(percentScore * 10.0) / 10.0, grade,
             String.join(", ", masteredConcepts),
             String.join(", ", revisitConcepts),
@@ -159,9 +181,6 @@ public class QuizController {
         );
         resultStore.computeIfAbsent(learnerId + ":" + subject, k -> new ArrayList<>()).add(result);
         activeQuizStore.remove(quizId);
-
-        // Forward results to ProgressController for analytics
-        // (ProgressController.recordQuiz would be called here in a full DI wiring)
 
         return ResponseEntity.ok(new QuizSubmitResponse(
             quizId, totalScore, maxScore, percentScore, grade,
@@ -244,40 +263,40 @@ public class QuizController {
 
     // ── Inner types ───────────────────────────────────────────────────────────
 
-    record QuizGenerateRequest(String difficulty, int questionCount) {}
+    public record QuizGenerateRequest(String topic, String difficulty, int questionCount) {}
 
-    record QuizGenerateResponse(
+    public record QuizGenerateResponse(
         String quizId, String subject, String topic, String difficulty,
         int questionCount, int timeLimitMinutes, int totalMarks,
         String bloomsLevelsCovered, String targetGaps,
         String questionsJson, String message) {}
 
-    record AnswerEntry(String question, String answer, String studentAnswer, String conceptTag) {}
+    public record AnswerEntry(String question, String correctAnswer, String studentAnswer, String conceptTag) {}
 
-    record QuizSubmitRequest(List<AnswerEntry> answers) {}
+    public record QuizSubmitRequest(List<AnswerEntry> answers) {}
 
-    record QuestionResult(
+    public record QuestionResult(
         String question, String correctAnswer, String studentAnswer,
         double score, boolean correct,
         String correctParts, String incorrectParts, String modelAnswer,
         String bloomsDemonstrated, String encouragement) {}
 
-    record QuizSubmitResponse(
+    public record QuizSubmitResponse(
         String quizId, int totalScore, int maxScore, double percentScore, String grade,
         String masteredConcepts, String revisitConcepts, String encouragement,
         List<QuestionResult> questionResults, Map<String, String> bloomsBreakdown) {}
 
-    record QuizResult(
+    public record QuizResult(
         String quizId, String subject, String topic, String difficulty,
         int questionCount, int totalScore, int maxScore, double percentScore, String grade,
         String masteredConcepts, String revisitConcepts,
         Map<String, String> bloomsBreakdown, List<QuestionResult> questionResults,
         String completedAt) {}
 
-    record QuizHistoryResponse(
+    public record QuizHistoryResponse(
         String learnerId, String subject, int totalAttempts,
         double avgScore, double bestScore,
         List<Double> scoreTrend, List<QuizResult> results) {}
 
-    record ActiveQuiz(Quiz quiz, String learnerId, String subject, String startedAt) {}
+    public record ActiveQuiz(Quiz quiz, String learnerId, String subject, String startedAt) {}
 }

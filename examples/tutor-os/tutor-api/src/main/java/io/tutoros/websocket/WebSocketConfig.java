@@ -1,4 +1,4 @@
-package io.squados.examples.tutoros.websocket;
+package io.tutoros.websocket;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.*;

@@ -1,8 +1,8 @@
-package io.squados.examples.tutoros.agent;
+package io.tutoros.agent;
 
 import io.squados.annotation.*;
-import io.squados.examples.tutoros.model.LearnerProfile;
-import io.squados.examples.tutoros.model.StudyPlan;
+import io.tutoros.model.LearnerProfile;
+import io.tutoros.model.StudyPlan;
 import io.squados.remote.SquadClient;
 
 /**
@@ -33,15 +33,8 @@ import io.squados.remote.SquadClient;
                   "learner's gap profile and official syllabus. Iterates until all " +
                   "gaps are covered and the weekly session target is achievable."
 )
-@AutoPlan(
-    goal            = "A complete study plan where every gap concept maps to at least one chapter " +
-                      "and total hours fit within the learner's weekly session target",
-    maxIterations   = 4,
-    reflectOn       = "Are all gap concepts covered? Are any chapters too large for one session? " +
-                      "Does the total time fit the learner's pace?",
-    stopCondition   = "ALL_GAPS_COVERED",
-    onMaxIterations = IterationPolicy.RETURN_BEST
-)
+// NOTE: @AutoPlan targets METHODS only — when SquadOS adds class-level autoplanning
+// in a future release, the iteration goal/policy below can be reinstated.
 @StructuredOutput(schema = StudyPlan.class, retryOnMalformed = true, maxRetries = 2)
 @DurableAgent(store = "memory", ttlHours = 168) // plan persists for a week
 @Traced(spanName = "curriculum-planning")

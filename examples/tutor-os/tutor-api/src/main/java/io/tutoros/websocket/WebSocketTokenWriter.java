@@ -1,6 +1,7 @@
-package io.squados.examples.tutoros.websocket;
+package io.tutoros.websocket;
 
-import io.squados.streaming.TokenWriter;
+import io.squados.llm.StreamToken;
+import io.squados.llm.TokenWriter;
 
 /**
  * WebSocketTokenWriter — bridges SquadOS @Streaming with TutorOS WebSocket clients.
@@ -8,9 +9,9 @@ import io.squados.streaming.TokenWriter;
  * DirectTutorAgent is annotated with:
  *   @Streaming(writer = WebSocketTokenWriter.class, chunkSize = 3)
  *
- * SquadOS's StreamingEngine calls write(token) for each chunk produced by the LLM.
- * This implementation forwards tokens to TutoringWebSocketHandler, which broadcasts
- * them to all WebSocket clients connected to the current session.
+ * SquadOS's StreamingEngine calls write(StreamToken) for each chunk produced by the
+ * LLM. This implementation forwards tokens to TutoringWebSocketHandler, which
+ * broadcasts them to all WebSocket clients connected to the current session.
  *
  * The sessionId is set on this writer before streaming begins via setSessionId().
  * SquadOS injects the writer as a Spring bean and the pipeline sets the context
@@ -18,6 +19,11 @@ import io.squados.streaming.TokenWriter;
  *
  * ThreadLocal is used so that concurrent sessions on different threads each have
  * their own sessionId without interfering.
+ *
+ * Stream lifecycle:
+ *   - write(StreamToken) is called for each chunk
+ *   - The final chunk has isLast()==true; we broadcast DONE then call flush()
+ *   - flush() is the only post-stream hook on TokenWriter (no complete/error)
  */
 public class WebSocketTokenWriter implements TokenWriter {
 
@@ -48,39 +54,33 @@ public class WebSocketTokenWriter implements TokenWriter {
      * the full response is still assembled in-memory and returned via
      * the HTTP response (SessionController handles both paths).
      *
-     * @param token a single token or small chunk from the LLM stream
-     */
-    @Override
-    public void write(String token) {
-        String sessionId = sessionIdHolder.get();
-        if (sessionId != null && handler.hasActiveClients(sessionId)) {
-            handler.broadcastToken(sessionId, token);
-        }
-    }
-
-    /**
-     * Called by SquadOS StreamingEngine when the LLM stream ends normally.
-     */
-    @Override
-    public void complete() {
-        String sessionId = sessionIdHolder.get();
-        if (sessionId != null) {
-            handler.broadcastDone(sessionId);
-        }
-        sessionIdHolder.remove();   // clean up ThreadLocal
-    }
-
-    /**
-     * Called by SquadOS StreamingEngine if the LLM stream errors.
+     * When token.isLast() is true, broadcasts a DONE frame in addition
+     * to the final TOKEN frame. The ThreadLocal is cleared in flush().
      *
-     * @param error the exception that terminated the stream
+     * @param token a single token chunk from the LLM stream
      */
     @Override
-    public void error(Throwable error) {
+    public void write(StreamToken token) {
         String sessionId = sessionIdHolder.get();
-        if (sessionId != null) {
-            handler.broadcastError(sessionId, error.getMessage());
+        if (sessionId == null) return;
+
+        if (handler.hasActiveClients(sessionId)) {
+            String text = token.text();
+            if (text != null && !text.isEmpty()) {
+                handler.broadcastToken(sessionId, text);
+            }
+            if (token.isLast()) {
+                handler.broadcastDone(sessionId);
+            }
         }
+    }
+
+    /**
+     * Called by SquadOS StreamingEngine after the final token.
+     * Cleans up the ThreadLocal so the bean is reusable across requests.
+     */
+    @Override
+    public void flush() {
         sessionIdHolder.remove();
     }
 }

@@ -1,4 +1,4 @@
-package io.squados.examples.tutoros.websocket;
+package io.tutoros.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.web.socket.*;

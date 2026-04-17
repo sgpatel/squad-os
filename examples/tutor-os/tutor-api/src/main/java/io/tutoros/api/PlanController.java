@@ -1,11 +1,11 @@
-package io.squados.examples.tutoros.api;
+package io.tutoros.api;
 
 import io.squados.context.SquadContext;
-import io.squados.context.AgentResponse;
+import io.squados.agent.AgentResponse;
 import io.squados.annotation.AgentRole;
-import io.squados.examples.tutoros.agent.CurriculumPlannerAgent;
-import io.squados.examples.tutoros.model.*;
-import io.squados.examples.tutoros.pipeline.SessionManager;
+import io.tutoros.agent.CurriculumPlannerAgent;
+import io.tutoros.model.*;
+import io.tutoros.pipeline.SessionManager;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -88,8 +88,7 @@ public class PlanController {
         String syllabus = planner.fetchSyllabus(subject, profile.level);
 
         // Run CurriculumPlannerAgent via SquadContext
-        AgentResponse result = ctx.submit(
-            AgentRole.STRATEGIST, "curriculum-planner",
+        AgentResponse result = ctx.submitTo(AgentRole.STRATEGIST,
             planner.planningPrompt(profile, syllabus)
         );
 

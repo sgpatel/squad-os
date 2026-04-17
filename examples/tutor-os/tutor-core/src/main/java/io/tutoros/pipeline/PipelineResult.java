@@ -1,6 +1,6 @@
-package io.squados.examples.tutoros.pipeline;
+package io.tutoros.pipeline;
 
-import io.squados.examples.tutoros.model.*;
+import io.tutoros.model.*;
 
 /**
  * Sealed result type returned by TutoringPipeline for every operation.

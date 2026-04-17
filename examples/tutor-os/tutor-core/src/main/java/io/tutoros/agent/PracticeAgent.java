@@ -1,7 +1,7 @@
-package io.squados.examples.tutoros.agent;
+package io.tutoros.agent;
 
 import io.squados.annotation.*;
-import io.squados.examples.tutoros.model.PracticeQuestion;
+import io.tutoros.model.PracticeQuestion;
 
 /**
  * Practice Agent — generates a calibrated PracticeQuestion after each

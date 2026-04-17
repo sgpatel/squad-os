@@ -5,7 +5,7 @@
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>io.squados.examples</groupId>
+  <groupId>io.tutoros</groupId>
   <artifactId>tutor-os-parent</artifactId>
   <version>1.0.0</version>
   <packaging>pom</packaging>
@@ -50,7 +50,6 @@
           <version>3.11.0</version>
           <configuration>
             <release>21</release>
-            <compilerArgs><arg>--enable-preview</arg></compilerArgs>
           </configuration>
         </plugin>
       </plugins>

@@ -1,4 +1,4 @@
-package io.squados.examples.tutoros.model;
+package io.tutoros.model;
 
 import io.squados.annotation.OutputField;
 

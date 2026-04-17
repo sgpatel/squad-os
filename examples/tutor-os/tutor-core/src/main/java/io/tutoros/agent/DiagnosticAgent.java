@@ -1,7 +1,7 @@
-package io.squados.examples.tutoros.agent;
+package io.tutoros.agent;
 
 import io.squados.annotation.*;
-import io.squados.examples.tutoros.model.LearnerProfile;
+import io.tutoros.model.LearnerProfile;
 
 /**
  * Diagnostic Agent — runs once at the start of each new subject and

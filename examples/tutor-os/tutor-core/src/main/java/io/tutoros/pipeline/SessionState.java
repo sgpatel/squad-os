@@ -1,6 +1,6 @@
-package io.squados.examples.tutoros.pipeline;
+package io.tutoros.pipeline;
 
-import io.squados.examples.tutoros.model.*;
+import io.tutoros.model.*;
 
 import java.time.Instant;
 import java.util.*;

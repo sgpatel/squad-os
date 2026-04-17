@@ -1,12 +1,12 @@
-package io.squados.examples.tutoros.pipeline;
+package io.tutoros.pipeline;
 
 import io.squados.annotation.*;
 import io.squados.context.SquadContext;
-import io.squados.context.AgentResponse;
+import io.squados.agent.AgentResponse;
 import io.squados.debate.DebateEngine;
 import io.squados.debate.DebateResult;
-import io.squados.examples.tutoros.agent.*;
-import io.squados.examples.tutoros.model.*;
+import io.tutoros.agent.*;
+import io.tutoros.model.*;
 
 /**
  * TutoringPipeline — the central orchestrator of TutorOS.
@@ -122,12 +122,11 @@ public class TutoringPipeline {
     public PipelineResult process(SessionState session, String message) {
 
         // ── Step 1: Guardian input check ────────────────────────────
-        AgentResponse guardianResult = ctx.submit(
-            AgentRole.SUPPORT, "guardian",
+        AgentResponse guardianResult = ctx.submitTo(AgentRole.SUPPORT,
             guardian.reviewPrompt(message, session.profile().level())
         );
 
-        String verdict = guardianResult.text();
+        String verdict = guardianResult.content();
         if (verdict.startsWith("DISTRESS")) {
             notifyEscalation(session, message, true);
             return PipelineResult.safe(guardian.distressResponse(session.profile().name()));
@@ -148,11 +147,10 @@ public class TutoringPipeline {
         }
 
         // ── Step 3: Content fetch (tool calls) ───────────────────────
-        AgentResponse contentResult = ctx.submit(
-            AgentRole.RESEARCHER, "content",
+        AgentResponse contentResult = ctx.submitTo(AgentRole.RESEARCHER,
             buildContentPrompt(session, message)
         );
-        String groundedContent = contentResult.text();
+        String groundedContent = contentResult.content();
 
         // ── Step 4: Teaching style debate ────────────────────────────
         String winnerStyle = runTeachingDebate(session, message, groundedContent);
@@ -161,18 +159,17 @@ public class TutoringPipeline {
         AgentResponse tutorResult = runSelectedTutor(
             winnerStyle, session, message, groundedContent
         );
-        String tutorResponse = tutorResult.text();
+        String tutorResponse = tutorResult.content();
 
         // ── Step 6: Guardian output check ────────────────────────────
-        AgentResponse outputCheck = ctx.submit(
-            AgentRole.SUPPORT, "guardian-output",
+        AgentResponse outputCheck = ctx.submitTo(AgentRole.SUPPORT,
             guardian.outputCheckPrompt(tutorResponse, session.profile().level())
         );
-        if (outputCheck.text().startsWith("FAIL")) {
+        if (outputCheck.content().startsWith("FAIL")) {
             // Re-run direct tutor with a corrective instruction
-            tutorResult = ctx.submit(AgentRole.WRITER, "direct-tutor-retry",
-                tutorResponse + "\n\nFix: " + outputCheck.text());
-            tutorResponse = tutorResult.text();
+            tutorResult = ctx.submitTo(AgentRole.WRITER,
+                tutorResponse + "\n\nFix: " + outputCheck.content());
+            tutorResponse = tutorResult.content();
         }
 
         return PipelineResult.tutor(tutorResponse, winnerStyle, groundedContent);
@@ -185,8 +182,7 @@ public class TutoringPipeline {
     public PipelineResult assess(SessionState session, String studentAnswer,
                                   PracticeQuestion question, int attemptNumber) {
 
-        AgentResponse feedbackResult = ctx.submit(
-            AgentRole.CRITIC, "assessment",
+        AgentResponse feedbackResult = ctx.submitTo(AgentRole.CRITIC,
             assessment.gradingPrompt(
                 question, studentAnswer, attemptNumber,
                 session.profile().level(), session.profile().goal(),
@@ -195,7 +191,7 @@ public class TutoringPipeline {
         );
 
         // Update mastery via ProgressAgent
-        ctx.submit(AgentRole.SUPPORT, "progress-update",
+        ctx.submitTo(AgentRole.SUPPORT,
             progress.masteryUpdatePrompt(
                 question.conceptTag,
                 session.currentMastery(question.conceptTag),
@@ -223,10 +219,9 @@ public class TutoringPipeline {
      */
     public Quiz generateQuiz(SessionState session, String topic,
                               int questionCount, String difficulty) {
-        AgentResponse result = ctx.submit(
-            AgentRole.EXECUTOR, "quiz",
+        AgentResponse result = ctx.submitTo(AgentRole.EXECUTOR,
             quiz.quizPrompt(
-                session.profile(), topic, questionCount,
+                session.profile().raw(), topic, questionCount,
                 difficulty, session.memoryContext()
             )
         );
@@ -238,8 +233,7 @@ public class TutoringPipeline {
      * Called by SessionController on /session/{id}/todos endpoint.
      */
     public TodoList generateTodos(SessionState session, SessionSummary summary) {
-        AgentResponse result = ctx.submit(
-            AgentRole.EXECUTOR, "todo",
+        AgentResponse result = ctx.submitTo(AgentRole.EXECUTOR,
             todo.generatePrompt(
                 summary,
                 session.profile().goal(),
@@ -253,8 +247,7 @@ public class TutoringPipeline {
     // ── Private helpers ──────────────────────────────────────────────
 
     private PipelineResult runDiagnosticFlow(SessionState session, String message) {
-        AgentResponse result = ctx.submit(
-            AgentRole.ANALYST, "diagnostic",
+        AgentResponse result = ctx.submitTo(AgentRole.ANALYST,
             diagnostic.diagnosticPrompt(
                 session.profile().name(), session.profile().level(),
                 session.profile().subject(), session.profile().topic(),
@@ -263,20 +256,19 @@ public class TutoringPipeline {
         );
         LearnerProfile updatedProfile = result.structuredOutput(LearnerProfile.class);
         session.updateProfile(updatedProfile);
-        return PipelineResult.diagnostic(updatedProfile, result.text());
+        return PipelineResult.diagnostic(updatedProfile, result.content());
     }
 
     private PipelineResult runPlanningFlow(SessionState session, String message) {
-        AgentResponse result = ctx.submit(
-            AgentRole.STRATEGIST, "curriculum-planner",
+        AgentResponse result = ctx.submitTo(AgentRole.STRATEGIST,
             planner.planningPrompt(
-                session.profile(),
+                session.profile().raw(),
                 planner.fetchSyllabus(session.profile().subject(), session.profile().level())
             )
         );
         StudyPlan plan = result.structuredOutput(StudyPlan.class);
         session.updatePlan(plan);
-        return PipelineResult.plan(plan, result.text());
+        return PipelineResult.plan(plan, result.content());
     }
 
     private String buildContentPrompt(SessionState session, String message) {
@@ -287,11 +279,17 @@ public class TutoringPipeline {
     }
 
     private String runTeachingDebate(SessionState session, String message, String content) {
-        // Run 2-round debate: SocraticTutor vs DirectTutor
+        // Run 2-round debate: SocraticTutor vs DirectTutor — use the explicit form
+        // since TutoringPipeline itself does not carry an @Debate annotation.
         try {
             DebateResult debate = debateEngine.run(
                 "Which teaching style is best for this learner on this concept? " +
-                "Profile: " + session.profile() + " | Concept: " + session.currentConcept()
+                "Profile: " + session.profile() + " | Concept: " + session.currentConcept(),
+                new String[] { "SocraticTutorAgent", "DirectTutorAgent" },
+                2,                       // maxRounds
+                VoteRule.MAJORITY,
+                TieBreaker.APPROVE,
+                0.85f                    // convergence threshold
             );
             return debate.consensus().contains("DIRECT") ? "DIRECT" : "SOCRATIC";
         } catch (Exception e) {
@@ -304,7 +302,7 @@ public class TutoringPipeline {
     private AgentResponse runSelectedTutor(String style, SessionState session,
                                             String message, String content) {
         if ("SOCRATIC".equals(style)) {
-            return ctx.submit(AgentRole.CRITIC, "socratic-tutor",
+            return ctx.submitTo(AgentRole.CRITIC,
                 socratic.teachingPrompt(
                     message, session.currentConcept(),
                     session.profile().level(), session.profile().bloomsLevel(),
@@ -312,7 +310,7 @@ public class TutoringPipeline {
                 )
             );
         }
-        return ctx.submit(AgentRole.WRITER, "direct-tutor",
+        return ctx.submitTo(AgentRole.WRITER,
             direct.teachingPrompt(
                 message, session.currentConcept(),
                 session.profile().level(), session.profile().goal(),
@@ -324,7 +322,7 @@ public class TutoringPipeline {
     }
 
     private void notifyEscalation(SessionState session, String trigger, boolean distress) {
-        ctx.submit(AgentRole.SUPPORT, "escalation",
+        ctx.submitTo(AgentRole.SUPPORT,
             escalation.teacherBriefPrompt(
                 session.profile().name(), session.profile().level(),
                 session.currentConcept(), session.recentHistory(),

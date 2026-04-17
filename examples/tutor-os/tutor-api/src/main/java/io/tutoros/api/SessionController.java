@@ -1,7 +1,7 @@
-package io.squados.examples.tutoros.api;
+package io.tutoros.api;
 
-import io.squados.examples.tutoros.model.*;
-import io.squados.examples.tutoros.pipeline.*;
+import io.tutoros.model.*;
+import io.tutoros.pipeline.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

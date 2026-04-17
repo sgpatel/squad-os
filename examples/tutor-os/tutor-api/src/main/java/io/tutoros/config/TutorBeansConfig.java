@@ -1,9 +1,10 @@
-package io.squados.examples.tutoros.config;
+package io.tutoros.config;
 
 import io.squados.context.SquadContext;
-import io.squados.examples.tutoros.agent.*;
-import io.squados.examples.tutoros.pipeline.*;
-import io.squados.examples.tutoros.websocket.*;
+import io.squados.debate.DebateEngine;
+import io.tutoros.agent.*;
+import io.tutoros.pipeline.*;
+import io.tutoros.websocket.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -115,14 +116,23 @@ public class TutorBeansConfig {
             EscalationAgent escalationAgent,
             VisualisationAgent visualisationAgent,
             TodoAgent todoAgent,
-            QuizAgent quizAgent) {
+            QuizAgent quizAgent,
+            // DebateEngine is auto-registered by squad-spring-boot-starter
+            // (SquadAutoConfiguration#squadDebateEngine, @ConditionalOnMissingBean).
+            DebateEngine debateEngine) {
 
+        // Constructor parameter order in TutoringPipeline:
+        //   ctx, guardian, diagnostic, planner, content, socratic, direct,
+        //   practice, assessment, progress, escalation,
+        //   todo, quiz, visualisation, debateEngine
         return new TutoringPipeline(
             ctx,
             guardianAgent, diagnosticAgent, curriculumPlannerAgent,
             contentAgent, socraticTutorAgent, directTutorAgent,
             practiceAgent, assessmentAgent, progressAgent,
-            escalationAgent, visualisationAgent, todoAgent, quizAgent
+            escalationAgent,
+            todoAgent, quizAgent, visualisationAgent,
+            debateEngine
         );
     }
 
@@ -155,7 +165,7 @@ public class TutorBeansConfig {
      * Delegates all agent invocations to TutoringPipeline.
      */
     @Bean
-    public SessionManager sessionManager(TutoringPipeline pipeline) {
-        return new SessionManager(pipeline);
+    public SessionManager sessionManager(TutoringPipeline pipeline, SquadContext ctx) {
+        return new SessionManager(pipeline, ctx);
     }
 }

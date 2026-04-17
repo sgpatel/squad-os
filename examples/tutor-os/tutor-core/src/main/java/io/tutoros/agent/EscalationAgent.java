@@ -1,4 +1,4 @@
-package io.squados.examples.tutoros.agent;
+package io.tutoros.agent;
 
 import io.squados.annotation.*;
 import io.squados.remote.SquadClient;

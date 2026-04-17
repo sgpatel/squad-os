@@ -6,7 +6,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>io.squados.examples</groupId>
+    <groupId>io.tutoros</groupId>
     <artifactId>tutor-os-parent</artifactId>
     <version>1.0.0</version>
   </parent>
@@ -18,7 +18,7 @@
 
     <!-- TutorOS core (agents + pipeline) -->
     <dependency>
-      <groupId>io.squados.examples</groupId>
+      <groupId>io.tutoros</groupId>
       <artifactId>tutor-core</artifactId>
       <version>1.0.0</version>
     </dependency>

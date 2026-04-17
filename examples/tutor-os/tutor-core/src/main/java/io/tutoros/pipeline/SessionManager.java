@@ -1,8 +1,8 @@
-package io.squados.examples.tutoros.pipeline;
+package io.tutoros.pipeline;
 
 import io.squados.annotation.*;
 import io.squados.context.SquadContext;
-import io.squados.examples.tutoros.model.*;
+import io.tutoros.model.*;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -114,8 +114,8 @@ public class SessionManager {
 
         // Generate summary via ProgressAgent
         AgentResponseAdapter response = AgentResponseAdapter.of(
-            ctx.submit(
-                io.squados.annotation.AgentRole.SUPPORT, "progress-summary",
+            ctx.submitTo(
+                io.squados.annotation.AgentRole.SUPPORT,
                 buildSummaryPrompt(state)
             )
         );
@@ -187,11 +187,11 @@ public class SessionManager {
      * Thin adapter over AgentResponse for structured output extraction.
      * Avoids direct dependency on AgentResponse in SessionManager.
      */
-    private record AgentResponseAdapter(io.squados.context.AgentResponse raw) {
-        static AgentResponseAdapter of(io.squados.context.AgentResponse r) { return new AgentResponseAdapter(r); }
+    private record AgentResponseAdapter(io.squados.agent.AgentResponse raw) {
+        static AgentResponseAdapter of(io.squados.agent.AgentResponse r) { return new AgentResponseAdapter(r); }
         <T> T as(Class<T> cls) {
-            var so = raw.structuredOutput();
-            if (so != null && cls.isInstance(so.value())) return cls.cast(so.value());
+            T parsed = raw.structuredOutput(cls);
+            if (parsed != null) return parsed;
             throw new IllegalStateException("No structured output of type " + cls.getSimpleName());
         }
     }
