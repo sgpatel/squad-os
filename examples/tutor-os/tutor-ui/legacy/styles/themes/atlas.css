@@ -67,18 +67,7 @@
 }
 
 /* Atlas dark — deeper blue rather than warm graphite */
-:root[data-theme="atlas"][data-mode="dark"] {
-  --color-bg:           #0b1220;
-  --color-surface:      #131c33;
-  --color-surface-2:    #1a2542;
-  --color-surface-3:    #233057;
-  --color-border:       #2c3a66;
-  --color-border-strong:#445586;
-  --color-text:         #eef2ff;
-  --color-text-muted:   #a3b1d4;
-  --color-text-subtle:  #6b78a3;
-  --color-accent-soft:  #1e3a8a;
-}
+:root[data-theme="atlas"][data-mode="dark"],
 @media (prefers-color-scheme: dark) {
   :root[data-theme="atlas"]:not([data-mode="light"]) {
     --color-bg:           #0b1220;

@@ -1,0 +1,92 @@
+/* ─────────────────────────────────────────────────────────────────
+ * Graphite — Professional (22+) theme
+ *
+ * Vibe : closer to Claude.ai / Linear than to a "tutor app".
+ *        Dense, keyboard-first, near-black, no celebrations.
+ * Refs : Claude.ai, Raycast, Linear, Vercel
+ *
+ * Distinguishing moves
+ *   • Near-black background, near-white text, single muted accent
+ *   • Workspace switcher prominent (e.g. "AWS Cert Prep" / "MBA Finance")
+ *   • Citations + confidence shown inline on every tutor response
+ *   • Keyboard hints visible everywhere (ghost ⌘K, ⌥, ↩)
+ *   • No mascot, no streak, no XP, no confetti
+ * ───────────────────────────────────────────────────────────────── */
+
+:root[data-theme="graphite"] {
+  /* Dark first; the light override is a quiet warm-grey */
+  --color-bg:           #f7f7f5;
+  --color-surface:      #ffffff;
+  --color-surface-2:    #f0efeb;
+  --color-surface-3:    #e6e5df;
+  --color-border:       #d6d4cb;
+  --color-border-strong:#b3b1a4;
+  --color-text:         #18181b;
+  --color-text-muted:   #5b5b62;
+  --color-text-subtle:  #888a8e;
+
+  --color-accent:       #a78bfa;       /* muted lavender — never shouts */
+  --color-accent-hover: #8b6df0;
+  --color-accent-soft:  #ede9fe;
+  --color-accent-fg:    #18181b;
+
+  --font-display: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-body:    'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', monospace;
+
+  --text-xs:    11px;
+  --text-sm:    12px;
+  --text-base:  13.5px;
+  --text-md:    14px;
+  --text-lg:    16px;
+  --text-xl:    19px;
+  --text-2xl:   24px;
+  --text-3xl:   30px;
+  --text-4xl:   38px;
+
+  --leading-normal:  1.45;
+
+  --radius-xs:   3px;
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:   12px;
+  --radius-2xl:  16px;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.10), 0 2px 4px rgba(0,0,0,.06);
+
+  --dur-fast:    100ms;
+  --dur-normal:  140ms;
+  --dur-slow:    240ms;
+  --ease-out:    cubic-bezier(.4,0,.2,1);    /* material standard */
+
+  --has-mascot:        0;
+  --has-streak:        0;
+  --has-xp-bar:        0;
+  --has-map-path:      0;
+  --density:           compact;
+  --ornament-level:    0;
+  --celebration-level: 0;
+
+  --max-content: 920px;
+  --topbar-height: 52px;
+}
+
+/* Graphite is dark by default */
+:root[data-theme="graphite"]:not([data-mode="light"]) {
+  --color-bg:           #0a0a0a;
+  --color-surface:      #111111;
+  --color-surface-2:    #1a1a1a;
+  --color-surface-3:    #232323;
+  --color-border:       #292929;
+  --color-border-strong:#3d3d3d;
+  --color-text:         #fafafa;
+  --color-text-muted:   #a1a1a1;
+  --color-text-subtle:  #6b6b6b;
+  --color-accent-soft:  #2e2a4a;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.40);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.50), 0 1px 2px rgba(0,0,0,.30);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.65), 0 2px 4px rgba(0,0,0,.40);
+}
