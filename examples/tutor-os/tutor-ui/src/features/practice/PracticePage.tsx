@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { usePractice } from '@/store/practice';
 import { useWorkspace } from '@/store/workspace';
 import { Button } from '@/components/ui/Button';
@@ -10,12 +11,22 @@ import { SectionLabel, Tag } from '@/components/ui/Misc';
  * yourself: Again · Hard · Good · Easy → next card.
  */
 export function PracticePage() {
-  const queue   = usePractice(s => s.dueQueue());
+  // Subscribe to the stable source array; derive the due queue locally.
+  // Selecting `s.dueQueue()` directly would return a fresh array every
+  // render and trip Zustand's snapshot equality → infinite update loop.
+  const cards   = usePractice(s => s.cards);
   const cursor  = usePractice(s => s.cursor);
   const flipped = usePractice(s => s.flipped);
   const flip    = usePractice(s => s.flip);
   const grade   = usePractice(s => s.grade);
   const concept = useWorkspace(s => s.getConcept);
+
+  const queue = useMemo(() => {
+    const now = Date.now();
+    return cards
+      .filter(c => new Date(c.due).getTime() <= now)
+      .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime());
+  }, [cards]);
 
   const card = queue[cursor];
   const remaining = queue.length - cursor;

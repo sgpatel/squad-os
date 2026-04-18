@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mic, RotateCw, Sparkles, CalendarDays, ArrowRight, Flame } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -34,10 +34,22 @@ export function HomePage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [q, setQ] = useState('');
 
-  const { user } = useWorkspace();
-  const todayItems = usePlan(s => s.forDate(new Date().toISOString().slice(0, 10)));
-  const dueCount = usePractice(s => s.dueQueue().length);
-  const { start, isRunning, messages } = usePipeline();
+  const user      = useWorkspace(s => s.user);
+  // Select the stable source list, then derive today's items locally.
+  // (Returning a freshly-filtered array directly from a Zustand selector
+  //  would trip useSyncExternalStore's snapshot equality → render loop.)
+  const planItems = usePlan(s => s.items);
+  const todayKey  = new Date().toISOString().slice(0, 10);
+  const todayItems = useMemo(
+    () => planItems
+      .filter(i => i.date === todayKey)
+      .sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? '')),
+    [planItems, todayKey]
+  );
+  const dueCount  = usePractice(s => s.dueQueue().length);
+  const start     = usePipeline(s => s.start);
+  const isRunning = usePipeline(s => s.isRunning);
+  const messages  = usePipeline(s => s.messages);
 
   // Most recent tutor message that has a debate attached → render it inline.
   const lastDebate = [...messages].reverse().find(m => m.role === 'tutor' && m.debate)?.debate;
