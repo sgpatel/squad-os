@@ -101,8 +101,10 @@ export const seedTopics: Topic[] = [
   },
   { id: 't_calvin', chapterId: 'ch_photosynth', name: 'Calvin cycle',
     content: [
-      'The Calvin cycle uses ATP and NADPH from the light reactions to fix CO₂ into glucose.',
-      'Three phases: carbon fixation (RuBisCO + RuBP → 3-PGA), reduction (3-PGA → G3P), regeneration (G3P → RuBP).'
+      'The Calvin cycle uses **ATP** and **NADPH** from the light reactions to fix $\\text{CO}_2$ into glucose.',
+      'Net equation:\n\n$$3\\,\\text{CO}_2 + 9\\,\\text{ATP} + 6\\,\\text{NADPH} \\rightarrow \\text{G3P} + 9\\,\\text{ADP} + 6\\,\\text{NADP}^+ + 3\\,\\text{H}_2\\text{O}$$',
+      'Three phases:\n\n| Phase | Inputs | Output |\n|---|---|---|\n| Carbon fixation | RuBisCO + RuBP + CO₂ | 3-PGA |\n| Reduction | 3-PGA + ATP + NADPH | G3P |\n| Regeneration | G3P + ATP | RuBP |',
+      'In code, a tiny simulation step looks like:\n\n```python\ndef calvin_step(co2, atp, nadph):\n    pga  = rubisco_fix(co2, rubp)\n    g3p  = reduce(pga, atp, nadph)\n    return regenerate(g3p)\n```'
     ],
     conceptIds: ['k_rubisco','k_g3p']
   }

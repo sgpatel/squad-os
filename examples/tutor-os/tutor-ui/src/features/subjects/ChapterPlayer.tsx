@@ -4,6 +4,7 @@ import { useWorkspace } from '@/store/workspace';
 import { useNotes } from '@/store/notes';
 import { usePipeline } from '@/store/pipeline';
 import { Button } from '@/components/ui/Button';
+import { Markdown } from '@/components/ui/Markdown';
 import { Tag, SectionLabel } from '@/components/ui/Misc';
 import { fmtMinutes, fmtPercent } from '@/lib/format';
 
@@ -66,9 +67,10 @@ export function ChapterPlayer() {
           <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--space-4)' }}>{topic.name}</h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-            {topic.content.map((p, i) => (
-              <p key={i} style={{ lineHeight: 'var(--leading-relaxed)' }}>{p}</p>
-            ))}
+            {/* Topic content is markdown — supports **bold**, `code`, $math$,
+                tables, lists, etc. Each paragraph entry in the seed is rendered
+                independently so authoring stays paragraph-oriented. */}
+            <Markdown>{topic.content.join('\n\n')}</Markdown>
           </div>
 
           {topic.conceptIds.length > 0 && (

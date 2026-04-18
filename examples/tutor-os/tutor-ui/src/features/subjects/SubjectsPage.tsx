@@ -1,7 +1,17 @@
 import { Link } from 'react-router-dom';
-import * as Icons from 'lucide-react';
+import { Atom, Book, Cloud, Code, FlaskConical, Leaf, Sigma, BookOpen } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useWorkspace } from '@/store/workspace';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { fmtMinutes } from '@/lib/format';
+
+// Explicit icon lookup. We used to do `import * as Icons from 'lucide-react'`
+// + `Icons[s.icon]`, which defeats tree-shaking — Rollup ships the entire
+// 750 kB lucide bundle. The seed data uses a tiny fixed set of names, so
+// hand-maintaining this map keeps the route chunk small (~2 kB instead).
+const SUBJECT_ICONS: Record<string, LucideIcon> = {
+  Atom, Book, Cloud, Code, FlaskConical, Leaf, Sigma
+};
 
 /**
  * Subjects browser — workspace-scoped grid of subject cards.
@@ -20,9 +30,16 @@ export function SubjectsPage() {
         </div>
       </header>
 
+      {subjects.length === 0 ? (
+        <EmptyState
+          icon={<BookOpen size={20} />}
+          title="No subjects in this workspace"
+          hint="Switch workspaces from the topbar, or ask the tutor to seed a syllabus from a PDF or topic name."
+        />
+      ) : (
       <div className="subj-grid">
         {subjects.map(s => {
-          const Icon = (Icons as any)[s.icon] ?? Icons.Book;
+          const Icon = SUBJECT_ICONS[s.icon] ?? Book;
           const subjCourses = courses.filter(c => c.subjectId === s.id);
           const totalChapters = subjCourses.reduce((sum, c) => sum + c.chapterIds.length, 0);
           const totalMinutes  = subjCourses.reduce((sum, c) => sum + c.estMinutes,        0);
@@ -57,6 +74,7 @@ export function SubjectsPage() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

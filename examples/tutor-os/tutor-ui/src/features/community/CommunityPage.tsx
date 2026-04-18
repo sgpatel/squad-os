@@ -1,6 +1,7 @@
-import { ThumbsUp, Check, MessageCircle, Plus } from 'lucide-react';
+import { ThumbsUp, Check, MessageCircle, Plus, Users } from 'lucide-react';
 import { seedDoubts } from '@/lib/mockData';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Tag } from '@/components/ui/Misc';
 import { fmtRelative } from '@/lib/format';
 
@@ -23,6 +24,14 @@ export function CommunityPage() {
         </div>
       </header>
 
+      {seedDoubts.length === 0 ? (
+        <EmptyState
+          icon={<Users size={20} />}
+          title="No doubts yet"
+          hint="Stuck on something? Ask the community — peers, your tutor, or the AI can answer. Accepted answers get pinned to the top."
+          action={<Button variant="primary" leading={<Plus size={14} />}>Ask the first doubt</Button>}
+        />
+      ) : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
         {seedDoubts.map(d => (
           <article key={d.id} className="doubt">
@@ -59,6 +68,7 @@ export function CommunityPage() {
           </article>
         ))}
       </div>
+      )}
     </div>
   );
 }

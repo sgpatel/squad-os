@@ -1,6 +1,7 @@
-import { Book, Video, Globe, FileText, Plus, ExternalLink } from 'lucide-react';
+import { Book, Video, Globe, FileText, Plus, ExternalLink, Library as LibraryIcon } from 'lucide-react';
 import { seedSources } from '@/lib/mockData';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Tag } from '@/components/ui/Misc';
 import type { SourceKind } from '@/lib/types';
 import { fmtPercent } from '@/lib/format';
@@ -32,6 +33,14 @@ export function LibraryPage() {
         </div>
       </header>
 
+      {seedSources.length === 0 ? (
+        <EmptyState
+          icon={<LibraryIcon size={20} />}
+          title="Your library is empty"
+          hint="Drop in a PDF, paste a URL, or import a video. Every tutor answer cites back to entries here, so the more you add, the richer the explanations."
+          action={<Button variant="primary" leading={<Plus size={14} />}>Add your first source</Button>}
+        />
+      ) : (
       <div className="source-grid">
         {seedSources.map(s => {
           const Icon = ICON[s.kind];
@@ -58,6 +67,7 @@ export function LibraryPage() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

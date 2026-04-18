@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { FileText, Plus } from 'lucide-react';
 import { useNotes } from '@/store/notes';
 import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Tag } from '@/components/ui/Misc';
 import { fmtRelative } from '@/lib/format';
 
@@ -33,6 +34,14 @@ export function NotesPage() {
         </div>
       </header>
 
+      {notes.length === 0 ? (
+        <EmptyState
+          icon={<FileText size={20} />}
+          title="No notes yet"
+          hint="Capture a thought from a chapter, paste a snippet, or hit ⌘K → New note. Notes auto-save and stay on your device."
+          action={<Button variant="primary" leading={<Plus size={14} />} onClick={newNote}>Create your first note</Button>}
+        />
+      ) : (
       <div className="subj-grid">
         {notes.map(n => (
           <button
@@ -52,6 +61,7 @@ export function NotesPage() {
           </button>
         ))}
       </div>
+      )}
     </div>
   );
 }

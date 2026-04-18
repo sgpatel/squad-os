@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 // CSS load order matters — tokens first, theme overrides next, base components last.
 // Each theme override is gated by `:root[data-theme="..."]` so they coexist safely.
@@ -13,14 +14,18 @@ import './styles/themes/studio.css';
 import './styles/themes/graphite.css';
 import './styles/base.css';
 import './styles/app.css';
+// KaTeX styles — used by the Markdown component for $math$ rendering.
+import 'katex/dist/katex.min.css';
 
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('Missing #root element in index.html');
 
 createRoot(rootEl).render(
   <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>
 );

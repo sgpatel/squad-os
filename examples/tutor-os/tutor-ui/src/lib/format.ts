@@ -25,17 +25,5 @@ export function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
-/** A poor man's markdown — bold + paragraphs only. Real app would use a renderer. */
-export function renderMarkdownLite(s: string): { __html: string } {
-  const escaped = s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  const withBold = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  const withCode = withBold.replace(/`([^`]+)`/g, '<code>$1</code>');
-  const html = withCode
-    .split(/\n\n+/)
-    .map(p => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
-    .join('');
-  return { __html: html };
-}
+// (renderMarkdownLite removed — see components/ui/Markdown.tsx for the
+//  real renderer with GFM, math, and code-block support.)
