@@ -2,6 +2,8 @@ package io.tutoros.api;
 
 import io.tutoros.model.*;
 import io.tutoros.pipeline.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,10 +27,28 @@ import org.springframework.web.bind.annotation.*;
 @CrossOrigin(origins = "*") // tighten in production
 public class SessionController {
 
+    private static final Logger log = LoggerFactory.getLogger(SessionController.class);
+
     private final SessionManager sessionManager;
 
     public SessionController(SessionManager sessionManager) {
         this.sessionManager = sessionManager;
+    }
+
+    /**
+     * Catch-all for pipeline exceptions so the response carries the real
+     * cause instead of a blank 500. Browser / curl / UI now see
+     * { type: "ERROR", text: "ClassName: message" } which is 100x easier
+     * to debug than a generic Whitelabel page.
+     */
+    @ExceptionHandler(Throwable.class)
+    public ResponseEntity<MessageResponse> handleAny(Throwable t) {
+        log.error("Pipeline request failed", t);
+        String msg = t.getClass().getSimpleName()
+            + (t.getMessage() != null ? ": " + t.getMessage() : "");
+        return ResponseEntity.status(500).body(
+            new MessageResponse("ERROR", msg, null, false, null)
+        );
     }
 
     // ── Start / resume ────────────────────────────────────────────────
@@ -70,18 +90,24 @@ public class SessionController {
     /**
      * POST /session/{id}/message
      *
-     * Body: MessageRequest { message }
+     * Body: MessageRequest { message, mode? }
+     * Query: ?mode=agentic|direct (takes precedence over body when set)
      * Response: MessageResponse (tutor text, teachingStyle, visualQueued, etc.)
      *
-     * The full 12-step pipeline runs here.
+     *   mode=agentic (default) → full 12-step pipeline
+     *   mode=direct             → slim guardian → direct-tutor → guardian path
+     *
      * For streaming: use WebSocket on /ws/session/{id} instead.
      */
     @PostMapping("/{sessionId}/message")
     public ResponseEntity<MessageResponse> sendMessage(
-            @PathVariable String sessionId,
+            @PathVariable("sessionId") String sessionId,
+            @RequestParam(value = "mode", required = false) String modeParam,
             @RequestBody MessageRequest request) {
 
-        PipelineResult result = sessionManager.message(sessionId, request.message());
+        String modeStr = modeParam != null ? modeParam : request.mode();
+        SessionManager.AssistMode mode = SessionManager.AssistMode.fromString(modeStr);
+        PipelineResult result = sessionManager.message(sessionId, request.message(), mode);
 
         return ResponseEntity.ok(switch (result) {
             case PipelineResult.TutorResponse r ->
@@ -89,7 +115,10 @@ public class SessionController {
             case PipelineResult.SafeRefusal r ->
                 new MessageResponse("SAFE_REFUSAL", r.text(), null, false, null);
             case PipelineResult.BlockedResult r ->
-                new MessageResponse("BLOCKED", "I can't help with that.", null, false, null);
+                // Surface the real reason (e.g. "Session not found.") so the
+                // UI can react intelligently — used to always return a generic
+                // "I can't help with that." which hid the actual cause.
+                new MessageResponse("BLOCKED", r.reason(), null, false, null);
             case PipelineResult.DiagnosticResult r ->
                 new MessageResponse("DIAGNOSTIC", r.introMessage(), null, false, r.profile());
             case PipelineResult.PlanResult r ->
@@ -111,7 +140,7 @@ public class SessionController {
      */
     @PostMapping("/{sessionId}/answer")
     public ResponseEntity<FeedbackResponse> submitAnswer(
-            @PathVariable String sessionId,
+            @PathVariable("sessionId") String sessionId,
             @RequestBody AnswerRequest request) {
 
         PipelineResult result = sessionManager.submitAnswer(
@@ -136,7 +165,7 @@ public class SessionController {
      * Response: SessionSummary
      */
     @PostMapping("/{sessionId}/end")
-    public ResponseEntity<SessionSummary> endSession(@PathVariable String sessionId) {
+    public ResponseEntity<SessionSummary> endSession(@PathVariable("sessionId") String sessionId) {
         return ResponseEntity.ok(sessionManager.endSession(sessionId));
     }
 
@@ -150,7 +179,7 @@ public class SessionController {
      */
     @PostMapping("/{sessionId}/quiz")
     public ResponseEntity<Quiz> generateQuiz(
-            @PathVariable String sessionId,
+            @PathVariable("sessionId") String sessionId,
             @RequestBody QuizRequest request) {
 
         Quiz quiz = sessionManager.quiz(
@@ -195,7 +224,14 @@ public class SessionController {
         String firstMessage, String currentChapter, int masteryPct
     ) {}
 
-    public record MessageRequest(String message) {}
+    /**
+     * @param message  the raw student message
+     * @param mode     optional — "agentic" (default) or "direct"
+     */
+    public record MessageRequest(String message, String mode) {
+        /** Legacy constructor for callers that don't send a mode. */
+        public MessageRequest(String message) { this(message, null); }
+    }
 
     public record MessageResponse(
         String type, String text, String teachingStyle,

@@ -29,11 +29,15 @@ export type PipelineEvent =
  * Drive the pipeline; yields events as it advances.
  * Caller can `for await (const evt of runPipelineMock(prompt)) { ... }`.
  */
-export async function* runPipelineMock(prompt: string): AsyncGenerator<PipelineEvent, void, void> {
+export async function* runPipelineMock(
+  prompt: string,
+  /** Stage template; pass PIPELINE_STAGES_DIRECT for direct mode. */
+  stageTemplate: { key: PipelineStageKey; label: string; detail: string }[] = PIPELINE_STAGES
+): AsyncGenerator<PipelineEvent, void, void> {
   const id = `run_${++runIdCounter}_${Date.now().toString(36)}`;
   const startedAt = performance.now();
 
-  const steps: PipelineStep[] = PIPELINE_STAGES.map(s => ({
+  const steps: PipelineStep[] = stageTemplate.map(s => ({
     key: s.key, label: s.label, detail: s.detail, state: 'pending'
   }));
 

@@ -1,11 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { usePipeline } from '@/store/pipeline';
+import { useSettings } from '@/store/settings';
 import { ChatMessage } from './ChatMessage';
 import { ChatComposer } from './ChatComposer';
-import { PipelineReveal } from '@/features/pipeline/PipelineReveal';
-import { PipelineGraph } from '@/features/pipeline/PipelineGraph';
+import { AgentActivity } from '@/features/pipeline/AgentActivity';
 import { seedChat } from '@/lib/mockData';
-import { SectionLabel } from '@/components/ui/Misc';
 
 /**
  * Tutor — the active chat canvas.
@@ -16,6 +15,7 @@ import { SectionLabel } from '@/components/ui/Misc';
  */
 export function TutorPage() {
   const { messages, start, isRunning, currentRun } = usePipeline();
+  const assistMode = useSettings(s => s.assistMode);
   const threadEndRef = useRef<HTMLDivElement>(null);
 
   // Seed an example exchange on first visit so the page isn't empty.
@@ -37,17 +37,12 @@ export function TutorPage() {
         <div className="chat__thread-inner">
           {messages.map(m => <ChatMessage key={m.id} msg={m} />)}
 
-          {/* Show the pipeline + graph below the thread while a run is live */}
-          {currentRun && (
-            <>
-              <SectionLabel>Pipeline</SectionLabel>
-              <PipelineReveal />
-              <div className="mt-5">
-                <SectionLabel>Topology</SectionLabel>
-                <PipelineGraph />
-              </div>
-            </>
-          )}
+          {/* Inline agent-activity block — renders at the end of the thread
+              where the tutor reply will land, mimicking the tool-use /
+              thinking affordances in ChatGPT, Claude, and Perplexity.
+              Agentic mode only; direct mode stays minimal. */}
+          {currentRun && assistMode === 'agentic' && <AgentActivity />}
+
           <div ref={threadEndRef} />
         </div>
       </div>

@@ -4,6 +4,7 @@ import io.squados.context.SquadContext;
 import io.squados.debate.DebateEngine;
 import io.tutoros.agent.*;
 import io.tutoros.pipeline.*;
+import io.tutoros.pipeline.PipelineEventBus;
 import io.tutoros.websocket.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -119,12 +120,11 @@ public class TutorBeansConfig {
             QuizAgent quizAgent,
             // DebateEngine is auto-registered by squad-spring-boot-starter
             // (SquadAutoConfiguration#squadDebateEngine, @ConditionalOnMissingBean).
-            DebateEngine debateEngine) {
+            DebateEngine debateEngine,
+            // PipelineEventBus is wired below; declared here so Spring
+            // resolves it before constructing the pipeline.
+            PipelineEventBus pipelineEventBus) {
 
-        // Constructor parameter order in TutoringPipeline:
-        //   ctx, guardian, diagnostic, planner, content, socratic, direct,
-        //   practice, assessment, progress, escalation,
-        //   todo, quiz, visualisation, debateEngine
         return new TutoringPipeline(
             ctx,
             guardianAgent, diagnosticAgent, curriculumPlannerAgent,
@@ -132,8 +132,19 @@ public class TutorBeansConfig {
             practiceAgent, assessmentAgent, progressAgent,
             escalationAgent,
             todoAgent, quizAgent, visualisationAgent,
-            debateEngine
+            debateEngine,
+            pipelineEventBus
         );
+    }
+
+    /**
+     * Bridges {@link PipelineEventBus} → WebSocket frames so connected UI
+     * clients see per-stage progress in real time. Distinct bean from the
+     * handler so unit tests can swap in a recording bus.
+     */
+    @Bean
+    public PipelineEventBus pipelineEventBus(TutoringWebSocketHandler wsHandler) {
+        return new WebSocketPipelineEventBus(wsHandler);
     }
 
     // ── WebSocket ─────────────────────────────────────────────────────────────

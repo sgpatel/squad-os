@@ -62,21 +62,49 @@ public class SessionManager {
 
     /**
      * Process a student message through the full pipeline.
-     *
-     * @param sessionId    session ID returned by startOrResume
-     * @param message      raw student message
-     * @return PipelineResult to be serialised into the HTTP/WebSocket response
+     * Defaults to agentic mode for callers that don't specify.
      */
     public PipelineResult message(String sessionId, String message) {
+        return message(sessionId, message, AssistMode.AGENTIC);
+    }
+
+    /**
+     * Process a student message through the selected pipeline path.
+     *
+     *   AGENTIC → full 12-step pipeline with debate + content fetch
+     *   DIRECT  → slim guardian → direct tutor → guardian path
+     *
+     * @param sessionId  session ID returned by startOrResume
+     * @param message    raw student message
+     * @param mode       which pipeline variant to run
+     */
+    public PipelineResult message(String sessionId, String message, AssistMode mode) {
         SessionState state = findBySessionId(sessionId);
-        if (state == null) return PipelineResult.blocked("Session not found.");
+        if (state == null) return PipelineResult.blocked("SESSION_NOT_FOUND");
 
         // Burnout protection
         if (state.sessionDurationMinutes() > MAX_SESSION_MINUTES) {
             return PipelineResult.safe(burnoutMessage(state.profile().name()));
         }
 
-        return pipeline.process(state, message);
+        return (mode == AssistMode.DIRECT)
+            ? pipeline.processDirect(state, message)
+            : pipeline.process(state, message);
+    }
+
+    /**
+     * How heavily the pipeline should run for a given message.
+     * Mirrors the UI's AssistMode union.
+     */
+    public enum AssistMode {
+        AGENTIC,
+        DIRECT;
+
+        /** Lenient parser — accepts "agentic"/"direct" in any case; unknown → AGENTIC. */
+        public static AssistMode fromString(String s) {
+            if (s == null) return AGENTIC;
+            return "direct".equalsIgnoreCase(s.trim()) ? DIRECT : AGENTIC;
+        }
     }
 
     /**
@@ -90,7 +118,7 @@ public class SessionManager {
     public PipelineResult submitAnswer(String sessionId, PracticeQuestion question,
                                         String answer, int attemptNumber) {
         SessionState state = findBySessionId(sessionId);
-        if (state == null) return PipelineResult.blocked("Session not found.");
+        if (state == null) return PipelineResult.blocked("SESSION_NOT_FOUND");
         return pipeline.assess(state, answer, question, attemptNumber);
     }
 

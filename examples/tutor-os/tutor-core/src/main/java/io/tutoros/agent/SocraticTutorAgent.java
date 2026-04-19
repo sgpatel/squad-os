@@ -26,7 +26,12 @@ import io.squados.annotation.*;
  *   @OptimizePrompt    — prompt is improved based on "I understand" signals
  */
 @Agent(
-    role        = AgentRole.CRITIC,
+    // Distinct role from AssessmentAgent (CRITIC) — both teachers and graders
+    // previously claimed CRITIC which caused the registry to silently evict
+    // whichever registered first, routing teaching prompts to the grader and
+    // failing JSON parsing for AssessmentFeedback. EDITOR is the closest
+    // behavioural match (low temp, refinement-focused) and is unused elsewhere.
+    role        = AgentRole.EDITOR,
     name        = "SocraticTutorAgent",
     description = "Teaches through guided questions. Leads the learner to construct " +
                   "understanding themselves via the Socratic method. " +

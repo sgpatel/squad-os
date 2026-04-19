@@ -167,18 +167,81 @@ src/
 
 ---
 
-## Swapping mocks for the real backend
+## Wiring the real backend
 
-Two seams to wire:
+The UI ships with a deterministic mock so it runs offline. To talk to the
+live `tutor-api` (Spring Boot) on port 8080, set one env var and the
+pipeline store flips to the live path automatically — no component changes.
 
-1. **Read paths** — every `seed*` array in `mockData.ts`. Replace with
-   `useQuery`/`fetch` against your TutorOS REST endpoints. The Zustand
-   stores already have `partialize` set so persisted state stays minimal.
+```bash
+# Terminal 1 — backend
+cd examples/tutor-os
+mvn -pl tutor-api -am spring-boot:run
 
-2. **Pipeline stream** — replace `runPipelineMock` in `lib/pipeline.ts`
-   with an `EventSource('/api/runs/{id}/events')`. The components listen
-   for `started/step:run/step:done/message/finished` and don't care
-   whether they're driven by a setTimeout or a server.
+# Terminal 2 — frontend (Vite proxies /session, /progress, /plan, /quiz, /ws → :8080)
+cd examples/tutor-os/tutor-ui
+echo 'VITE_API_BASE_URL=/' > .env.local
+npm run dev
+```
+
+In production, set `VITE_API_BASE_URL` to the deployed API origin
+(e.g. `https://api.tutoros.example`).
+
+### How the live path works
+
+```
+┌─────────── tutor-ui ──────────┐         ┌──────── tutor-api ─────────┐
+│ usePipeline.start(prompt)     │         │                            │
+│   ├─ POST /session/start      │ ──────► │ SessionController          │
+│   ├─ open WS                  │ ──────► │   /ws/session/{id}/stream  │
+│   ├─ POST /session/{id}/msg   │ ──────► │ TutoringPipeline           │
+│   └─ FrameTranslator          │ ◄────── │   ├─ events.stageStart()   │
+│        emits PipelineEvent    │  WS     │   ├─ events.stageDone()    │
+│        into the store         │ frames  │   ├─ TOKEN stream          │
+│                               │         │   ├─ events.message()      │
+│                               │         │   └─ events.done()         │
+└───────────────────────────────┘         └────────────────────────────┘
+```
+
+`src/lib/api.ts` carries:
+
+- `LIVE_BACKEND` flag (set when `VITE_API_BASE_URL` is non-empty)
+- typed REST client (`api.startSession`, `api.sendMessage`, …)
+- `connectStream(sessionId, handlers)` for the WebSocket
+- `FrameTranslator` — converts wire frames into the existing
+  `PipelineEvent` union the store has always consumed, so components
+  stay declarative
+
+`src/hooks/useSessionStream.ts` is a React-friendly subscriber with
+heartbeat + exponential-backoff reconnect — useful for any future panel
+that wants to surface live tutor status (status chip, debug page, …).
+
+### Stream wire protocol
+
+The backend emits JSON frames with shape `{ type, stage?, content?, payload? }`
+on `ws://{host}/ws/session/{sessionId}/stream`:
+
+| `type`         | meaning                                         | fields used        |
+|----------------|-------------------------------------------------|--------------------|
+| `CONNECTED`    | handshake                                       | `content`          |
+| `STAGE_START`  | pipeline entered a step                         | `stage`            |
+| `STAGE_DONE`   | pipeline finished a step                        | `stage`, `payload` |
+| `STAGE_ERROR`  | pipeline step failed                            | `stage`, `content` |
+| `TOKEN`        | one LLM token chunk (during the tutor stage)   | `content`          |
+| `DEBATE_ROUND` | one resolved debate round                       | `payload`          |
+| `MESSAGE`      | final structured tutor message                  | `payload`          |
+| `MASTERY_DELTA`| concept mastery changed                         | `payload`          |
+| `DONE`         | run complete                                    | —                  |
+| `ERROR`        | transport / pipeline error                      | `content`          |
+| `PONG`         | heartbeat reply                                 | —                  |
+
+Stage keys mirror the UI's `PipelineStageKey` union: `guardian`,
+`diagnostic`, `planner`, `content`, `debate`, `tutor`, `practice`,
+`assessment`, `progress`.
+
+Backwards compatibility: the legacy two-arg `StreamFrame(type, content)`
+constructor is still emitted by older callers and tolerated by the
+translator — old backends will animate as a single tutor stage.
 
 ---
 

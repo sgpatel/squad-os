@@ -1,0 +1,14 @@
+squad:
+  name: "tutor-os"
+  profile: "default"
+  llm:
+    provider: "ollama"
+    model: "qwen3.5:9b"
+  agents:
+    - class: "io.tutoros.agent.GuardianAgent"
+    - class: "io.tutoros.agent.DiagnosticAgent"
+    - class: "io.tutoros.agent.CurriculumPlannerAgent"
+    - class: "io.tutoros.agent.ContentAgent"
+    - class: "io.tutoros.agent.DirectTutorAgent"
+    - class: "io.tutoros.agent.PracticeAgent"
+    - class: "io.tutoros.agent.AssessmentAgent"

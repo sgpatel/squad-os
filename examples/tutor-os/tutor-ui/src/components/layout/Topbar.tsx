@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, Search, Sun, Moon, Contrast, Flame } from 'lucide-react';
+import { ChevronDown, Search, Sun, Moon, Contrast, Flame, Zap, Brain } from 'lucide-react';
 import { useSettings } from '@/store/settings';
 import { useWorkspace } from '@/store/workspace';
 import { Avatar, ProgressBar } from '@/components/ui/Misc';
@@ -20,7 +20,10 @@ interface TopbarProps {
  * expose the mode toggle as a one-tap convenience.
  */
 export function Topbar({ onOpenCommand }: TopbarProps) {
-  const { mode, cycleMode } = useSettings();
+  const mode          = useSettings(s => s.mode);
+  const cycleMode     = useSettings(s => s.cycleMode);
+  const assistMode    = useSettings(s => s.assistMode);
+  const setAssistMode = useSettings(s => s.setAssistMode);
   const { user, workspaces, activeWorkspaceId, setActiveWorkspace } = useWorkspace();
   const [wsOpen, setWsOpen] = useState(false);
 
@@ -68,6 +71,32 @@ export function Topbar({ onOpenCommand }: TopbarProps) {
       {/* Pipeline strip — auto-renders when a run is active */}
       <div className="flex-1 flex items-center" style={{ justifyContent: 'center' }}>
         <PipelineStrip />
+      </div>
+
+      {/* Assist mode toggle — Direct ⚡ vs Agentic 🧠 */}
+      <div
+        role="group"
+        aria-label="Assist mode"
+        className="mode-toggle"
+      >
+        <button
+          type="button"
+          className={'mode-toggle__btn' + (assistMode === 'direct' ? ' is-active' : '')}
+          onClick={() => setAssistMode('direct')}
+          title="Direct — fast single-agent reply, no debate"
+          aria-pressed={assistMode === 'direct'}
+        >
+          <Zap size={12} /> Direct
+        </button>
+        <button
+          type="button"
+          className={'mode-toggle__btn' + (assistMode === 'agentic' ? ' is-active' : '')}
+          onClick={() => setAssistMode('agentic')}
+          title="Agentic — full pipeline with debate + citations"
+          aria-pressed={assistMode === 'agentic'}
+        >
+          <Brain size={12} /> Agentic
+        </button>
       </div>
 
       {/* Search / command palette trigger */}

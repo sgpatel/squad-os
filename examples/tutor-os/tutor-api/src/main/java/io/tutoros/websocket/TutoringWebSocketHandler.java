@@ -42,7 +42,7 @@ public class TutoringWebSocketHandler extends TextWebSocketHandler {
         sessions.computeIfAbsent(sessionId, k -> new ConcurrentHashMap<>())
                 .put(wsSession.getId(), wsSession);
 
-        sendFrame(wsSession, new StreamFrame("CONNECTED",
+        sendFrame(wsSession, StreamFrame.connected(
             "Connected to session " + sessionId + ". Waiting for tutor response..."));
     }
 
@@ -60,7 +60,7 @@ public class TutoringWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void handleTransportError(WebSocketSession wsSession, Throwable ex) {
-        sendFrame(wsSession, new StreamFrame("ERROR", "Transport error: " + ex.getMessage()));
+        sendFrame(wsSession, StreamFrame.error("Transport error: " + ex.getMessage()));
     }
 
     @Override
@@ -69,7 +69,7 @@ public class TutoringWebSocketHandler extends TextWebSocketHandler {
         // Chat messages go via POST /session/{id}/message (HTTP).
         // Reserved for future: heartbeat PING / client-side abort.
         if ("PING".equals(message.getPayload())) {
-            sendFrame(session, new StreamFrame("PONG", ""));
+            sendFrame(session, StreamFrame.pong());
         }
     }
 
@@ -84,7 +84,7 @@ public class TutoringWebSocketHandler extends TextWebSocketHandler {
      * @param token     a single streaming token from the LLM
      */
     public void broadcastToken(String sessionId, String token) {
-        broadcast(sessionId, new StreamFrame("TOKEN", token));
+        broadcast(sessionId, StreamFrame.token(token));
     }
 
     /**
@@ -92,7 +92,7 @@ public class TutoringWebSocketHandler extends TextWebSocketHandler {
      * @param sessionId the TutorOS session ID
      */
     public void broadcastDone(String sessionId) {
-        broadcast(sessionId, new StreamFrame("DONE", ""));
+        broadcast(sessionId, StreamFrame.done());
     }
 
     /**
@@ -101,7 +101,45 @@ public class TutoringWebSocketHandler extends TextWebSocketHandler {
      * @param reason    human-readable error message
      */
     public void broadcastError(String sessionId, String reason) {
-        broadcast(sessionId, new StreamFrame("ERROR", reason));
+        broadcast(sessionId, StreamFrame.error(reason));
+    }
+
+    // ── Pipeline-event broadcast helpers (called by WebSocketPipelineEventBus) ──
+
+    /** Notify clients that pipeline step {@code stage} has started. */
+    public void broadcastStageStart(String sessionId, String stage) {
+        broadcast(sessionId, new StreamFrame("STAGE_START", stage, "", null));
+    }
+
+    /** Notify clients that pipeline step {@code stage} has completed. */
+    public void broadcastStageDone(String sessionId, String stage, Object payload) {
+        broadcast(sessionId, new StreamFrame("STAGE_DONE", stage, "", payload));
+    }
+
+    /** Notify clients that pipeline step {@code stage} failed. */
+    public void broadcastStageError(String sessionId, String stage, String reason) {
+        broadcast(sessionId, new StreamFrame("STAGE_ERROR", stage, reason, null));
+    }
+
+    /** Stream a single resolved debate round to clients (for the debate panel). */
+    public void broadcastDebateRound(String sessionId, Object round) {
+        broadcast(sessionId, new StreamFrame("DEBATE_ROUND", null, "", round));
+    }
+
+    /**
+     * Publish the final tutor message in structured form. Useful even when
+     * tokens have streamed — gives the UI a single source of truth for
+     * citations / confidence / debate / teachingStyle.
+     */
+    public void broadcastMessage(String sessionId, Object messagePayload) {
+        broadcast(sessionId, new StreamFrame("MESSAGE", null, "", messagePayload));
+    }
+
+    /** Publish a mastery change so the progress UI can react in real time. */
+    public void broadcastMasteryDelta(String sessionId, String concept,
+                                       double before, double after) {
+        broadcast(sessionId, new StreamFrame("MASTERY_DELTA", null, "",
+            java.util.Map.of("concept", concept, "before", before, "after", after)));
     }
 
     /**
@@ -155,7 +193,40 @@ public class TutoringWebSocketHandler extends TextWebSocketHandler {
     /**
      * JSON frame sent to WebSocket clients.
      *
-     * type: CONNECTED | TOKEN | DONE | ERROR | PONG
+     * Wire shape: {@code { type, stage?, content?, payload? }}.
+     *
+     * Supported {@code type} values:
+     *
+     *   CONNECTED      — handshake confirmation
+     *   TOKEN          — single LLM token chunk (during the tutor stage)
+     *   DONE           — pipeline run complete
+     *   ERROR          — transport / pipeline error
+     *   PONG           — heartbeat reply
+     *   STAGE_START    — pipeline entered a step (use {@link #stage()})
+     *   STAGE_DONE     — pipeline finished a step ({@link #payload()} carries
+     *                    a stage-specific result, e.g. content snippet,
+     *                    debate winner, mastery delta)
+     *   STAGE_ERROR    — pipeline step failed ({@link #content()} carries the reason)
+     *   DEBATE_ROUND   — one resolved debate round ({@link #payload()})
+     *   MESSAGE        — final structured tutor message ({@link #payload()}
+     *                    carries body / teachingStyle / citations / confidence)
+     *   MASTERY_DELTA  — concept mastery changed ({@link #payload()})
+     *
+     * The legacy two-arg constructor is preserved so older callers keep
+     * compiling; {@code stage} and {@code payload} default to {@code null}.
      */
-    public record StreamFrame(String type, String content) {}
+    public record StreamFrame(String type, String stage, String content, Object payload) {
+
+        /** Legacy constructor used by older callers / older tests. */
+        public StreamFrame(String type, String content) {
+            this(type, null, content, null);
+        }
+
+        // ── Static factories for the common cases ────────────────────────
+        public static StreamFrame connected(String msg)         { return new StreamFrame("CONNECTED", null, msg, null); }
+        public static StreamFrame token(String chunk)           { return new StreamFrame("TOKEN",     null, chunk, null); }
+        public static StreamFrame done()                        { return new StreamFrame("DONE",      null, "", null); }
+        public static StreamFrame error(String reason)          { return new StreamFrame("ERROR",     null, reason, null); }
+        public static StreamFrame pong()                        { return new StreamFrame("PONG",      null, "", null); }
+    }
 }

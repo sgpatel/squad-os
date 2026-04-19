@@ -233,6 +233,7 @@ export const seedDoubts: Doubt[] = [
 ];
 
 // ── Pipeline stage definitions ──────────────────────────────────────
+// Full 9-stage sequence used by agentic mode (debate + diagnostic + planner).
 export const PIPELINE_STAGES: PipelineStageDef[] = [
   { key: 'guardian',   label: 'Safety check',      detail: 'Validating prompt scope + safety policy.' },
   { key: 'diagnostic', label: 'Diagnose level',    detail: 'Estimating prior knowledge & gaps.' },
@@ -244,6 +245,18 @@ export const PIPELINE_STAGES: PipelineStageDef[] = [
   { key: 'assessment', label: 'Score answer',      detail: 'Rubric: claim · evidence · clarity.' },
   { key: 'progress',   label: 'Update mastery',    detail: 'Concept mastery delta + streak.' }
 ];
+
+// Slim 2-stage sequence used by direct mode — guardian → tutor (the
+// output-side guardian check is rolled into `tutor` for a cleaner UI).
+export const PIPELINE_STAGES_DIRECT: PipelineStageDef[] = [
+  { key: 'guardian', label: 'Safety check',     detail: 'Quick scope + policy check.' },
+  { key: 'tutor',    label: 'Compose response', detail: 'Direct explanation, no debate.' }
+];
+
+/** Returns the stage template for a given assist mode. */
+export function stagesForMode(mode: 'agentic' | 'direct'): PipelineStageDef[] {
+  return mode === 'direct' ? PIPELINE_STAGES_DIRECT : PIPELINE_STAGES;
+}
 
 // ── A canned debate (used both by Home demo and Tutor reply) ────────
 export const seedDebate: DebateRound = {
