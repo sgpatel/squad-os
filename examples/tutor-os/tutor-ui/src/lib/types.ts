@@ -101,6 +101,11 @@ export interface Note {
   body: string;
   /** Anchored to a course/chapter when created from there */
   chapterId?: string;
+  /** Subject the note belongs to — set when saved from a tutor message
+      while a subject is active, or picked manually in the editor. */
+  subjectId?: string;
+  /** Optional back-reference to the tutor message the note was saved from. */
+  sourceMessageId?: string;
   tags: string[];
   createdAt: string;
   updatedAt: string;
@@ -252,7 +257,26 @@ export interface ChatMessage {
   pipelineRunId?: string;
   /** debate produced for this message */
   debate?: DebateRound;
+  /** A diagram emitted by VisualisationAgent (gpai-style domain spec). */
+  visualAsset?: VisualAsset;
   createdAt: number;
+}
+
+/**
+ * Wire shape for VisualisationAgent output.
+ *
+ * The agent picks a `type` and emits a tiny `specJson` for a deterministic
+ * renderer (SmilesDrawer for chem, Vega-Lite for plot, …). The frontend
+ * `<Diagram />` component routes by `type` and parses `specJson` once.
+ */
+export interface VisualAsset {
+  type: 'chem' | 'plot' | 'geometry' | 'freebody' | 'flow' | 'circuit';
+  concept: string;
+  title: string;
+  caption?: string;
+  /** JSON spec serialised as a string — parsed by the renderer. */
+  specJson: string;
+  altText: string;
 }
 
 // ── Debate Round (signature view) ───────────────────────────────────

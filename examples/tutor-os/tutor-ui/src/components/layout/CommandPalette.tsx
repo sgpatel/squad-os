@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Home, MessageSquare, BookOpen, FileText, PenLine, Layers, ListChecks,
+  Home, BookOpen, FileText, PenLine, Layers, ListChecks,
   CalendarDays, BarChart3, Library, Users, Settings as Cog,
-  Sparkles, FilePlus, Play
+  Sparkles, FilePlus, Play, ScrollText, FlaskConical, LineChart
 } from 'lucide-react';
 import { useNotes } from '@/store/notes';
 import { usePipeline } from '@/store/pipeline';
@@ -33,15 +33,16 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const [active, setActive] = useState(0);
   const createNote = useNotes(s => s.create);
   const startPipeline = usePipeline(s => s.start);
+  const pushDemoVisual = usePipeline(s => s.pushDemoVisual);
 
   const commands: Cmd[] = useMemo(() => [
-    { id: 'go-home',      group: 'Jump',   icon: Home,            label: 'Home',          action: () => navigate('/') },
-    { id: 'go-tutor',     group: 'Jump',   icon: MessageSquare,   label: 'Tutor',         action: () => navigate('/tutor') },
+    { id: 'go-home',      group: 'Jump',   icon: Home,            label: 'Ask',           meta: 'tutor & solver', action: () => navigate('/') },
     { id: 'go-subjects',  group: 'Jump',   icon: BookOpen,        label: 'Subjects',      action: () => navigate('/subjects') },
     { id: 'go-notes',     group: 'Jump',   icon: FileText,        label: 'Notes',         action: () => navigate('/notes') },
+    { id: 'go-cheat',     group: 'Jump',   icon: ScrollText,      label: 'Cheatsheet',    action: () => navigate('/cheatsheet') },
     { id: 'go-scratch',   group: 'Jump',   icon: PenLine,         label: 'Rough work',    action: () => navigate('/scratch') },
     { id: 'go-practice',  group: 'Jump',   icon: Layers,          label: 'Practice',      action: () => navigate('/practice') },
-    { id: 'go-quiz',      group: 'Jump',   icon: ListChecks,      label: 'Quizzes',       action: () => navigate('/quiz/qz_photo') },
+    { id: 'go-quiz',      group: 'Jump',   icon: ListChecks,      label: 'Quizzes',       action: () => navigate('/quiz') },
     { id: 'go-plan',      group: 'Jump',   icon: CalendarDays,    label: 'Plan',          action: () => navigate('/plan') },
     { id: 'go-progress',  group: 'Jump',   icon: BarChart3,       label: 'Progress',      action: () => navigate('/progress') },
     { id: 'go-library',   group: 'Jump',   icon: Library,         label: 'Library',       action: () => navigate('/library') },
@@ -52,13 +53,18 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       action: () => { const n = createNote(); navigate(`/notes/${n.id}`); } },
 
     { id: 'ask-photo',    group: 'Ask',    icon: Sparkles,        label: 'Explain photosynthesis', meta: 'tutor',
-      action: () => { navigate('/tutor'); void startPipeline('Explain photosynthesis like I\'m 16 — and prove it.'); } },
+      action: () => { navigate('/'); void startPipeline('Explain photosynthesis like I\'m 16 — and prove it.'); } },
     { id: 'ask-iam',      group: 'Ask',    icon: Sparkles,        label: 'Walk me through AWS IAM', meta: 'tutor',
-      action: () => { navigate('/tutor'); void startPipeline('Walk me through AWS IAM with a concrete example.'); } },
+      action: () => { navigate('/'); void startPipeline('Walk me through AWS IAM with a concrete example.'); } },
 
-    { id: 'run-quiz',     group: 'Action', icon: Play,            label: 'Start photosynthesis quiz',
-      action: () => navigate('/quiz/qz_photo') }
-  ], [navigate, createNote, startPipeline]);
+    { id: 'run-quiz',     group: 'Action', icon: Play,            label: 'Create new quiz',
+      action: () => navigate('/quiz') },
+
+    { id: 'demo-chem',    group: 'Demo',   icon: FlaskConical,    label: 'Visualize: benzene', meta: 'chem renderer',
+      action: () => { navigate('/tutor'); pushDemoVisual('chem'); } },
+    { id: 'demo-plot',    group: 'Demo',   icon: LineChart,       label: 'Visualize: y = sin(x)', meta: 'plot renderer',
+      action: () => { navigate('/tutor'); pushDemoVisual('plot'); } },
+  ], [navigate, createNote, startPipeline, pushDemoVisual]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();

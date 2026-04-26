@@ -135,6 +135,15 @@ public class TutoringWebSocketHandler extends TextWebSocketHandler {
         broadcast(sessionId, new StreamFrame("MESSAGE", null, "", messagePayload));
     }
 
+    /**
+     * Publish a renderer-ready VisualAsset produced by VisualisationAgent.
+     * The FE FrameTranslator attaches it to the pending tutor message so
+     * the matching renderer (chem / plot / …) mounts inside the chat bubble.
+     */
+    public void broadcastVisual(String sessionId, Object visualAsset) {
+        broadcast(sessionId, new StreamFrame("VISUAL", null, "", visualAsset));
+    }
+
     /** Publish a mastery change so the progress UI can react in real time. */
     public void broadcastMasteryDelta(String sessionId, String concept,
                                        double before, double after) {
@@ -211,6 +220,8 @@ public class TutoringWebSocketHandler extends TextWebSocketHandler {
      *   MESSAGE        — final structured tutor message ({@link #payload()}
      *                    carries body / teachingStyle / citations / confidence)
      *   MASTERY_DELTA  — concept mastery changed ({@link #payload()})
+     *   VISUAL         — renderer-ready VisualAsset ({@link #payload()} carries
+     *                    {type, concept, title, caption, specJson, altText})
      *
      * The legacy two-arg constructor is preserved so older callers keep
      * compiling; {@code stage} and {@code payload} default to {@code null}.

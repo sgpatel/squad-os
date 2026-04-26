@@ -1,11 +1,16 @@
-import { useMemo, useState } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
-import { Check } from 'lucide-react';
-import { seedQuestions, seedQuizzes } from '@/lib/mockData';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Check, Loader2 } from 'lucide-react';
+import { useQuizStore } from '@/store/quiz';
+import { useWorkspace } from '@/store/workspace';
+import { useAuth } from '@/store/auth';
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Input';
 import { Tag, SectionLabel } from '@/components/ui/Misc';
 import { fmtMinutes } from '@/lib/format';
+import { LIVE_BACKEND, api, DEMO_LEARNER_ID } from '@/lib/api';
+import type { QuizQuestion } from '@/lib/types';
+import { QuizHome } from './QuizHome';
 
 type AnswerState =
   | { kind: 'unanswered' }
@@ -17,48 +22,60 @@ interface Result {
   correct: boolean;
   /** rubric for short-answer */
   rubric?: { claim: number; evidence: number; clarity: number };
+  explanation?: string;
 }
 
 /**
  * Quiz Player — supports MCQ, multi-select, and short-answer.
  *
- * For short answers we mock a rubric ("claim · evidence · clarity")
- * — exactly the shape an assessment agent would emit. In production
- * the agent fills these scores; here a mock heuristic does it.
+ * Questions come from the quiz store (populated by `generate()`, which
+ * routes through the backend QuizAgent when LIVE_BACKEND is set, or a
+ * local mock generator otherwise).
+ *
+ * Short-answer grading uses the backend AssessmentAgent when live; in
+ * mock mode a lightweight keyword-overlap heuristic stands in so the
+ * rubric shape still lights up.
  */
 export function QuizPage() {
   const { quizId } = useParams<{ quizId: string }>();
-  const quiz = seedQuizzes.find(q => q.id === quizId);
-  if (!quiz) return <Navigate to="/" replace />;
-
+  const navigate = useNavigate();
+  // IMPORTANT: subscribe to the stable dicts and derive the questions
+  // array locally. Selecting s.questionsFor(id) returns a fresh array
+  // every render → zustand's snapshot equality fails → infinite loop.
+  const quiz         = useQuizStore(s => (quizId ? s.quizzes[quizId] : undefined));
+  const questionDict = useQuizStore(s => s.questions);
   const questions = useMemo(
-    () => quiz.questionIds.map(id => seedQuestions.find(q => q.id === id)).filter(Boolean) as typeof seedQuestions,
-    [quiz]
+    () => (quiz ? quiz.questionIds.map(id => questionDict[id]).filter(Boolean) as QuizQuestion[] : []),
+    [quiz, questionDict]
   );
+  const activeSubjectId = useWorkspace(s => s.activeSubjectId);
+  const getSubject      = useWorkspace(s => s.getSubject);
+  const learnerId = useAuth(s => s.currentUserId) ?? DEMO_LEARNER_ID;
 
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
   const [results, setResults] = useState<Record<string, Result>>({});
   const [done, setDone] = useState(false);
+  const [grading, setGrading] = useState(false);
+
+  useEffect(() => { setIdx(0); setAnswers({}); setResults({}); setDone(false); }, [quizId]);
+
+  // No id in the URL (or id points at nothing) → show the quiz home.
+  if (!quizId) return <QuizHome />;
+  if (!quiz)   return <QuizHome missingId={quizId} />;
+  if (questions.length === 0) return <QuizHome missingId={quizId} />;
 
   const q = questions[idx]!;
   const ans = answers[q.id] ?? ({ kind: 'unanswered' } as AnswerState);
   const res = results[q.id];
 
-  const submit = () => {
-    let result: Result;
-    if (q.kind === 'mcq' && ans.kind === 'mcq') {
-      result = { correct: q.correct?.[0] === ans.choice };
-    } else if (q.kind === 'multi' && ans.kind === 'multi') {
-      const want = new Set(q.correct ?? []);
-      const got  = new Set(ans.choices);
-      result = { correct: want.size === got.size && [...want].every(i => got.has(i)) };
-    } else if (q.kind === 'short' && ans.kind === 'short') {
-      result = { correct: ans.text.trim().length > 30, rubric: gradeShort(ans.text, q.ideal ?? '') };
-    } else {
-      return;
-    }
-    setResults({ ...results, [q.id]: result });
+  const submit = async () => {
+    const r = await gradeAnswer(q, ans, {
+      learnerId,
+      subject: (activeSubjectId && getSubject(activeSubjectId)?.name) || quiz.title.split(' · ')[0] || 'General',
+      setGrading,
+    });
+    if (r) setResults({ ...results, [q.id]: r });
   };
 
   const next = () => {
@@ -74,15 +91,19 @@ export function QuizPage() {
         <header className="page-header">
           <div><h1>{quiz.title} — results</h1>
           <p>{correctCount} / {questions.length} correct</p></div>
+          <Button onClick={() => navigate('/quiz')}>Create another</Button>
         </header>
         <div className="card">
           <SectionLabel>Where you struggled</SectionLabel>
-          {questions.filter(q => !results[q.id]?.correct).map(q => (
-            <div key={q.id} style={{ marginTop: 'var(--space-3)' }}>
-              <p style={{ fontWeight: 500 }}>{q.prompt}</p>
-              <p className="small muted">{q.explanation}</p>
+          {questions.filter(qq => !results[qq.id]?.correct).map(qq => (
+            <div key={qq.id} style={{ marginTop: 'var(--space-3)' }}>
+              <p style={{ fontWeight: 500 }}>{qq.prompt}</p>
+              <p className="small muted">{results[qq.id]?.explanation ?? qq.explanation}</p>
             </div>
           ))}
+          {questions.every(qq => results[qq.id]?.correct) && (
+            <p className="muted">Nothing to revisit — nice work.</p>
+          )}
         </div>
       </div>
     );
@@ -162,7 +183,7 @@ export function QuizPage() {
             rows={4}
             placeholder="Type a 1–2 sentence answer."
             value={ans.kind === 'short' ? ans.text : ''}
-            disabled={!!res}
+            disabled={!!res || grading}
             onChange={(e) => setAnswers({ ...answers, [q.id]: { kind: 'short', text: e.target.value } })}
           />
         )}
@@ -189,30 +210,101 @@ export function QuizPage() {
                 {res.correct
                   ? <Tag kind="success">Correct</Tag>
                   : <Tag kind="danger">Wrong</Tag>}
-                <span className="small muted">{q.explanation}</span>
+                <span className="small muted">{res.explanation ?? q.explanation}</span>
               </div>
             )}
             {res.rubric && (
-              <p className="small muted" style={{ gridColumn: '1 / -1', marginTop: 4 }}>{q.explanation}</p>
+              <p className="small muted" style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+                {res.explanation ?? q.explanation}
+              </p>
             )}
           </div>
         )}
 
         <div className="row mt-5" style={{ justifyContent: 'flex-end' }}>
-          {!res && <Button variant="primary" onClick={submit} disabled={ans.kind === 'unanswered'}>Submit</Button>}
-          {res  && <Button variant="primary" onClick={next}>{idx === questions.length - 1 ? 'Finish' : 'Next'}</Button>}
+          {!res && (
+            <Button variant="primary" onClick={submit}
+              disabled={ans.kind === 'unanswered' || grading}>
+              {grading
+                ? <><Loader2 size={14} className="spin" /> Grading…</>
+                : 'Submit'}
+            </Button>
+          )}
+          {res && <Button variant="primary" onClick={next}>{idx === questions.length - 1 ? 'Finish' : 'Next'}</Button>}
         </div>
       </div>
     </div>
   );
 }
 
-/** Toy rubric — keyword overlap. Real backend would call the assessment agent. */
-function gradeShort(answer: string, ideal: string): { claim: number; evidence: number; clarity: number } {
+// ── Grading ─────────────────────────────────────────────────────────
+
+async function gradeAnswer(
+  q: QuizQuestion,
+  ans: AnswerState,
+  ctx: { learnerId: string; subject: string; setGrading: (b: boolean) => void }
+): Promise<Result | null> {
+  if (q.kind === 'mcq' && ans.kind === 'mcq') {
+    return { correct: q.correct?.[0] === ans.choice, explanation: q.explanation };
+  }
+  if (q.kind === 'multi' && ans.kind === 'multi') {
+    const want = new Set(q.correct ?? []);
+    const got  = new Set(ans.choices);
+    const correct = want.size === got.size && [...want].every(i => got.has(i));
+    return { correct, explanation: q.explanation };
+  }
+  if (q.kind === 'short' && ans.kind === 'short') {
+    if (LIVE_BACKEND) {
+      ctx.setGrading(true);
+      try {
+        const sessionId = `${ctx.learnerId}:${ctx.subject}`;
+        const { feedback } = await api.submitAnswer(
+          sessionId,
+          {
+            question: q.prompt,
+            answer: q.ideal ?? '',
+            conceptTag: q.conceptId,
+            type: 'SHORT_ANSWER',
+            difficulty: 'MEDIUM',
+            bloomsLevel: 'APPLY',
+            marks: 1,
+          },
+          ans.text,
+          1
+        );
+        const score01 = Math.max(0, Math.min(1, (feedback.score ?? 0) / 100));
+        return {
+          correct: feedback.correct ?? score01 >= 0.7,
+          rubric: {
+            claim: score01,
+            evidence: score01 * 0.9,
+            clarity: Math.max(0, Math.min(1, ans.text.split(/\s+/).filter(Boolean).length / 25)),
+          },
+          explanation: [feedback.correctParts, feedback.incorrectParts, feedback.hint, feedback.modelAnswer]
+            .filter(Boolean).join(' · ') || q.explanation,
+        };
+      } catch (e) {
+        // Fall back to heuristic so the quiz doesn't get stuck.
+        return mockShortAnswer(ans.text, q, e instanceof Error ? e.message : String(e));
+      } finally {
+        ctx.setGrading(false);
+      }
+    }
+    return mockShortAnswer(ans.text, q);
+  }
+  return null;
+}
+
+function mockShortAnswer(text: string, q: QuizQuestion, warn?: string): Result {
+  const ideal = q.ideal ?? '';
   const norm = (s: string) => new Set(s.toLowerCase().match(/[a-z]+/g) ?? []);
-  const a = norm(answer); const i = norm(ideal);
+  const a = norm(text); const i = norm(ideal);
   const overlap = [...a].filter(t => i.has(t)).length;
   const recall = i.size === 0 ? 0 : Math.min(1, overlap / Math.max(3, i.size * 0.4));
-  const length = Math.min(1, answer.split(/\s+/).filter(Boolean).length / 25);
-  return { claim: recall, evidence: recall * 0.9, clarity: length };
+  const length = Math.min(1, text.split(/\s+/).filter(Boolean).length / 25);
+  return {
+    correct: recall >= 0.6,
+    rubric: { claim: recall, evidence: recall * 0.9, clarity: length },
+    explanation: warn ? `(offline grading — ${warn}) ${q.explanation}` : q.explanation,
+  };
 }

@@ -4,7 +4,6 @@ import { useSettings } from '@/store/settings';
 import { ChatMessage } from './ChatMessage';
 import { ChatComposer } from './ChatComposer';
 import { AgentActivity } from '@/features/pipeline/AgentActivity';
-import { seedChat } from '@/lib/mockData';
 
 /**
  * Tutor — the active chat canvas.
@@ -17,14 +16,6 @@ export function TutorPage() {
   const { messages, start, isRunning, currentRun } = usePipeline();
   const assistMode = useSettings(s => s.assistMode);
   const threadEndRef = useRef<HTMLDivElement>(null);
-
-  // Seed an example exchange on first visit so the page isn't empty.
-  // (One-shot — won't re-seed if you've already chatted.)
-  useEffect(() => {
-    if (messages.length === 0) {
-      usePipeline.setState({ messages: seedChat });
-    }
-  }, [messages.length]);
 
   // Pin scroll to bottom on new messages.
   useEffect(() => {

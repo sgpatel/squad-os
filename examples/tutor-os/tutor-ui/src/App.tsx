@@ -1,9 +1,12 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
+import { RequireAuth } from '@/components/layout/RequireAuth';
 import { RouteFallback } from '@/components/ui/RouteFallback';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useSettings } from '@/store/settings';
+import { LoginPage } from '@/features/auth/LoginPage';
+import { RegisterPage } from '@/features/auth/RegisterPage';
 
 // Home is eager — it's the most common first paint, no point hiding it
 // behind a skeleton. Everything else is split out so the initial JS bundle
@@ -16,6 +19,7 @@ const CoursePage    = lazy(() => import('@/features/subjects/CoursePage').then(m
 const ChapterPlayer = lazy(() => import('@/features/subjects/ChapterPlayer').then(m => ({ default: m.ChapterPlayer })));
 const NotesPage     = lazy(() => import('@/features/notes/NotesPage').then(m => ({ default: m.NotesPage })));
 const NoteEditor    = lazy(() => import('@/features/notes/NoteEditor').then(m => ({ default: m.NoteEditor })));
+const CheatsheetPage = lazy(() => import('@/features/cheatsheet/CheatsheetPage').then(m => ({ default: m.CheatsheetPage })));
 const RoughWorkPage = lazy(() => import('@/features/roughwork/RoughWorkPage').then(m => ({ default: m.RoughWorkPage })));
 const PracticePage  = lazy(() => import('@/features/practice/PracticePage').then(m => ({ default: m.PracticePage })));
 const QuizPage      = lazy(() => import('@/features/quiz/QuizPage').then(m => ({ default: m.QuizPage })));
@@ -55,11 +59,20 @@ export function App() {
 
   return (
     <Routes>
-      <Route element={<AppShell />}>
+      {/* Public auth routes — available without a session. */}
+      <Route path="login"    element={<LoginPage />} />
+      <Route path="register" element={<RegisterPage />} />
+
+      {/* Everything inside AppShell requires an authenticated user. */}
+      <Route element={<RequireAuth><AppShell /></RequireAuth>}>
         <Route index element={<HomePage />} />
 
         {/* Lazy routes — wrapped in a single Suspense per route so the */}
         {/* shell (topbar, sidenav) stays mounted while the chunk loads. */}
+        {/* "Ask" (HomePage at /) is the chat-first landing; /tutor is the
+            dedicated full-screen chat surface that "Open full chat" routes
+            to. Both share the pipeline store, so the conversation state
+            carries across when the learner expands. */}
         <Route path="tutor"               element={<Lazy><TutorPage /></Lazy>} />
         <Route path="tutor/:sessionId"    element={<Lazy><TutorPage /></Lazy>} />
 
@@ -70,9 +83,11 @@ export function App() {
 
         <Route path="notes"               element={<Lazy><NotesPage /></Lazy>} />
         <Route path="notes/:noteId"       element={<Lazy><NoteEditor /></Lazy>} />
+        <Route path="cheatsheet"          element={<Lazy><CheatsheetPage /></Lazy>} />
 
         <Route path="scratch"             element={<Lazy><RoughWorkPage /></Lazy>} />
         <Route path="practice"            element={<Lazy><PracticePage /></Lazy>} />
+        <Route path="quiz"                element={<Lazy><QuizPage /></Lazy>} />
         <Route path="quiz/:quizId"        element={<Lazy><QuizPage /></Lazy>} />
 
         <Route path="progress"            element={<Lazy><ProgressPage /></Lazy>} />

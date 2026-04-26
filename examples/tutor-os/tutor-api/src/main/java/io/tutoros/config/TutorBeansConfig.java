@@ -50,6 +50,11 @@ public class TutorBeansConfig {
     }
 
     @Bean
+    public IntentAnalyzerAgent intentAnalyzerAgent() {
+        return new IntentAnalyzerAgent();
+    }
+
+    @Bean
     public SocraticTutorAgent socraticTutorAgent() {
         return new SocraticTutorAgent();
     }
@@ -109,6 +114,7 @@ public class TutorBeansConfig {
             DiagnosticAgent diagnosticAgent,
             CurriculumPlannerAgent curriculumPlannerAgent,
             ContentAgent contentAgent,
+            IntentAnalyzerAgent intentAnalyzerAgent,
             SocraticTutorAgent socraticTutorAgent,
             DirectTutorAgent directTutorAgent,
             PracticeAgent practiceAgent,
@@ -128,7 +134,7 @@ public class TutorBeansConfig {
         return new TutoringPipeline(
             ctx,
             guardianAgent, diagnosticAgent, curriculumPlannerAgent,
-            contentAgent, socraticTutorAgent, directTutorAgent,
+            contentAgent, intentAnalyzerAgent, socraticTutorAgent, directTutorAgent,
             practiceAgent, assessmentAgent, progressAgent,
             escalationAgent,
             todoAgent, quizAgent, visualisationAgent,

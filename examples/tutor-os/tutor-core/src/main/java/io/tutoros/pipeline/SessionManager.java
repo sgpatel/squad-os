@@ -170,6 +170,21 @@ public class SessionManager {
 
     // ── Helpers ───────────────────────────────────────────────────────
 
+    /**
+     * Look up the active session for a (learnerId, subject) pair and
+     * return its canonical sessionId (the `SESSION-{learnerId}-{ts}`
+     * form). Returns null if no session exists.
+     *
+     * Callers that only know the learner + subject from the URL (e.g.
+     * QuizController) use this instead of composing a sessionId by hand
+     * — the internal map is keyed differently than the public sessionId
+     * format, so those two must never be confused.
+     */
+    public String resolveSessionId(String learnerId, String subject) {
+        SessionState state = sessions.get(sessionKey(learnerId, subject));
+        return state == null ? null : state.sessionId();
+    }
+
     private SessionState findBySessionId(String sessionId) {
         return sessions.values().stream()
             .filter(s -> s.sessionId().equals(sessionId))

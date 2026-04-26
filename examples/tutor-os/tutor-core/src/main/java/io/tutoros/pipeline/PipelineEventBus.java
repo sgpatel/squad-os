@@ -44,6 +44,15 @@ public interface PipelineEventBus {
 
     void masteryDelta(String sessionId, String concept, double before, double after);
 
+    /**
+     * Publish a renderer-ready visual asset (chem SMILES / Vega-Lite plot / …)
+     * produced by VisualisationAgent. Subscribers (e.g. WS clients) attach it
+     * to the pending tutor message so the FE can mount the matching renderer.
+     *
+     * Wire encoding (WebSocketPipelineEventBus): frame {type:"VISUAL", payload:&lt;VisualAsset&gt;}.
+     */
+    void visual(String sessionId, Object visualAsset);
+
     void done(String sessionId);
 
     /**
@@ -58,6 +67,7 @@ public interface PipelineEventBus {
         @Override public void debateRound(String sessionId, Object round) {}
         @Override public void message(String sessionId, Object messagePayload) {}
         @Override public void masteryDelta(String sessionId, String concept, double before, double after) {}
+        @Override public void visual(String sessionId, Object visualAsset) {}
         @Override public void done(String sessionId) {}
     };
 }

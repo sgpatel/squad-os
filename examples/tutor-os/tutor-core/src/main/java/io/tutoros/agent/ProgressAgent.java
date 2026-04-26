@@ -27,7 +27,7 @@ import io.tutoros.model.SessionSummary;
  *   @Traced       — every progress update is a named span
  */
 @Agent(
-    role        = AgentRole.SUPPORT,
+    role        = AgentRole.HEALER,
     name        = "ProgressAgent",
     description = "Maintains concept-level mastery scores, session history, " +
                   "and learning streaks. Detects plateaus and accelerations. " +

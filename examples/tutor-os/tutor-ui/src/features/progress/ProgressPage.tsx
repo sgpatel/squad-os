@@ -5,6 +5,8 @@ import { Card, CardMeta, CardTitle } from '@/components/ui/Card';
 import { Sparkline } from '@/components/ui/Sparkline';
 import { SectionLabel, Tag } from '@/components/ui/Misc';
 import { fmtPercent } from '@/lib/format';
+import { SubTabs } from '@/components/ui/SubTabs';
+import { PROGRESS_TABS } from '@/components/layout/hubTabs';
 
 /**
  * Progress dashboard.
@@ -34,6 +36,7 @@ export function ProgressPage() {
 
   return (
     <div className="page-react">
+      <SubTabs tabs={PROGRESS_TABS} ariaLabel="Progress hub" />
       <header className="page-header">
         <div>
           <h1>Progress</h1>

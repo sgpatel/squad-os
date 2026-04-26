@@ -1,9 +1,12 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Atom, Book, Cloud, Code, FlaskConical, Leaf, Sigma, BookOpen } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useWorkspace } from '@/store/workspace';
+import { usePipeline } from '@/store/pipeline';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { fmtMinutes } from '@/lib/format';
+import { SubTabs } from '@/components/ui/SubTabs';
+import { LIBRARY_TABS } from '@/components/layout/hubTabs';
 
 // Explicit icon lookup. We used to do `import * as Icons from 'lucide-react'`
 // + `Icons[s.icon]`, which defeats tree-shaking — Rollup ships the entire
@@ -18,11 +21,27 @@ const SUBJECT_ICONS: Record<string, LucideIcon> = {
  * Clicking a subject jumps to its first course.
  */
 export function SubjectsPage() {
-  const { workspaceSubjects, courses, chapters } = useWorkspace();
+  const { workspaceSubjects, courses, chapters, setActiveSubject } = useWorkspace();
+  const { reset: resetPipeline } = usePipeline();
+  const navigate = useNavigate();
   const subjects = workspaceSubjects();
+
+  const handleSubjectClick = (subjectId: string, firstCourseId?: string) => {
+    // Set the active subject and reset the session so a new one is created
+    setActiveSubject(subjectId);
+    resetPipeline();
+    
+    // Navigate to the course or tutor page
+    if (firstCourseId) {
+      navigate(`/courses/${firstCourseId}`);
+    } else {
+      navigate('/tutor');
+    }
+  };
 
   return (
     <div className="page-react">
+      <SubTabs tabs={LIBRARY_TABS} ariaLabel="Library hub" />
       <header className="page-header">
         <div>
           <h1>Subjects</h1>
@@ -51,9 +70,9 @@ export function SubjectsPage() {
           // Tint the icon background with the subject's brand color.
           const tint = s.color + '22';
           return (
-            <Link
+            <button
               key={s.id}
-              to={subjCourses[0] ? `/courses/${subjCourses[0].id}` : '#'}
+              onClick={() => handleSubjectClick(s.id, subjCourses[0]?.id)}
               className="subj-card"
               style={{ ['--subj-tint' as any]: tint, ['--subj-color' as any]: s.color }}
             >
@@ -70,7 +89,7 @@ export function SubjectsPage() {
               <div className="chapter-item__bar" aria-label={`Mastery ${(avgMastery * 100).toFixed(0)}%`}>
                 <span style={{ ['--m' as any]: `${avgMastery * 100}%`, width: `${avgMastery * 100}%` }} />
               </div>
-            </Link>
+            </button>
           );
         })}
       </div>

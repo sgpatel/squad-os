@@ -2,146 +2,149 @@ package io.tutoros.agent;
 
 import io.squados.annotation.*;
 import io.tutoros.model.VisualAsset;
-import io.squados.remote.SquadClient;
 
 /**
- * Visualisation Agent — generates SVG diagrams, D3.js charts, and
- * Manim animations to explain concepts visually.
+ * Visualisation Agent — picks a diagram domain and emits a COMPACT spec
+ * for a deterministic renderer.
  *
- * Selection logic (picked by the LLM based on concept type):
- *   SVG   → static diagrams, labelled structures, flow charts
- *           (instant render, embedded directly in chat as HTML)
- *   D3JS  → interactive graphs, data plots, animations that the
- *           student can manipulate in-browser (no server needed)
- *   MANIM → cinematic step-by-step mathematical/scientific animations
- *           (Python subprocess on the server; takes 20–40s to render)
+ * Why no raw SVG: LLMs drift on atom positioning, wire crossings, and
+ * geometry constraints. Asking the model to emit a tiny domain spec
+ * (SMILES for chemistry, Vega-Lite JSON for plots, etc.) and rendering
+ * server-side / client-side with a real library is the path that
+ * gpai-class output actually requires.
  *
- * Triggered by ContentAgent's requestVisualisation() tool call.
- * Runs asynchronously — the chat message shows a placeholder while
- * the render completes, then updates via WebSocket push.
+ * v1 supports two domains end-to-end:
+ *   - chem  → SMILES string → SmilesDrawer in the browser
+ *   - plot  → Vega-Lite v5 spec → vega-embed in the browser
  *
- * Future scope note (from product design):
- *   - SVG animations via CSS/SMIL for step-by-step process diagrams
- *   - D3.js simulation (e.g. particle model of gas pressure)
- *   - Manim integration via REST API call to a Python service
- *   - Learner-interactive: student can drag labels onto blank diagrams
+ * Adding a new domain is a 3-line change: add the type to the router
+ * prompt, add a spec prompt method, add a renderer on the frontend.
  *
  * Features:
- *   @StructuredOutput — typed VisualAsset with render payload
- *   @RemoteSquad      — calls Python Manim render service for MANIM type
- *   @Traced           — render latency tracked per asset type
- *   @Retry            — Manim server can be slow; retry up to 2×
+ *   @StructuredOutput — the agent returns a typed VisualAsset
+ *   @Traced           — render selection latency tracked
+ *   @Retry            — short retry on transient LLM failure
  */
 @Agent(
-    role        = AgentRole.EXECUTOR,
+    role        = AgentRole.VISIONARY,
     name        = "VisualisationAgent",
-    description = "Generates SVG diagrams, D3.js interactive charts, and Manim " +
-                  "animations for any science/maths concept. Embedded directly " +
-                  "in the chat or linked as a rendered video."
+    description = "Picks a diagram domain (chem, plot, …) and emits a compact " +
+                  "renderer-ready spec. Never emits raw SVG — the frontend renders " +
+                  "via SmilesDrawer / Vega-Lite / etc. for publication-quality output."
 )
 @StructuredOutput(schema = VisualAsset.class, retryOnMalformed = true, maxRetries = 2)
-@Retry(maxAttempts = 2, backoffMs = 2000)
-@Traced(spanName = "visualisation-render")
+@Retry(maxAttempts = 2, backoffMs = 1500)
+@Traced(spanName = "visualisation-spec")
 public class VisualisationAgent {
 
     /**
-     * Python Manim render service — called for MANIM type assets.
-     * Returns a video URL after async render completes.
+     * Single-shot prompt: emit a renderer-ready spec for the concept under
+     * the type the pipeline has already routed to. The pipeline calls
+     * {@link #selectRenderType} first and pins the type here so weaker LLMs
+     * cannot drift into the wrong domain (and so the prompt does not need
+     * to ship example SMILES strings that small models tend to copy
+     * verbatim under uncertainty — a known in-context contamination mode).
      *
-     * Feature: @RemoteSquad
+     * The structured-output retry loop still handles spec-level malformation.
      */
-    @RemoteSquad(url = "${tutor.manim.url}", auth = "api-key", timeoutMs = 60000)
-    private SquadClient manimService;
+    public String visualPrompt(String concept, String learnerLevel, String requiredType) {
+        // Pin to a supported type. If the caller passed something we don't
+        // render, fall back to the safer default (plot accepts anything that
+        // can be tabulated; chem only accepts molecules).
+        String t = (requiredType == null) ? "plot" : requiredType.trim().toLowerCase();
+        if (!"chem".equals(t) && !"plot".equals(t)) t = "plot";
 
-    /**
-     * Prompt for SVG diagram generation.
-     *
-     * The LLM produces inline SVG markup that is embedded directly
-     * in the chat bubble as an HTML element.
-     */
-    public String svgPrompt(String concept, String learnerLevel) {
+        String typeBlock = "chem".equals(t)
+            ? """
+              You MUST set type = "chem".
+              specJson = {"smiles":"<canonical SMILES for the concept>"}
+              Rules:
+                - Emit the correct canonical SMILES for THE CONCEPT, not for any
+                  example you have seen. Do NOT default to caffeine, benzene,
+                  glucose, or any other unrelated molecule.
+                - Keep SMILES under 120 characters.
+                - If you genuinely cannot recall the SMILES for this concept,
+                  set specJson to {"smiles":""} and explain in the caption.
+              """
+            : """
+              You MUST set type = "plot".
+              specJson = a complete Vega-Lite v5 specification with fields:
+                $schema, description, width, height, data, mark, encoding.
+              Rules:
+                - Width 480, height 280.
+                - Always include axis titles tied to THE CONCEPT.
+                - Pick `mark` from: line | point | bar | area.
+                - For function plots, embed `data.values` — an array of
+                  {x, y} samples computed from the actual function in the
+                  concept (≥ 40 points across a sensible domain). Do not
+                  default to a sine wave unless the concept IS a sine wave.
+              """;
+
         return """
-            Generate a clean, labelled SVG diagram explaining: %s
+            You are emitting a tiny renderer spec for the concept below.
+            NEVER produce raw SVG. NEVER produce inline JavaScript.
+
+            Concept: %s
             Audience: %s-level learner.
 
-            Requirements:
-            - Use SVG 1.1, viewBox="0 0 600 400", no external dependencies
-            - Colour scheme: dark background (#1a1a2e), bright labels (#e6edf3)
-            - Use arrows (marker-end) to show direction/flow
-            - Label every component clearly with <text> elements
-            - Include a <title> and a one-sentence <desc> for accessibility
-            - Add simple CSS animation for key moving parts (electron flow, etc.)
-              using @keyframes inside a <style> block
+            %s
 
-            Output ONLY the SVG markup — no prose, no markdown fences.
-            """.formatted(concept, learnerLevel);
+            Output requirements (REQUIRED for every field — do not omit any):
+              type      : exactly "%s"
+              concept   : 2–4 words drawn from THE CONCEPT above
+              title     : ≤ 6 words
+              caption   : 1 short sentence (≤ 120 chars) about THE CONCEPT
+              specJson  : the spec described above, as a JSON OBJECT serialised
+                          to a STRING. Escape inner quotes. No markdown fences.
+              altText   : 1 sentence describing what is shown, for screen readers.
+            """.formatted(concept, learnerLevel, typeBlock, t);
     }
 
     /**
-     * Prompt for D3.js interactive visualisation generation.
-     *
-     * The LLM produces a self-contained JavaScript snippet that
-     * renders into a <div id="viz-[id]"> injected into the chat.
+     * Backwards-compatible 2-arg overload — keeps callers that don't yet
+     * pin a type compiling. Lets the agent fall back to "plot" (the
+     * domain that fits the most concepts safely).
      */
-    public String d3Prompt(String concept, String dataContext, String learnerLevel) {
-        return """
-            Generate a self-contained D3.js v7 visualisation for: %s
-            Audience: %s-level learner.
-
-            Data context: %s
-
-            Requirements:
-            - Self-contained: all D3 code in one <script> block
-            - Renders into: document.getElementById('viz-TARGET')
-            - Width: 560px, height: 320px, responsive
-            - Dark theme: background #161b22, text #e6edf3
-            - Interactive: tooltip on hover showing exact values
-            - Animated: transitions on load (300ms ease)
-            - Include a legend if multiple data series
-
-            Output ONLY the JavaScript code — no HTML wrapper, no markdown.
-            """.formatted(concept, learnerLevel, dataContext);
+    public String visualPrompt(String concept, String learnerLevel) {
+        return visualPrompt(concept, learnerLevel, selectRenderType(concept));
     }
 
     /**
-     * Prompt for Manim scene script generation.
-     *
-     * The LLM writes a Python Manim scene. The manimService compiles
-     * and renders it server-side, returning a video URL.
-     *
-     * Future scope: stream render progress via WebSocket.
+     * Quick pre-router used by ContentAgent's tool call when it wants
+     * to hint the type without spending an LLM call. The single-shot
+     * prompt above will still re-decide if the LLM disagrees.
      */
-    public String manimPrompt(String concept, String learnerLevel) {
-        return """
-            Write a Python Manim (Community Edition) scene script explaining: %s
-            Audience: %s-level learner — calibrate mathematical complexity accordingly.
-
-            Requirements:
-            - Scene class name: TutorOSScene (extends Scene)
-            - Duration: 60–90 seconds of animation
-            - Use MathTex for equations, Text for labels
-            - Animate step-by-step: show each component before the next appears
-            - Use color_theme: DARK (dark background, bright objects)
-            - Include a narrator text at bottom for each animation step
-            - End with a summary slide showing the key equation/diagram
-
-            Output ONLY the Python code — no prose.
-            """.formatted(concept, learnerLevel);
-    }
-
-    /**
-     * Selects the best render type for a given concept and learner context.
-     *
-     * Called by ContentAgent's requestVisualisation() tool before
-     * invoking this agent — allows pre-routing without an LLM call.
-     */
-    public String selectRenderType(String concept, String learnerLevel, boolean fastMode) {
-        if (fastMode) return "SVG"; // always fast in exam revision mode
+    public String selectRenderType(String concept) {
+        if (concept == null) return "plot";
         String c = concept.toLowerCase();
-        if (c.contains("graph") || c.contains("rate") || c.contains("plot") ||
-            c.contains("spectrum") || c.contains("distribution")) return "D3JS";
-        if (c.contains("animation") || c.contains("step by step") ||
-            c.contains("mechanism") || c.contains("derive")) return "MANIM";
-        return "SVG"; // default for diagrams, structures, flow charts
+
+        // Chem first — wins on explicit molecule cues. Order matters: a
+        // prompt like "structure of caffeine molecule" should route to chem
+        // before any plot-ish word can hijack it.
+        if (c.contains("molecule") || c.contains("compound") || c.contains("smiles") ||
+            c.contains("organic chemistry") || c.contains("functional group") ||
+            c.contains("structure of ") || c.contains("skeletal ") ||
+            c.contains("benzene") || c.contains("alkane") || c.contains("alkene") ||
+            c.contains("alcohol") || c.contains("carboxylic") || c.contains("ester") ||
+            c.contains("amine") || c.contains("amide") || c.contains("aromatic")) {
+            return "chem";
+        }
+
+        // Plot — function graphs, data plots, distributions, comparisons,
+        // and the full trig / algebra family. These are the prompts the
+        // learner is most likely to phrase as "show me / graph of / plot of".
+        String[] plotMarkers = {
+            "graph", "plot", "chart", "rate", "distribution", "histogram",
+            "vs ", " vs.", "function of", "function ",
+            "sin", "cos", "tan", "sec ", "csc ", "cot ",
+            "sine", "cosine", "tangent", "exponential", "logarith",
+            "polynomial", "quadratic", "cubic", "linear equation",
+            "slope", "intercept", "derivative", "integral",
+            "frequency", "amplitude", "wave"
+        };
+        for (String m : plotMarkers) {
+            if (c.contains(m)) return "plot";
+        }
+        return "plot"; // safest default — most "show me X" requests are graphs
     }
 }

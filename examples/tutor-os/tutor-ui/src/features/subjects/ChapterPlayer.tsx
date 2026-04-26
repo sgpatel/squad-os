@@ -95,7 +95,7 @@ export function ChapterPlayer() {
           <Button leading={<MessageSquare size={14} />} onClick={askTutor}>Ask tutor about this</Button>
           <Button leading={<FileText size={14} />} onClick={makeNote}>Make a note</Button>
           <Button leading={<Layers size={14} />} onClick={() => navigate('/practice')}>Practice flashcards</Button>
-          <Button leading={<ListChecks size={14} />} onClick={() => navigate('/quiz/qz_photo')}>Take quiz</Button>
+          <Button leading={<ListChecks size={14} />} onClick={() => navigate('/quiz')}>Take quiz</Button>
         </div>
       </section>
     </div>

@@ -32,7 +32,7 @@ import io.tutoros.model.Quiz;
  *   @Traced           — quiz generation is a named span
  */
 @Agent(
-    role        = AgentRole.EXECUTOR,
+    role        = AgentRole.DPS,
     name        = "QuizAgent",
     description = "Generates calibrated on-demand quizzes targeting gap concepts. " +
                   "Adapts question count, difficulty distribution, and type " +
@@ -81,21 +81,40 @@ public class QuizAgent {
             Previously wrong questions to re-test (from memory):
             %s
 
-            Requirements for each question:
-            1. Include a complete worked solution
-            2. Include 3 progressive hints
-            3. For MULTIPLE_CHOICE: 4 options, all plausible (no obviously wrong distractors)
-            4. For SHORT_ANSWER: include a model answer with mark-scheme bullet points
-            5. Tag each question with its Bloom's level and concept
+            Each question MUST be a JSON object with EXACTLY these field
+            names (no synonyms — do not rename, do not add fields):
+              "question"       : string — the question text
+              "type"           : "MULTIPLE_CHOICE" | "SHORT_ANSWER"
+              "options"        : string — for MULTIPLE_CHOICE only, exactly 4
+                                 options joined by " | " (pipe), e.g.
+                                 "Option A | Option B | Option C | Option D".
+                                 OMIT for SHORT_ANSWER.
+              "answer"         : string — for MULTIPLE_CHOICE this is the
+                                 correct option text (must match one of the
+                                 options exactly); for SHORT_ANSWER this is
+                                 a one-line model answer.
+              "bloomsLevel"    : "REMEMBER"|"UNDERSTAND"|"APPLY"|"ANALYZE"|"EVALUATE"|"CREATE"
+              "difficulty"     : "EASY" | "MEDIUM" | "HARD"
+              "conceptTag"     : string — the concept this question tests
+              "hints"          : string — up to 2 short hints separated by " | "
+              "workedSolution" : string — 1–2 short sentences (NOT an essay)
+              "marks"          : integer
+
+            Be concise — keep total output under ~3000 tokens so the JSON
+            is never truncated. Do not invent extra fields.
 
             Quiz-level requirements:
-            - questionsJson: JSON array of PracticeQuestion objects
-            - bloomsLevelsCovered: list the Bloom's levels present
-            - targetGaps: which gap concepts appear in this quiz
-            - totalMarks: sum of all question marks
+            - questionsJson: JSON array of PracticeQuestion objects, serialised
+              as a STRING (escape inner quotes). This field is REQUIRED — never
+              omit it, never end the response before closing it.
+            - bloomsLevelsCovered: comma-separated Bloom levels present.
+            - targetGaps: comma-separated gap concepts covered.
+            - totalMarks: sum of all question marks.
             - timeLimitMinutes: %d
 
             Calibrate question language to %s level — not simpler, not harder.
+            Keep prose tight. Prioritise completing every required field over
+            verbosity in any single field.
             """.formatted(
                 profile.name, profile.level, profile.goal,
                 topic, profile.learningStyle, bloomTarget,

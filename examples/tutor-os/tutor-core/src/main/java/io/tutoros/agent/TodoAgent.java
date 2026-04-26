@@ -31,7 +31,7 @@ import io.tutoros.model.TodoList;
  *   @AgentMemory      — recalls which todo types the learner actually completes
  */
 @Agent(
-    role        = AgentRole.EXECUTOR,
+    role        = AgentRole.WILDCARD,
     name        = "TodoAgent",
     description = "Generates specific, actionable learning todos after every session. " +
                   "Calibrated to the learner's goal, available time, and gap concepts. " +

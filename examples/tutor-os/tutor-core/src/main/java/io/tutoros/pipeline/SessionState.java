@@ -73,7 +73,12 @@ public class SessionState {
     public boolean needsNewPlan()    { return currentPlan == null || isChapterComplete(); }
 
     public void updatePlan(StudyPlan plan) {
-        this.currentPlan        = plan;
+        // A null plan here means the StrategistAgent either failed or
+        // returned an un-parseable response. Keep the previous plan (if
+        // any) so the session isn't wedged, and let the caller decide
+        // how to surface the failure to the learner.
+        if (plan == null) return;
+        this.currentPlan         = plan;
         this.currentChapterIndex = plan.currentChapterIndex;
         advanceToCurrentChapterConcept();
     }

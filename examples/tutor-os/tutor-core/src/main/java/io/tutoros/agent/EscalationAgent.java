@@ -26,7 +26,7 @@ import io.squados.remote.SquadClient;
  *   @Traced        — escalation events are high-priority spans in OTel
  */
 @Agent(
-    role        = AgentRole.SUPPORT,
+    role        = AgentRole.TANK,
     name        = "EscalationAgent",
     description = "Pauses the session and notifies a human teacher when the learner " +
                   "is stuck, distressed, or plateaued. Produces a concise teacher brief " +

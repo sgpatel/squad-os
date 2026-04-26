@@ -14,6 +14,7 @@ public enum AgentRole {
     TANK,        // Defensive, deterministic, low temperature
     DPS,         // Aggressive, creative, high temperature
     SUPPORT,     // Stable, consistent, low temperature
+    HEALER,      // Restores/updates state, stable, slightly higher budget
     SCOUT,       // Recon, fast, low token usage
 
     // ── Work / task roles ─────────────────────────────────────────────
@@ -46,6 +47,10 @@ public enum AgentRole {
 
             // Support: very stable — heal calls must not hallucinate
             case SUPPORT    -> new LlmOptions(0.2f,  512, null);
+
+            // Healer: stable state-updater — needs slightly more room
+            // than Support to emit structured updates (progress, mastery).
+            case HEALER     -> new LlmOptions(0.2f, 1024, null);
 
             // Scout: fast, minimal — recon not essays
             case SCOUT      -> new LlmOptions(0.4f,  256, null);

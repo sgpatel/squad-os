@@ -7,6 +7,8 @@ import { SectionLabel, Tag } from '@/components/ui/Misc';
 import { usePomodoro } from '@/hooks/usePomodoro';
 import { fmtMinutes } from '@/lib/format';
 import type { PlanItemKind } from '@/lib/types';
+import { SubTabs } from '@/components/ui/SubTabs';
+import { PROGRESS_TABS } from '@/components/layout/hubTabs';
 
 const KIND_TONE: Record<PlanItemKind, 'success' | 'warn' | 'danger' | 'info' | undefined> = {
   study:    'info',
@@ -36,6 +38,7 @@ export function PlanPage() {
 
   return (
     <div className="page-react">
+      <SubTabs tabs={PROGRESS_TABS} ariaLabel="Progress hub" />
       <header className="page-header">
         <div>
           <h1>Plan</h1>

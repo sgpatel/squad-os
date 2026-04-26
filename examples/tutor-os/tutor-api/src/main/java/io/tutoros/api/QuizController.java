@@ -5,6 +5,9 @@ import io.tutoros.model.PracticeQuestion;
 import io.tutoros.model.Quiz;
 import io.tutoros.pipeline.PipelineResult;
 import io.tutoros.pipeline.SessionManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,7 +29,10 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @RestController
 @RequestMapping("/quiz")
+@CrossOrigin(origins = "*") // tighten in production — matches SessionController
 public class QuizController {
+
+    private static final Logger log = LoggerFactory.getLogger(QuizController.class);
 
     private final SessionManager sessionManager;
 
@@ -48,24 +54,52 @@ public class QuizController {
      * Generates a new quiz using QuizAgent (@Benchmark, @AgentMemory).
      * The session must be active (started via SessionController) so that
      * the learner's profile and mastery map are available in SessionState.
+     * `sessionId` is composed from (learnerId, subject) using the same
+     * format SessionManager uses internally — see `sessionKey()` there.
      */
     @PostMapping("/{learnerId}/{subject}/generate")
-    public ResponseEntity<QuizGenerateResponse> generate(
+    public ResponseEntity<?> generate(
             @PathVariable String learnerId,
             @PathVariable String subject,
             @RequestBody QuizGenerateRequest req) {
+        String sessionId = sessionManager.resolveSessionId(learnerId, subject);
+        if (sessionId == null) {
+            log.info("Quiz generate: no active session for {}:{} — client should /session/start first",
+                learnerId, subject);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(
+                new ErrorBody("SESSION_NOT_FOUND",
+                    "No active session for this learner + subject. Start a session first via /session/start.")
+            );
+        }
 
-        String sessionId = learnerId + ":" + subject;
-
-        String topic      = req.topic()      == null || req.topic().isBlank() ? subject : req.topic();
+        String topic      = req.topic()      == null || req.topic().isBlank() ? "General" : req.topic();
         String difficulty = req.difficulty() == null || req.difficulty().isBlank() ? "MEDIUM" : req.difficulty();
         int    count      = req.questionCount() <= 0 ? 5 : req.questionCount();
 
-        Quiz quiz = sessionManager.quiz(sessionId, topic, count, difficulty);
+        Quiz quiz;
+        try {
+            quiz = sessionManager.quiz(sessionId, topic, count, difficulty);
+        } catch (RuntimeException e) {
+            // LLM call blew up (auth, rate limit, parse failure, …) or
+            // the agent returned something unparseable. Surface a real
+            // message to the client instead of a bare 500.
+            log.error("Quiz generate failed for {}", sessionId, e);
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(
+                new ErrorBody("QUIZ_GENERATE_FAILED",
+                    "Couldn't generate a quiz: " + rootMessage(e))
+            );
+        }
+
+        if (quiz == null) {
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(
+                new ErrorBody("QUIZ_GENERATE_EMPTY",
+                    "The quiz agent returned no quiz. Please try again.")
+            );
+        }
 
         // Store as active
         activeQuizStore.put(quiz.quizId,
-            new ActiveQuiz(quiz, learnerId, subject, Instant.now().toString()));
+            new ActiveQuiz(quiz, sessionId, Instant.now().toString()));
 
         return ResponseEntity.ok(new QuizGenerateResponse(
             quiz.quizId,
@@ -88,7 +122,9 @@ public class QuizController {
      * POST /quiz/{learnerId}/{subject}/{quizId}/submit
      *
      * Grades all answers using AssessmentAgent (@Benchmark) and stores result.
-     * Returns per-question feedback + overall score.
+     * Returns per-question feedback + overall score. learnerId + subject are
+     * path params for URL symmetry with the other routes; the quizId alone
+     * is enough to locate the active quiz in-memory.
      */
     @PostMapping("/{learnerId}/{subject}/{quizId}/submit")
     public ResponseEntity<?> submit(
@@ -102,7 +138,7 @@ public class QuizController {
             return ResponseEntity.notFound().build();
         }
 
-        String sessionId = learnerId + ":" + subject;
+        String sessionId = active.sessionId();
         List<QuestionResult> questionResults = new ArrayList<>();
         int totalScore = 0;
         int maxScore   = 0;
@@ -172,14 +208,14 @@ public class QuizController {
 
         // Persist result
         QuizResult result = new QuizResult(
-            quizId, subject, active.quiz().topic, active.quiz().difficulty,
+            quizId, active.quiz().subject, active.quiz().topic, active.quiz().difficulty,
             active.quiz().questionCount, totalScore, maxScore,
             Math.round(percentScore * 10.0) / 10.0, grade,
             String.join(", ", masteredConcepts),
             String.join(", ", revisitConcepts),
             bloomsBreakdown, questionResults, Instant.now().toString()
         );
-        resultStore.computeIfAbsent(learnerId + ":" + subject, k -> new ArrayList<>()).add(result);
+        resultStore.computeIfAbsent(sessionId, k -> new ArrayList<>()).add(result);
         activeQuizStore.remove(quizId);
 
         return ResponseEntity.ok(new QuizSubmitResponse(
@@ -194,16 +230,19 @@ public class QuizController {
 
     /**
      * GET /quiz/{learnerId}/{subject}/history
-     * Returns all completed quiz results for this learner+subject,
+     * Returns all completed quiz results for this session,
      * ordered most recent first.
      */
     @GetMapping("/{learnerId}/{subject}/history")
     public ResponseEntity<QuizHistoryResponse> history(
             @PathVariable String learnerId,
             @PathVariable String subject) {
-
-        String key = learnerId + ":" + subject;
-        List<QuizResult> results = resultStore.getOrDefault(key, Collections.emptyList());
+        // If no session has been started yet, there are simply no results
+        // — return an empty history rather than 404'ing.
+        String sessionId = sessionManager.resolveSessionId(learnerId, subject);
+        List<QuizResult> results = sessionId == null
+            ? Collections.emptyList()
+            : resultStore.getOrDefault(sessionId, Collections.emptyList());
 
         // Sort most recent first
         List<QuizResult> sorted = results.stream()
@@ -226,7 +265,7 @@ public class QuizController {
             .toList();
 
         return ResponseEntity.ok(new QuizHistoryResponse(
-            learnerId, subject, totalAttempts,
+            sessionId, totalAttempts,
             Math.round(avgScore * 10.0) / 10.0,
             Math.round(bestScore * 10.0) / 10.0,
             scoreTrend, sorted
@@ -242,9 +281,10 @@ public class QuizController {
             @PathVariable String learnerId,
             @PathVariable String subject,
             @PathVariable String quizId) {
+        String sessionId = sessionManager.resolveSessionId(learnerId, subject);
+        if (sessionId == null) return ResponseEntity.notFound().build();
 
-        String key = learnerId + ":" + subject;
-        return resultStore.getOrDefault(key, Collections.emptyList()).stream()
+        return resultStore.getOrDefault(sessionId, Collections.emptyList()).stream()
             .filter(r -> r.quizId().equals(quizId))
             .findFirst()
             .<ResponseEntity<?>>map(ResponseEntity::ok)
@@ -257,9 +297,22 @@ public class QuizController {
      * Called by SessionController when a quiz is generated mid-session
      * and the result should be recorded for progress analytics.
      */
-    public void recordResult(String learnerId, String subject, QuizResult result) {
-        resultStore.computeIfAbsent(learnerId + ":" + subject, k -> new ArrayList<>()).add(result);
+    public void recordResult(String sessionId, QuizResult result) {
+        resultStore.computeIfAbsent(sessionId, k -> new ArrayList<>()).add(result);
     }
+
+    // ── Internal helpers ─────────────────────────────────────────────────────
+
+    /** Walk to the root cause so error bodies show the real reason, not a wrapper. */
+    private static String rootMessage(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null && cur.getCause() != cur) cur = cur.getCause();
+        String m = cur.getMessage();
+        return (m == null || m.isBlank()) ? cur.getClass().getSimpleName() : m;
+    }
+
+    /** Structured error body so the UI can branch on `code` rather than parse text. */
+    public record ErrorBody(String code, String message) {}
 
     // ── Inner types ───────────────────────────────────────────────────────────
 
@@ -294,9 +347,9 @@ public class QuizController {
         String completedAt) {}
 
     public record QuizHistoryResponse(
-        String learnerId, String subject, int totalAttempts,
+        String sessionId, int totalAttempts,
         double avgScore, double bestScore,
         List<Double> scoreTrend, List<QuizResult> results) {}
 
-    public record ActiveQuiz(Quiz quiz, String learnerId, String subject, String startedAt) {}
+    public record ActiveQuiz(Quiz quiz, String sessionId, String startedAt) {}
 }

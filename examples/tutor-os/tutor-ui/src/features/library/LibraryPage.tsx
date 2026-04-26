@@ -5,6 +5,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Tag } from '@/components/ui/Misc';
 import type { SourceKind } from '@/lib/types';
 import { fmtPercent } from '@/lib/format';
+import { SubTabs } from '@/components/ui/SubTabs';
+import { LIBRARY_TABS } from '@/components/layout/hubTabs';
 
 const ICON: Record<SourceKind, React.ComponentType<{ size?: string | number }>> = {
   book:  Book,
@@ -23,6 +25,7 @@ const ICON: Record<SourceKind, React.ComponentType<{ size?: string | number }>> 
 export function LibraryPage() {
   return (
     <div className="page-react">
+      <SubTabs tabs={LIBRARY_TABS} ariaLabel="Library hub" />
       <header className="page-header">
         <div>
           <h1>Library</h1>

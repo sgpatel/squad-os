@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Eraser, Pen, Undo, Trash2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { SubTabs } from '@/components/ui/SubTabs';
+import { NOTES_TABS } from '@/components/layout/hubTabs';
 
 type Tool = 'pen' | 'eraser';
 interface Stroke {
@@ -97,6 +99,7 @@ export function RoughWorkPage() {
 
   return (
     <div className="canvas-page">
+      <SubTabs tabs={NOTES_TABS} ariaLabel="Notes hub" />
       <div className="canvas-toolbar">
         <Button variant={tool === 'pen' ? 'primary' : 'default'} size="sm"
           leading={<Pen size={12} />} onClick={() => setTool('pen')}>Pen</Button>

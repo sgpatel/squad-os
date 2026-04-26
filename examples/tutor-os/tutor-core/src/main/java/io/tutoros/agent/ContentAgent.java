@@ -163,19 +163,25 @@ public class ContentAgent {
      */
     @SquadTool(
         name        = "requestVisualisation",
-        description = "Request a visual explanation of a concept. " +
-                      "Specify the type: SVG (instant diagram), D3JS (interactive chart), " +
-                      "MANIM (animated video — takes 30s to render). " +
-                      "Returns a placeholder that VisualisationAgent will populate."
+        description = "ALWAYS call this when the learner asks for a diagram, " +
+                      "structure, plot, graph, chart, or visualisation of a " +
+                      "concept (e.g. 'show me the structure of caffeine', " +
+                      "'plot the rate of reaction', 'draw a free-body diagram'). " +
+                      "Specify the type hint: 'chem' for molecules / organic " +
+                      "structures, 'plot' for function graphs / data plots / " +
+                      "distributions. Returns a placeholder; the actual " +
+                      "renderer-ready spec is produced by VisualisationAgent."
     )
     public String requestVisualisation(
         @ToolParam(description = "Concept to visualise") String concept,
-        @ToolParam(description = "Visual type: SVG | D3JS | MANIM") String type,
+        @ToolParam(description = "Diagram domain hint: chem | plot (v1) — VisualisationAgent re-picks if needed") String type,
         @ToolParam(description = "Learner level to calibrate complexity") String learnerLevel
     ) {
-        // Signals the pipeline to invoke VisualisationAgent asynchronously
+        // Signals the pipeline to invoke VisualisationAgent asynchronously.
+        // The actual `type` is decided by the VisualisationAgent's spec prompt;
+        // `type` here is just a hint kept for backwards compatibility.
         return String.format(
-            "{\"renderType\":\"%s\",\"concept\":\"%s\",\"level\":\"%s\",\"status\":\"QUEUED\"}",
+            "{\"type\":\"%s\",\"concept\":\"%s\",\"level\":\"%s\",\"status\":\"QUEUED\"}",
             type, concept, learnerLevel
         );
     }

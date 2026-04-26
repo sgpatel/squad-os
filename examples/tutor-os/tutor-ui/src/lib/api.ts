@@ -15,7 +15,7 @@ import type {
   PipelineEvent,
 } from './pipeline';
 import type {
-  ChatMessage, DebateRound, PipelineRun, PipelineStep, PipelineStageKey
+  ChatMessage, DebateRound, PipelineRun, PipelineStep, PipelineStageKey, VisualAsset
 } from './types';
 import { PIPELINE_STAGES } from './mockData';
 import type { PipelineStageDef } from './types';
@@ -23,14 +23,24 @@ import type { PipelineStageDef } from './types';
 // ── Env / feature flag ──────────────────────────────────────────────
 
 /**
- * When VITE_API_BASE_URL is set, the live backend path is used.
- * In dev with the Vite proxy, set it to an empty-ish marker like '/'
- * (or the proxy origin itself); in prod set the deployed API origin.
+ * Two env knobs, deliberately separate:
+ *
+ *   VITE_API_BASE_URL   — absolute origin of the backend ('http://host:8080'),
+ *                         used for direct cross-origin calls in prod.
+ *   VITE_LIVE_BACKEND   — 'true' to force the live path without supplying an
+ *                         origin, so dev can hit the Vite proxy (same-origin,
+ *                         no CORS). Ignored when VITE_API_BASE_URL is set.
+ *
+ * Keeping them separate means you can develop against the real backend
+ * without chasing CORS: leave the origin blank, set VITE_LIVE_BACKEND=true,
+ * and `fetch('/session/start')` is proxied by Vite to tutor-api.
  */
 const RAW_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
+const LIVE_FLAG = String(import.meta.env.VITE_LIVE_BACKEND ?? '').trim().toLowerCase();
 
 /** True iff we should hit the real tutor-api. Otherwise the mock pipeline runs. */
-export const LIVE_BACKEND: boolean = RAW_BASE.length > 0;
+export const LIVE_BACKEND: boolean =
+  RAW_BASE.length > 0 || LIVE_FLAG === 'true' || LIVE_FLAG === '1';
 
 /** REST base — '' means "use same-origin / Vite proxy". */
 const HTTP_BASE: string = RAW_BASE.replace(/\/+$/, '');
@@ -155,7 +165,167 @@ export const api = {
   endSession(sessionId: string): Promise<unknown> {
     return apiFetch(`/session/${encodeURIComponent(sessionId)}/end`, { method: 'POST' });
   },
+
+  // ── Quiz / Practice generation ─────────────────────────────────────
+  // Backend: QuizController (POST /quiz/{learnerId}/{subject}/...)
+  // and SessionController answer endpoint for rubric-based grading.
+
+  generateQuiz(
+    learnerId: string,
+    subject: string,
+    req: { topic?: string; difficulty?: string; questionCount?: number }
+  ): Promise<QuizGenerateResponse> {
+    return apiFetch(
+      `/quiz/${encodeURIComponent(learnerId)}/${encodeURIComponent(subject)}/generate`,
+      { method: 'POST', body: JSON.stringify(req) }
+    );
+  },
+
+  submitQuiz(
+    learnerId: string,
+    subject: string,
+    quizId: string,
+    answers: QuizAnswerEntry[]
+  ): Promise<QuizSubmitResponse> {
+    return apiFetch(
+      `/quiz/${encodeURIComponent(learnerId)}/${encodeURIComponent(subject)}/${encodeURIComponent(quizId)}/submit`,
+      { method: 'POST', body: JSON.stringify({ answers }) }
+    );
+  },
+
+  submitAnswer(
+    sessionId: string,
+    question: BackendPracticeQuestion,
+    answer: string,
+    attemptNumber = 1
+  ): Promise<{ feedback: BackendAssessmentFeedback }> {
+    return apiFetch(
+      `/session/${encodeURIComponent(sessionId)}/answer`,
+      { method: 'POST', body: JSON.stringify({ question, answer, attemptNumber }) }
+    );
+  },
 };
+
+// ── Session bootstrap (shared by chat + quiz + practice) ───────────
+
+/**
+ * Stable learner id used across the whole UI. The backend keys session
+ * state on `{learnerId}:{subject}`; all features must agree on this
+ * value or they'll generate ghost sessions that can't be reconciled.
+ *
+ * In a real app this comes from auth. For the example it's a constant.
+ */
+export const DEMO_LEARNER_ID = 'demo-learner';
+
+const SESSIONS_CACHE_KEY = 'tutoros.sessionsBySubject';
+
+function loadSessionMap(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(SESSIONS_CACHE_KEY);
+    return raw ? JSON.parse(raw) as Record<string, string> : {};
+  } catch { return {}; }
+}
+function saveSessionMap(m: Record<string, string>): void {
+  try { localStorage.setItem(SESSIONS_CACHE_KEY, JSON.stringify(m)); }
+  catch { /* noop */ }
+}
+
+/**
+ * Ensure a backend session exists for a (learnerId, subject) pair and
+ * return the sessionId. Safe to call many times — the cache keeps us
+ * from spamming `/session/start`, and the backend's `startOrResume` is
+ * idempotent for the same learner anyway.
+ */
+export async function ensureBackendSession(
+  learnerId: string,
+  subject: string,
+  opts?: Partial<StartSessionRequest>
+): Promise<string> {
+  const key = `${learnerId}:${subject}`;
+  const cache = loadSessionMap();
+  if (cache[key]) return cache[key];
+
+  const res = await api.startSession({
+    learnerId,
+    name: opts?.name ?? 'Priya',
+    level: opts?.level ?? 'higher-sec',
+    subjects: [subject],
+    topic: opts?.topic ?? `Introduction to ${subject}`,
+    goal: opts?.goal ?? 'Build a strong conceptual foundation.',
+    sessionsPerWeek: opts?.sessionsPerWeek ?? 4,
+    analogyDomain: opts?.analogyDomain ?? 'everyday life',
+    profession: opts?.profession,
+  });
+
+  cache[key] = res.sessionId;
+  saveSessionMap(cache);
+  return res.sessionId;
+}
+
+// ── Quiz/practice request+response shapes (mirror Java records) ─────
+
+export interface BackendPracticeQuestion {
+  question: string;
+  type: 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'CALCULATION' | 'DIAGRAM_LABEL' | 'ESSAY' | string;
+  options?: string;          // pipe-separated for MC
+  answer: string;
+  bloomsLevel?: string;
+  difficulty?: string;
+  conceptTag?: string;
+  hints?: string;
+  workedSolution?: string;
+  diagramDescription?: string;
+  marks?: number;
+}
+
+export interface BackendAssessmentFeedback {
+  score: number;
+  correct: boolean;
+  correctParts?: string;
+  incorrectParts?: string;
+  hint?: string;
+  encouragement?: string;
+  modelAnswer?: string;
+  bloomsDemonstrated?: string;
+  masteryDelta?: number;
+  suggestRetry?: boolean;
+  nextConcept?: string;
+}
+
+export interface QuizGenerateResponse {
+  quizId: string;
+  subject: string;
+  topic: string;
+  difficulty: string;
+  questionCount: number;
+  timeLimitMinutes: number;
+  totalMarks: number;
+  bloomsLevelsCovered: string;
+  targetGaps: string;
+  /** JSON array of BackendPracticeQuestion, serialised as a string */
+  questionsJson: string;
+  message: string;
+}
+
+export interface QuizAnswerEntry {
+  question: string;
+  correctAnswer: string;
+  studentAnswer: string;
+  conceptTag: string;
+}
+
+export interface QuizSubmitResponse {
+  quizId: string;
+  totalScore: number;
+  maxScore: number;
+  percentScore: number;
+  grade: string;
+  masteredConcepts: string;
+  revisitConcepts: string;
+  encouragement: string;
+  questionResults: unknown[];
+  bloomsBreakdown: Record<string, string>;
+}
 
 // ── WebSocket frame protocol ────────────────────────────────────────
 
@@ -170,7 +340,7 @@ export const api = {
 export interface StreamFrame {
   type: 'CONNECTED' | 'TOKEN' | 'DONE' | 'ERROR' | 'PONG'
       | 'STAGE_START' | 'STAGE_DONE' | 'STAGE_ERROR'
-      | 'DEBATE_ROUND' | 'MESSAGE' | 'MASTERY_DELTA';
+      | 'DEBATE_ROUND' | 'MESSAGE' | 'MASTERY_DELTA' | 'VISUAL';
   stage?: PipelineStageKey;
   content?: string;
   payload?: unknown;
@@ -252,6 +422,13 @@ export class FrameTranslator {
   private stageStartWall: Record<string, number> = {};
   private debateRounds: DebateRound['rounds'] = [];
   private hasReceivedStageEvent = false;
+  /**
+   * Visual asset received via a VISUAL frame. Stashed here so that whatever
+   * tutor-message event fires next (TOKEN-seeded message or final MESSAGE)
+   * can attach it. If the tutor message already exists when VISUAL arrives,
+   * we patch + re-emit immediately.
+   */
+  private pendingVisual: VisualAsset | null = null;
 
   constructor(
     prompt: string,
@@ -310,6 +487,19 @@ export class FrameTranslator {
       case 'MESSAGE': {
         const p = frame.payload as Partial<ChatMessage> | undefined;
         if (p) this.publishFinalTutor(p);
+        return;
+      }
+
+      case 'VISUAL': {
+        const asset = frame.payload as VisualAsset | undefined;
+        if (!asset || !asset.type || !asset.specJson) return;
+        this.pendingVisual = asset;
+        // If the tutor message has already been seeded (token streaming or a
+        // prior MESSAGE), patch it in place so the renderer mounts now.
+        if (this.tutorMsg) {
+          this.tutorMsg = { ...this.tutorMsg, visualAsset: asset };
+          this.emit({ kind: 'message', runId: this.runId, message: this.tutorMsg });
+        }
         return;
       }
 
@@ -414,6 +604,8 @@ export class FrameTranslator {
         body: token,
         pipelineRunId: this.runId,
         createdAt: Date.now(),
+        // VISUAL frames may arrive before the first TOKEN — attach now.
+        visualAsset: this.pendingVisual ?? undefined,
       };
       this.emit({ kind: 'message', runId: this.runId, message: this.tutorMsg });
       return;
@@ -426,6 +618,11 @@ export class FrameTranslator {
 
   private publishFinalTutor(p: Partial<ChatMessage>): void {
     const id = this.tutorMsg?.id ?? `msg_${Date.now().toString(36)}`;
+    // visualAsset preference order:
+    //   1. payload.visualAsset (belt-and-suspenders from the MESSAGE frame)
+    //   2. pendingVisual stashed by an earlier VISUAL frame
+    //   3. whatever was already on the streamed tutor message
+    const visualAsset = p.visualAsset ?? this.pendingVisual ?? this.tutorMsg?.visualAsset;
     const merged: ChatMessage = {
       id,
       role: 'tutor',
@@ -433,6 +630,7 @@ export class FrameTranslator {
       confidence: p.confidence,
       citations: p.citations,
       debate: p.debate,
+      visualAsset,
       pipelineRunId: this.runId,
       createdAt: this.tutorMsg?.createdAt ?? Date.now(),
     };

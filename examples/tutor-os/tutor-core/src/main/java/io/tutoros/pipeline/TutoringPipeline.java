@@ -74,6 +74,7 @@ public class TutoringPipeline {
     private final DiagnosticAgent   diagnostic;
     private final CurriculumPlannerAgent planner;
     private final ContentAgent      content;
+    private final IntentAnalyzerAgent intentAnalyzer;
     private final SocraticTutorAgent socratic;
     private final DirectTutorAgent  direct;
     private final PracticeAgent     practice;
@@ -96,6 +97,7 @@ public class TutoringPipeline {
                              DiagnosticAgent diagnostic,
                              CurriculumPlannerAgent planner,
                              ContentAgent content,
+                             IntentAnalyzerAgent intentAnalyzer,
                              SocraticTutorAgent socratic,
                              DirectTutorAgent direct,
                              PracticeAgent practice,
@@ -106,7 +108,7 @@ public class TutoringPipeline {
                              QuizAgent quiz,
                              VisualisationAgent visualisation,
                              DebateEngine debateEngine) {
-        this(ctx, guardian, diagnostic, planner, content, socratic, direct,
+        this(ctx, guardian, diagnostic, planner, content, intentAnalyzer, socratic, direct,
              practice, assessment, progress, escalation, todo, quiz,
              visualisation, debateEngine, PipelineEventBus.NOOP);
     }
@@ -120,6 +122,7 @@ public class TutoringPipeline {
                              DiagnosticAgent diagnostic,
                              CurriculumPlannerAgent planner,
                              ContentAgent content,
+                             IntentAnalyzerAgent intentAnalyzer,
                              SocraticTutorAgent socratic,
                              DirectTutorAgent direct,
                              PracticeAgent practice,
@@ -136,6 +139,7 @@ public class TutoringPipeline {
         this.diagnostic    = diagnostic;
         this.planner       = planner;
         this.content       = content;
+        this.intentAnalyzer = intentAnalyzer;
         this.socratic      = socratic;
         this.direct        = direct;
         this.practice      = practice;
@@ -201,6 +205,21 @@ public class TutoringPipeline {
             String groundedContent = contentResult.content();
             events.stageDone(sid, "content", groundedContent);
 
+            // ── Step 3.5: Visualisation ──────────────────────────────────
+            // Two triggers, either is sufficient:
+            //   (a) ContentAgent fired the requestVisualisation tool — its
+            //       sentinel JSON {"…","status":"QUEUED"} lands in the
+            //       grounded text.
+            //   (b) The user message itself reads like a visualise request
+            //       ("show me the structure of …", "draw …", "plot …",
+            //        "diagram", "visualise/visualize", "graph of …", etc).
+            //
+            // (b) exists because LLMs frequently pick wikipedia/wolfram over
+            // requestVisualisation even when the learner explicitly asks for
+            // a diagram. Triggering deterministically on the user's intent
+            // makes the diagram path reliable instead of LLM-mood-dependent.
+            VisualAsset asset = maybeRunVisualisation(sid, message, groundedContent, session);
+
             // ── Step 4: Teaching style debate ────────────────────────────
             events.stageStart(sid, "debate");
             String winnerStyle = runTeachingDebate(session, message, groundedContent);
@@ -227,11 +246,15 @@ public class TutoringPipeline {
 
             // Emit a final structured MESSAGE so non-token-stream subscribers
             // (and the UI's frame translator) get the full reply with metadata
-            // even on backends that don't stream tokens.
-            events.message(sid, java.util.Map.of(
-                "body",          tutorResponse,
-                "teachingStyle", winnerStyle
-            ));
+            // even on backends that don't stream tokens. When a visual asset
+            // was produced for this turn, include it in the payload so clients
+            // that missed the dedicated VISUAL frame (e.g. polling, replays)
+            // still see the diagram on the same message.
+            java.util.Map<String, Object> messagePayload = new java.util.LinkedHashMap<>();
+            messagePayload.put("body",          tutorResponse);
+            messagePayload.put("teachingStyle", winnerStyle);
+            if (asset != null) messagePayload.put("visualAsset", asset);
+            events.message(sid, messagePayload);
             events.done(sid);
 
             return PipelineResult.tutor(tutorResponse, winnerStyle, groundedContent);
@@ -341,7 +364,7 @@ public class TutoringPipeline {
         );
 
         // Update mastery via ProgressAgent
-        ctx.submitTo(AgentRole.SUPPORT,
+        ctx.submitTo(AgentRole.HEALER,
             progress.masteryUpdatePrompt(
                 question.conceptTag,
                 session.currentMastery(question.conceptTag),
@@ -369,13 +392,29 @@ public class TutoringPipeline {
      */
     public Quiz generateQuiz(SessionState session, String topic,
                               int questionCount, String difficulty) {
-        AgentResponse result = ctx.submitTo(AgentRole.EXECUTOR,
+        AgentResponse result = ctx.submitTo(AgentRole.DPS,
             quiz.quizPrompt(
                 session.profile().raw(), topic, questionCount,
                 difficulty, session.memoryContext()
             )
         );
-        return result.structuredOutput(Quiz.class);
+        Quiz parsed = result.structuredOutput(Quiz.class);
+        if (parsed == null) {
+            // Structured-output parse miss — surface the raw agent reply
+            // (or class name if even that's empty) so the controller can
+            // include it in the 502 body and the operator can see what
+            // the LLM actually said. Throwing here is preferable to
+            // returning null because the controller has dedicated
+            // exception handling that includes root-cause messages.
+            String raw = result.content();
+            String snippet = (raw == null || raw.isBlank())
+                ? "(empty response from agent)"
+                : raw.length() > 400 ? raw.substring(0, 400) + "…" : raw;
+            throw new IllegalStateException(
+                "Quiz agent returned no parseable Quiz JSON. Raw reply: " + snippet
+            );
+        }
+        return parsed;
     }
 
     /**
@@ -383,7 +422,7 @@ public class TutoringPipeline {
      * Called by SessionController on /session/{id}/todos endpoint.
      */
     public TodoList generateTodos(SessionState session, SessionSummary summary) {
-        AgentResponse result = ctx.submitTo(AgentRole.EXECUTOR,
+        AgentResponse result = ctx.submitTo(AgentRole.WILDCARD,
             todo.generatePrompt(
                 summary,
                 session.profile().goal(),
@@ -423,6 +462,18 @@ public class TutoringPipeline {
             )
         );
         StudyPlan plan = result.structuredOutput(StudyPlan.class);
+        if (plan == null) {
+            // Planner LLM call failed or returned unparseable JSON.
+            // Don't crash the pipeline — surface a graceful message so the
+            // UI can tell the learner to retry. The raw text (if any) may
+            // contain the agent's apology / partial reasoning.
+            String raw = result != null ? result.content() : null;
+            String fallback = (raw != null && !raw.isBlank())
+                ? raw
+                : "I couldn't draft a study plan this time — the planning agent didn't return a usable response. "
+                + "Please try again in a moment.";
+            return PipelineResult.blocked(fallback);
+        }
         session.updatePlan(plan);
         int chapterCount = 0;
         if (plan != null && plan.chapters != null && !plan.chapters.isBlank()) {
@@ -455,8 +506,44 @@ public class TutoringPipeline {
     }
 
     private String runTeachingDebate(SessionState session, String message, String content) {
-        // Run 2-round debate: SocraticTutor vs DirectTutor — use the explicit form
-        // since TutoringPipeline itself does not carry an @Debate annotation.
+        // Prefer a single-shot intent analysis over the 2-round debate. It's
+        // ~10× faster (one LLM call vs. six) and — with OpenAI — already
+        // accurate enough. The debate remains as a fallback.
+        try {
+            String conversationHistory = nullSafe(session.recentHistory(), "(no prior turns)");
+            String learnerProfile = String.format(
+                "Level: %s | Style: %s | Mastery: %d%% | Goal: %s",
+                nullSafe(session.profile().level(),         "higher-sec"),
+                nullSafe(session.profile().learningStyle(), "DIRECT"),
+                session.currentMasteryPct(),
+                nullSafe(session.profile().goal(),          "DEEP_UNDERSTANDING")
+            );
+
+            // Route to SCOUT — IntentAnalyzerAgent's role. Using ANALYST would
+            // collide with DiagnosticAgent and dispatch the wrong agent.
+            AgentResponse intentResult = ctx.submitTo(AgentRole.SCOUT,
+                intentAnalyzer.analyzeIntent(message, conversationHistory, learnerProfile)
+            );
+
+            // Parse the structured output rather than substring-matching the
+            // raw content (the `reasoning` field frequently contains the word
+            // "DIRECT" even when the recommendation is SOCRATIC).
+            IntentAnalysis analysis = intentResult.structuredOutput(IntentAnalysis.class);
+            if (analysis != null && analysis.recommendedStyle != null) {
+                String style = analysis.recommendedStyle.trim().toUpperCase();
+                if ("SOCRATIC".equals(style) || "DIRECT".equals(style)) {
+                    log.log(Level.INFO,
+                        "Intent → style={0} confidence={1} reason={2}",
+                        style, analysis.confidence, nullSafe(analysis.reasoning, ""));
+                    return style;
+                }
+            }
+        } catch (Exception e) {
+            log.log(Level.WARNING, "Intent analysis failed, falling back to debate: {0}",
+                    e.getMessage() != null ? e.getMessage() : e.toString());
+        }
+
+        // Fallback: Run 2-round debate if intent analysis fails
         try {
             DebateResult debate = debateEngine.run(
                 "Which teaching style is best for this learner on this concept? " +
@@ -469,9 +556,8 @@ public class TutoringPipeline {
             );
             return debate.consensus().contains("DIRECT") ? "DIRECT" : "SOCRATIC";
         } catch (Exception e) {
-            // Fallback: use profile preference if debate fails
-            return "DIRECT".equals(session.profile().preferredTeachingStyle())
-                   ? "DIRECT" : "SOCRATIC";
+            // Final fallback: default to DIRECT (better to over-explain than frustrate)
+            return "DIRECT";
         }
     }
 
@@ -501,13 +587,184 @@ public class TutoringPipeline {
     }
 
     private void notifyEscalation(SessionState session, String trigger, boolean distress) {
-        ctx.submitTo(AgentRole.SUPPORT,
+        ctx.submitTo(AgentRole.TANK,
             escalation.teacherBriefPrompt(
                 session.profile().name(), session.profile().level(),
                 session.currentConcept(), session.recentHistory(),
                 trigger, distress
             )
         );
+    }
+
+    /**
+     * Detects whether ContentAgent fired the {@code requestVisualisation}
+     * tool during step 3 and, if so, runs VisualisationAgent inline.
+     *
+     * The tool returns a sentinel JSON of shape
+     * {@code {"type":"<chem|plot>","concept":"<topic>","level":"<level>","status":"QUEUED"}}.
+     * That sentinel is part of the LLM's grounded output so we scan for it
+     * with a tolerant regex (the LLM may quote / re-format whitespace).
+     *
+     * Side effects on success:
+     *   - emits a {@code VISUAL} frame via {@link PipelineEventBus#visual}
+     *     so the UI can render the diagram before / alongside the tutor reply.
+     *
+     * Returns the parsed {@link VisualAsset} on success, {@code null} otherwise.
+     * Failures are swallowed (logged at WARNING) — visualisation is best-effort
+     * and must never block the teaching turn.
+     */
+    private VisualAsset maybeRunVisualisation(String sid, String userMessage,
+                                               String groundedContent,
+                                               SessionState session) {
+        // Trigger A: ContentAgent fired requestVisualisation — sentinel in grounded text.
+        boolean toolFired = groundedContent != null && (
+            groundedContent.contains("\"status\":\"QUEUED\"") ||
+            groundedContent.contains("\"status\": \"QUEUED\"")
+        );
+        // Trigger B: deterministic detection on the user's own message.
+        boolean userAskedForVisual = looksLikeVisualisationRequest(userMessage);
+
+        if (!toolFired && !userAskedForVisual) return null;
+
+        try {
+            String concept = null;
+            String typeHint = null;
+            if (toolFired) {
+                concept  = extractJsonField(groundedContent, "concept");
+                typeHint = extractJsonField(groundedContent, "type");
+            }
+            if (concept == null || concept.isBlank()) {
+                concept = sniffConceptFromMessage(userMessage);
+            }
+            if (concept == null || concept.isBlank()) {
+                concept = nullSafe(session.currentConcept(), "the current topic");
+            }
+            String level = nullSafe(session.profile().level(), "higher-sec");
+
+            // Hard-route the type before the LLM ever sees the prompt.
+            // The tool's typeHint wins when present (the LLM had context on
+            // the user's intent); otherwise the deterministic keyword router
+            // decides. This prevents weak models from drifting into "chem"
+            // and emitting a default caffeine SMILES for, e.g., "sin theta".
+            String pinnedType = (typeHint != null && !typeHint.isBlank())
+                ? typeHint.trim().toLowerCase()
+                : visualisation.selectRenderType(concept);
+
+            log.log(Level.INFO,
+                "Visualisation triggered for sid={0} concept={1} pinnedType={2} via={3}",
+                sid, concept, pinnedType, toolFired ? "tool" : "user-intent");
+
+            AgentResponse vizResult = ctx.submitTo(AgentRole.VISIONARY,
+                visualisation.visualPrompt(concept, level, pinnedType));
+            VisualAsset asset = vizResult != null
+                ? vizResult.structuredOutput(VisualAsset.class)
+                : null;
+            if (asset == null || asset.specJson == null || asset.specJson.isBlank()) {
+                log.log(Level.WARNING,
+                    "VisualisationAgent returned no usable VisualAsset for sid={0}", sid);
+                return null;
+            }
+            events.visual(sid, asset);
+            return asset;
+        } catch (RuntimeException ex) {
+            log.log(Level.WARNING, "Visualisation pipeline step failed for sid={0}: {1}",
+                sid, ex.getMessage() != null ? ex.getMessage() : ex.toString());
+            return null;
+        }
+    }
+
+    /**
+     * Cheap keyword classifier for "the user is explicitly asking for a
+     * diagram / plot / structure". Errs on the side of false-negatives —
+     * we'd rather miss a borderline case than render a diagram nobody asked
+     * for. Matches phrases the FE's own "Visualize" follow-up button emits
+     * ("Produce a clear labelled SVG diagram …") plus common natural-language
+     * variants.
+     */
+    private static boolean looksLikeVisualisationRequest(String message) {
+        if (message == null) return false;
+        String m = message.toLowerCase();
+        // Strong, unambiguous markers.
+        String[] strong = {
+            "visualise", "visualize", "labelled svg", "labeled svg",
+            "draw a diagram", "draw the diagram", "draw a structure",
+            "draw the structure", "show me the structure", "show structure of",
+            "structure of ", "molecular structure", "skeletal structure",
+            "diagram of ", "diagram for ", "svg diagram",
+            "plot of ", "plot the ", "graph of ", "graph the ",
+            "chart of ", "chart the "
+        };
+        for (String s : strong) {
+            if (m.contains(s)) return true;
+        }
+        // Verb + diagram/plot/graph/chart anywhere — softer match.
+        boolean hasVerb = m.contains("show ") || m.contains("draw ") ||
+                          m.contains("render ") || m.contains("sketch ") ||
+                          m.contains("illustrate ");
+        boolean hasNoun = m.contains("diagram") || m.contains("plot") ||
+                          m.contains("graph") || m.contains("chart") ||
+                          m.contains("structure");
+        return hasVerb && hasNoun;
+    }
+
+    /**
+     * Best-effort concept extraction from a user's visualise request. Strips
+     * the imperative wrapper ("show me the structure of …") so the
+     * VisualisationAgent prompt receives the bare topic. Falls back to the
+     * full message when no obvious wrapper is found — the agent's own
+     * structured-output prompt is robust to extra prose.
+     */
+    private static String sniffConceptFromMessage(String message) {
+        if (message == null || message.isBlank()) return null;
+        String m = message.trim();
+        String lower = m.toLowerCase();
+        String[] prefixes = {
+            "show me the structure of ", "show me the structure for ",
+            "show me a diagram of ", "show me the diagram of ",
+            "show the structure of ", "show structure of ",
+            "draw the structure of ", "draw a structure of ",
+            "draw a diagram of ",      "draw the diagram of ",
+            "diagram of ",             "diagram for ",
+            "plot of ",                "plot the ",
+            "graph of ",               "graph the ",
+            "structure of ",
+            "visualise ", "visualize ",
+            "render ", "sketch ", "illustrate "
+        };
+        for (String pfx : prefixes) {
+            int i = lower.indexOf(pfx);
+            if (i >= 0) {
+                String tail = m.substring(i + pfx.length()).trim();
+                // Drop anything after the first sentence terminator.
+                int cut = -1;
+                for (char c : new char[] { '.', '?', '!', '\n' }) {
+                    int k = tail.indexOf(c);
+                    if (k >= 0 && (cut < 0 || k < cut)) cut = k;
+                }
+                if (cut > 0) tail = tail.substring(0, cut).trim();
+                if (!tail.isBlank()) return tail;
+            }
+        }
+        // No prefix matched — use the message as-is, trimmed to keep prompts tight.
+        return m.length() > 160 ? m.substring(0, 160) : m;
+    }
+
+    /**
+     * Extracts a string field from the FIRST JSON-like object in {@code text}
+     * matching the QUEUED visualisation sentinel. Tolerates surrounding prose
+     * and whitespace variations the LLM may introduce when echoing the tool
+     * result back into its content stream.
+     */
+    private static String extractJsonField(String text, String field) {
+        // Match: "field"  :  "value"  — non-greedy on value, allow escaped quotes.
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+            "\"" + java.util.regex.Pattern.quote(field) + "\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\""
+        );
+        java.util.regex.Matcher m = p.matcher(text);
+        if (!m.find()) return null;
+        return m.group(1)
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\");
     }
 
     /** Returns {@code value} when non-null and non-empty, otherwise {@code fallback}. */

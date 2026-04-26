@@ -40,6 +40,7 @@ public class SpringAiLlmAdapter implements LlmPort {
 
     private final ChatClient chatClient;
     private final String     provider;
+    private static final System.Logger log = System.getLogger(SpringAiLlmAdapter.class.getName());
 
     public SpringAiLlmAdapter(ChatClient.Builder builder, String provider) {
         this.chatClient = builder.build();
@@ -50,6 +51,9 @@ public class SpringAiLlmAdapter implements LlmPort {
 
     @Override
     public LlmResponse chat(String systemPrompt, String userMessage, LlmOptions opts) {
+        log.log(System.Logger.Level.INFO, "\n=== LLM REQUEST ===\nSystem: {0}\nUser: {1}\nOptions: {2}\n",
+                truncate(systemPrompt, 500), truncate(userMessage, 200), opts);
+        
         var promptSpec = chatClient.prompt()
             .system(systemPrompt)
             .user(userMessage);
@@ -66,7 +70,12 @@ public class SpringAiLlmAdapter implements LlmPort {
         }
         
         ChatResponse cr = promptSpec.call().chatResponse();
-        return toLlmResponse(cr);
+        LlmResponse response = toLlmResponse(cr);
+        
+        log.log(System.Logger.Level.INFO, "\n=== LLM RESPONSE ===\n{0}\nTokens: prompt={1}, completion={2}\n",
+                truncate(response.content(), 500), response.promptTokens(), response.completionTokens());
+        
+        return response;
     }
 
     // ── Multi-turn chat with history ─────────────────────────────────────
@@ -175,12 +184,30 @@ public class SpringAiLlmAdapter implements LlmPort {
         try {
             Usage usage = cr.getMetadata().getUsage();
             if (usage != null) {
-                prompt     = usage.getPromptTokens()     != null ? usage.getPromptTokens().intValue()     : 0;
-                completion = usage.getCompletionTokens() != null ? usage.getCompletionTokens().intValue() : 0;
+                // Use reflection to handle both Integer and Long return types across Spring AI versions
+                try {
+                    var promptMethod = usage.getClass().getMethod("getPromptTokens");
+                    var completionMethod = usage.getClass().getMethod("getCompletionTokens");
+                    Object promptTokens = promptMethod.invoke(usage);
+                    Object completionTokens = completionMethod.invoke(usage);
+                    
+                    if (promptTokens instanceof Number) {
+                        prompt = ((Number) promptTokens).intValue();
+                    }
+                    if (completionTokens instanceof Number) {
+                        completion = ((Number) completionTokens).intValue();
+                    }
+                } catch (Exception ignored) {}
             }
         } catch (Exception ignored) {}
         return new LlmResponse(
             cr.getResult().getOutput().getText(),
             prompt, completion, provider);
+    }
+    
+    private static String truncate(String text, int maxLen) {
+        if (text == null) return "null";
+        if (text.length() <= maxLen) return text;
+        return text.substring(0, maxLen) + "... [truncated]";
     }
 }

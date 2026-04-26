@@ -61,6 +61,12 @@ public class WebSocketPipelineEventBus implements PipelineEventBus {
     }
 
     @Override
+    public void visual(String sessionId, Object visualAsset) {
+        if (sessionId == null || sessionId.isBlank() || visualAsset == null) return;
+        handler.broadcastVisual(sessionId, visualAsset);
+    }
+
+    @Override
     public void done(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) return;
         handler.broadcastDone(sessionId);

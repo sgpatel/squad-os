@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { runPipelineMock, type PipelineEvent } from '@/lib/pipeline';
-import { LIVE_BACKEND, api, connectStream, FrameTranslator, ApiError, type StreamFrame } from '@/lib/api';
+import { LIVE_BACKEND, api, connectStream, FrameTranslator, ApiError, DEMO_LEARNER_ID, type StreamFrame } from '@/lib/api';
 import { useSettings } from '@/store/settings';
+import { useAuth } from '@/store/auth';
 import { stagesForMode } from '@/lib/mockData';
 import type { PipelineRun, PipelineStep, ChatMessage } from '@/lib/types';
 
@@ -37,6 +38,9 @@ interface PipelineState {
 
   start: (prompt: string) => Promise<void>;
   pushUserMessage: (body: string) => void;
+  /** Inject a tutor message with a hardcoded VisualAsset — for FE demos
+   *  while the live agent path that populates `visualAsset` is still TODO. */
+  pushDemoVisual: (kind: 'chem' | 'plot') => void;
   reset: () => void;
 }
 
@@ -116,6 +120,52 @@ export const usePipeline = create<PipelineState>()((set, get) => ({
     } finally {
       set({ isRunning: false });
     }
+  },
+
+  pushDemoVisual: (kind) => {
+    const now = Date.now();
+    const id = `msg_demo_${now.toString(36)}`;
+    const visualAsset = kind === 'chem'
+      ? {
+          type: 'chem' as const,
+          concept: 'Benzene',
+          title: 'Benzene (C₆H₆)',
+          caption: 'Aromatic ring — six sp² carbons, delocalised π electrons.',
+          specJson: JSON.stringify({ smiles: 'c1ccccc1' }),
+          altText: 'Skeletal structure of benzene: a regular hexagon of six carbons with alternating double bonds.',
+        }
+      : {
+          type: 'plot' as const,
+          concept: 'Sine wave',
+          title: 'y = sin(x)',
+          caption: 'One full period from 0 to 2π — note zeros at 0, π, 2π.',
+          specJson: JSON.stringify({
+            $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+            width: 420, height: 220,
+            data: {
+              values: Array.from({ length: 81 }, (_, i) => {
+                const x = (i / 80) * 2 * Math.PI;
+                return { x, y: Math.sin(x) };
+              }),
+            },
+            mark: { type: 'line', strokeWidth: 2 },
+            encoding: {
+              x: { field: 'x', type: 'quantitative', title: 'x (radians)' },
+              y: { field: 'y', type: 'quantitative', title: 'sin(x)' },
+            },
+          }),
+          altText: 'Line plot of y = sin(x) from 0 to 2π.',
+        };
+
+    const body = kind === 'chem'
+      ? 'Here is the structure of **benzene** — a planar hexagonal ring of six carbons with delocalised π electrons.'
+      : 'Here is **y = sin(x)** plotted across one full period (0 → 2π). Notice the zeros at 0, π, and 2π.';
+
+    set(s => ({
+      messages: [...s.messages, {
+        id, role: 'tutor', body, createdAt: now, visualAsset,
+      }],
+    }));
   },
 
   reset: () => {
@@ -229,15 +279,28 @@ async function ensureSession(
   const cached = get().sessionId;
   if (cached) return cached;
 
+  // Get the selected subject from workspace store
+  const { activeSubjectId, getSubject } = await import('@/store/workspace').then(m => m.useWorkspace.getState());
+  const subject = activeSubjectId ? getSubject(activeSubjectId) : null;
+
+  // Default to Biology/Photosynthesis if no subject selected
+  const subjectName = subject?.name || 'Biology';
+  const topic = subject ? `Introduction to ${subject.name}` : 'Photosynthesis';
+
+  // Pull identity + profile from the logged-in user. If called before
+  // auth is ready (shouldn't happen — RequireAuth gates the app), fall
+  // back to the demo constants so the request at least succeeds.
+  const me = useAuth.getState().currentUser();
+
   const res = await api.startSession({
-    learnerId: 'demo-learner',
-    name: 'Aarav',
-    level: 'higher-sec',
-    subjects: ['Biology'],
-    topic: 'Photosynthesis',
-    goal: 'Build a strong conceptual foundation for board exams.',
-    sessionsPerWeek: 4,
-    analogyDomain: 'everyday life'
+    learnerId: me?.id ?? DEMO_LEARNER_ID,
+    name:      me?.name ?? 'Learner',
+    level:     me?.level ?? 'higher-sec',
+    subjects: [subjectName],
+    topic: topic,
+    goal:  me?.goal ?? 'Build a strong conceptual foundation.',
+    sessionsPerWeek: me?.sessionsPerWeek ?? 4,
+    analogyDomain:   me?.analogyDomain   ?? 'everyday life',
   });
 
   saveSessionId(res.sessionId);
