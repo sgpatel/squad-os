@@ -53,7 +53,7 @@ class MemoryConfigSmokeTest {
             @Override public int dimensions() { return 8; }
         };
 
-        MemoryManager manager = cfg.memoryManager(router, fakeEmbedder);
+        MemoryManager manager = cfg.memoryManager(router, singletonProvider(fakeEmbedder));
         assertNotNull(manager, "manager bean must not be null");
 
         // ── Write one EPISODIC record via the synthetic annotation. ────
@@ -112,6 +112,18 @@ class MemoryConfigSmokeTest {
                     throw new UnsupportedOperationException(method.getName());
                 }
             });
+    }
+
+    /** ObjectProvider that returns the supplied bean. */
+    private static <T> ObjectProvider<T> singletonProvider(T bean) {
+        return new ObjectProvider<T>() {
+            @Override public T getObject() { return bean; }
+            @Override public T getObject(Object... args) { return bean; }
+            @Override public T getIfAvailable() { return bean; }
+            @Override public T getIfUnique() { return bean; }
+            @Override public void ifAvailable(Consumer<T> dependencyConsumer) { dependencyConsumer.accept(bean); }
+            @Override public void ifUnique(Consumer<T> dependencyConsumer) { dependencyConsumer.accept(bean); }
+        };
     }
 
     /** ObjectProvider that always says "no bean available". */

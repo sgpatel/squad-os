@@ -4,6 +4,7 @@ import io.squados.memory.MemoryManager;
 import io.squados.memory.annotation.MemoryType;
 import io.squados.memory.retrieval.EmbeddingPort;
 import io.squados.memory.retrieval.MemoryRouter;
+import io.squados.memory.retrieval.MockEmbeddingPort;
 import io.squados.memory.store.InProcessMemoryStore;
 import io.squados.memory.store.MemoryStore;
 import io.squados.memory.store.PgVectorEpisodicStore;
@@ -92,10 +93,29 @@ public class MemoryConfig {
      * MemoryManager — coordinator pulled into {@link io.squados.context.SquadContext}
      * by the starter's {@code ObjectProvider<MemoryManager>}. Once attached,
      * AgentWrapper's {@code @AgentMemory} read path lights up automatically.
+     *
+     * The {@link EmbeddingPort} is optional. The starter creates a Spring AI
+     * adapter only when an {@code EmbeddingModel} bean exists (i.e. an LLM
+     * provider is configured). When it doesn't — local dev without
+     * {@code OPENAI_API_KEY}, smoke tests, etc. — we fall back to
+     * {@link MockEmbeddingPort}: deterministic 64-dim vectors derived from
+     * the text hash, so memory writes/reads still work and similar phrases
+     * still cluster. Memory recall quality is obviously lower than with a
+     * real model, but the subsystem is alive instead of preventing boot.
      */
     @Bean
     @ConditionalOnMissingBean
-    public MemoryManager memoryManager(MemoryRouter router, EmbeddingPort embedder) {
+    public MemoryManager memoryManager(
+            MemoryRouter router,
+            ObjectProvider<EmbeddingPort> embedderProvider) {
+        EmbeddingPort embedder = embedderProvider.getIfAvailable();
+        if (embedder == null) {
+            System.out.println(
+                "[TutorOS] No EmbeddingPort bean — falling back to MockEmbeddingPort " +
+                "(64-dim deterministic). Set OPENAI_API_KEY (or another Spring AI " +
+                "embedding provider) for production-quality recall.");
+            embedder = new MockEmbeddingPort();
+        }
         System.out.println("[TutorOS] MemoryManager wired (read path active for @AgentMemory)");
         return new MemoryManager(router, embedder);
     }
