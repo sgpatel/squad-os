@@ -221,4 +221,74 @@ public class GuardianAgent {
             What part is confusing you most? Start there and we'll build from it. 🎯
             """;
     }
+
+    // ── Subject/Topic disambiguation ────────────────────────────────────
+
+    /**
+     * Subject-match classifier prompt.
+     *
+     * Lives on GuardianAgent (rather than IntentAnalyzerAgent) because the
+     * intent analyser carries a {@code @StructuredOutput(IntentAnalysis)}
+     * annotation — every call would try to parse the response as
+     * IntentAnalysis JSON. GuardianAgent has no schema, so the LLM can
+     * return plain text and {@link #classifySubjectMatch} normalises it.
+     *
+     * Conceptually disambiguation is part of input gating: refusing to
+     * proceed when we can't tell what subject the question belongs to is
+     * the same shape of guardrail as refusing to proceed on injection
+     * attempts.
+     *
+     * Output contract: a single uppercase token on the FIRST line.
+     *   MATCHES   — the message is clearly inside the active subject
+     *   DIFFERENT — the message belongs to a different subject
+     *   UNKNOWN   — genuinely cannot tell
+     */
+    public String subjectMatchPrompt(String message, String activeSubject, String activeTopic) {
+        String topicLine = (activeTopic == null || activeTopic.isBlank())
+            ? ""
+            : "Active topic: " + activeTopic + "\n";
+        return """
+            You are classifying whether a learner's question belongs to their
+            active study subject. Output ONE uppercase token on the first line:
+
+              MATCHES    → the question clearly fits the active subject (or topic)
+              DIFFERENT  → the question is about a clearly different subject
+              UNKNOWN    → the question is too vague to tell
+
+            Be strict. "What is photosynthesis?" inside a Maths session is
+            DIFFERENT, not MATCHES. "Hello" inside any session is UNKNOWN.
+
+            Active subject: %s
+            %sLearner question: "%s"
+
+            Output the verdict on the first line. Nothing else is required.
+            """.formatted(
+                activeSubject == null ? "(none)" : activeSubject,
+                topicLine,
+                message == null ? "" : message);
+    }
+
+    /**
+     * Normalise the LLM's verdict response into one of MATCHES, DIFFERENT,
+     * UNKNOWN. Defensive against trailing punctuation, lowercase, and
+     * leading whitespace — the LLM occasionally adds prose before the
+     * token despite the prompt.
+     *
+     * Defaults to UNKNOWN on null/blank/unrecognised input. The pipeline's
+     * disambiguation gate treats UNKNOWN the same as DIFFERENT for safety
+     * (better to ask than to mix subjects), so this default biases
+     * toward asking the learner.
+     */
+    public static String classifySubjectMatch(String raw) {
+        if (raw == null) return "UNKNOWN";
+        String t = raw.trim();
+        if (t.isEmpty()) return "UNKNOWN";
+        // Take first line, strip punctuation, uppercase.
+        String first = t.split("\\R", 2)[0].trim().replaceAll("[^A-Za-z]", "").toUpperCase();
+        return switch (first) {
+            case "MATCHES", "MATCH"      -> "MATCHES";
+            case "DIFFERENT", "DIFFER"   -> "DIFFERENT";
+            default                       -> "UNKNOWN";
+        };
+    }
 }

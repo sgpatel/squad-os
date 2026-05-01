@@ -8,6 +8,7 @@ import io.squados.memory.retrieval.MockEmbeddingPort;
 import io.squados.memory.store.InProcessMemoryStore;
 import io.squados.memory.store.MemoryStore;
 import io.squados.memory.store.PgVectorEpisodicStore;
+import io.tutoros.memory.TutorOsMemoryManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -116,8 +117,10 @@ public class MemoryConfig {
                 "embedding provider) for production-quality recall.");
             embedder = new MockEmbeddingPort();
         }
-        System.out.println("[TutorOS] MemoryManager wired (read path active for @AgentMemory)");
-        return new MemoryManager(router, embedder);
+        System.out.println(
+            "[TutorOS] MemoryManager wired — subject/topic isolation active " +
+            "(read path filters by TurnContext tags)");
+        return new TutorOsMemoryManager(router, embedder);
     }
 
     // ── helpers ─────────────────────────────────────────────────────

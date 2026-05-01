@@ -5,6 +5,8 @@ import io.squados.memory.annotation.MemoryType;
 import io.squados.memory.retrieval.EmbeddingPort;
 import io.squados.memory.retrieval.MemoryRouter;
 import io.squados.memory.store.MemoryRecord;
+import io.tutoros.memory.TurnContext;
+import io.tutoros.memory.TutorOsMemoryManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -87,7 +89,108 @@ class MemoryConfigSmokeTest {
         assertEquals(sessionId, hits.get(0).getSessionId());
     }
 
+    /**
+     * PR-A behavioural test: cross-subject memories must NOT leak.
+     *
+     * Writes one record tagged subject:math and one tagged subject:biology
+     * into the same store, then sets the per-turn TurnContext to math and
+     * reads through the manager. Only the math record should come back —
+     * the biology record is filtered out by tag, even though both have
+     * the same embedding (perfect cosine match).
+     */
+    @Test
+    void subjectFilterIsolatesMemories() {
+        MemoryConfig cfg = new MemoryConfig();
+        ObjectProvider<DataSource> noDs = emptyProvider();
+        MemoryRouter router = cfg.memoryRouter("in-process", 8, noDs);
+
+        EmbeddingPort fakeEmbedder = new EmbeddingPort() {
+            @Override public float[] embed(String text) {
+                return new float[]{0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f};
+            }
+            @Override public int dimensions() { return 8; }
+        };
+
+        MemoryManager manager = cfg.memoryManager(router, singletonProvider(fakeEmbedder));
+        assertTrue(manager instanceof TutorOsMemoryManager,
+            "MemoryConfig must wire the TutorOsMemoryManager subclass");
+
+        String squadId   = "tutor-os";
+        String sessionId = "session-" + UUID.randomUUID();
+
+        // Two records, distinct subjects, identical embeddings.
+        manager.write(synthAnnotationWithTags("subject:math"),
+            null, squadId, sessionId, "Maths memory: derivative of x^2 is 2x");
+        manager.write(synthAnnotationWithTags("subject:biology"),
+            null, squadId, sessionId, "Biology memory: photosynthesis splits water");
+
+        assertEquals(2, router.countFor(MemoryType.EPISODIC), "both records written");
+
+        // ── Read with TurnContext bound to MATH. ────────────────────────
+        TutorOsMemoryManager.CTX.set(TurnContext.of(squadId, "math", "calculus", sessionId));
+        try {
+            List<MemoryRecord> hits = manager.read(
+                synthAnnotationWithTags("subject:math"),  // op=WRITE/READ doesn't matter for read
+                /*agentId*/ null,
+                /*squadId*/ null,        // simulates AgentWrapper passing null — TurnContext fills it in
+                /*sessionId*/ null,
+                /*query*/ "anything");
+            assertEquals(1, hits.size(), "subject filter must drop the biology record");
+            assertTrue(hits.get(0).getContent().toLowerCase().contains("maths"),
+                "the surviving record must be the maths one");
+        } finally {
+            TutorOsMemoryManager.CTX.remove();
+        }
+
+        // ── Read with TurnContext bound to BIOLOGY. ─────────────────────
+        TutorOsMemoryManager.CTX.set(TurnContext.of(squadId, "biology", null, sessionId));
+        try {
+            List<MemoryRecord> hits = manager.read(
+                synthAnnotationWithTags("subject:biology"),
+                null, null, null, "anything");
+            assertEquals(1, hits.size(), "biology turn must see only biology memories");
+            assertTrue(hits.get(0).getContent().toLowerCase().contains("biology"));
+        } finally {
+            TutorOsMemoryManager.CTX.remove();
+        }
+
+        // ── Read with NO TurnContext → behaves like vanilla framework. ─
+        // squadId=null means the in-process store filter rejects everything,
+        // demonstrating exactly the bug we're working around.
+        List<MemoryRecord> raw = manager.read(
+            synthAnnotationWithTags("subject:math"),
+            null, null, null, "anything");
+        assertEquals(0, raw.size(),
+            "without TurnContext, AgentWrapper's null squadId hits the framework bug");
+    }
+
     // ── helpers ───────────────────────────────────────────────────────
+
+    /** Variant of {@link #synthAnnotation()} that carries explicit tags. */
+    private static io.squados.memory.annotation.Memory synthAnnotationWithTags(String... tags) {
+        return (io.squados.memory.annotation.Memory) java.lang.reflect.Proxy.newProxyInstance(
+            io.squados.memory.annotation.Memory.class.getClassLoader(),
+            new Class<?>[]{ io.squados.memory.annotation.Memory.class },
+            (proxy, method, args) -> switch (method.getName()) {
+                case "type"           -> MemoryType.EPISODIC;
+                case "scope"          -> io.squados.memory.annotation.MemoryScope.SQUAD;
+                case "op"             -> io.squados.memory.annotation.MemoryOp.WRITE;
+                case "topK"           -> 10;
+                case "minScore"       -> 0.0f;
+                case "tags"           -> tags;
+                case "importance"     -> io.squados.memory.annotation.Importance.MEDIUM;
+                case "promote"        -> false;
+                case "annotationType" -> io.squados.memory.annotation.Memory.class;
+                case "toString"       -> "@Memory(test, tags=" + java.util.Arrays.toString(tags) + ")";
+                case "hashCode"       -> 0;
+                case "equals"         -> proxy == args[0];
+                default -> {
+                    Object def = method.getDefaultValue();
+                    if (def != null) yield def;
+                    throw new UnsupportedOperationException(method.getName());
+                }
+            });
+    }
 
     private static io.squados.memory.annotation.Memory synthAnnotation() {
         return (io.squados.memory.annotation.Memory) java.lang.reflect.Proxy.newProxyInstance(

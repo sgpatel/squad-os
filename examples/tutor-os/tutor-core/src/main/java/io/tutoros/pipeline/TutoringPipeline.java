@@ -8,6 +8,8 @@ import io.squados.debate.DebateResult;
 import io.squados.memory.MemoryManager;
 import io.squados.memory.annotation.Importance;
 import io.tutoros.agent.*;
+import io.tutoros.memory.TurnContext;
+import io.tutoros.memory.TutorOsMemoryManager;
 import io.tutoros.model.*;
 
 import java.lang.System.Logger;
@@ -206,6 +208,10 @@ public class TutoringPipeline {
      */
     public PipelineResult process(SessionState session, String message) {
         final String sid = session.sessionId();
+        // Bind the per-turn context BEFORE any agent runs so that
+        // @AgentMemory reads in AgentWrapper see a non-null squadId and
+        // hard-filter recall by the active subject.
+        TutorOsMemoryManager.CTX.set(buildTurnContext(session));
         try {
             // ── Step 1: Guardian input check ────────────────────────────
             events.stageStart(sid, "guardian");
@@ -223,6 +229,24 @@ public class TutoringPipeline {
             if ("INJECTION".equals(verdict) || "INAPPROPRIATE".equals(verdict)) {
                 events.done(sid);
                 return PipelineResult.blocked("Message blocked by safety filter.");
+            }
+
+            // ── Step 1.5: Subject/Topic disambiguation gate ──────────────
+            // Refuse to guess across subjects. If the message can't be
+            // confidently placed inside the active session subject (or the
+            // session has no subject yet), ask the learner to confirm
+            // BEFORE running ContentAgent / debate / tutor — those steps
+            // happily produce mixed-subject content otherwise.
+            //
+            // First session is exempt: DiagnosticAgent below is responsible
+            // for setting the subject in the first place.
+            if (!session.isFirstSession()) {
+                PipelineResult disambiguation =
+                    maybeDisambiguateSubject(sid, session, message);
+                if (disambiguation != null) {
+                    events.done(sid);
+                    return disambiguation;
+                }
             }
 
             // ── Step 2: Route — diagnose / plan / continue ───────────────
@@ -313,6 +337,11 @@ public class TutoringPipeline {
             events.stageError(sid, "tutor", ex.getMessage() != null ? ex.getMessage() : ex.toString());
             events.done(sid);
             throw ex;
+        } finally {
+            // Clear the per-turn context unconditionally — leaving it set
+            // would leak the active subject filter into the next request
+            // on the same thread.
+            TutorOsMemoryManager.CTX.remove();
         }
     }
 
@@ -550,9 +579,24 @@ public class TutoringPipeline {
     }
 
     private String buildContentPrompt(SessionState session, String message) {
+        // Pin subject + topic into the ContentAgent prompt so the LLM's
+        // tool-call decisions (Khan / Wikipedia / Wolfram / analogy /
+        // visualisation) stay inside the active subject. Without this,
+        // a maths question can pull a chemistry analogy or a biology
+        // wikipedia article when the concept name happens to be ambiguous
+        // (e.g. "function", "cell", "compound").
+        String subj  = session.profile().subject();
+        String topc  = session.profile().topic();
+        String scope = (subj != null && !subj.isBlank())
+            ? String.format(" | Subject: %s%s", subj,
+                (topc != null && !topc.isBlank()) ? " | Topic: " + topc : "")
+            : "";
         return String.format(
-            "Fetch grounded content for concept: '%s' | Level: %s | Question: %s",
-            session.currentConcept(), session.profile().level(), message
+            "Fetch grounded content for concept: '%s' | Level: %s%s | Question: %s%n" +
+            "Stay strictly within the stated subject — if no relevant source " +
+            "exists inside the subject, return nothing rather than reaching " +
+            "into a different subject.",
+            session.currentConcept(), session.profile().level(), scope, message
         );
     }
 
@@ -855,11 +899,18 @@ public class TutoringPipeline {
                 "Learner asked: %s%nTutor (%s style) replied: %s",
                 userMessage, winnerStyle, snippet);
 
-            String[] tags = new String[] {
-                "session:" + sessionId,
-                "style:"   + (winnerStyle != null ? winnerStyle.toLowerCase() : "unknown"),
-                "level:"   + session.profile().level()
-            };
+            // Tags are how TutorOsMemoryManager.read filters records by
+            // active subject/topic. Lower-cased for stable matching against
+            // the ThreadLocal TurnContext on the read side.
+            String subj = session.profile().subject();
+            String topc = session.profile().topic();
+            java.util.List<String> tagList = new java.util.ArrayList<>();
+            tagList.add("session:" + sessionId);
+            tagList.add("style:"   + (winnerStyle != null ? winnerStyle.toLowerCase() : "unknown"));
+            tagList.add("level:"   + session.profile().level());
+            if (subj != null && !subj.isBlank()) tagList.add("subject:" + subj.trim().toLowerCase());
+            if (topc != null && !topc.isBlank()) tagList.add("topic:"   + topc.trim().toLowerCase());
+            String[] tags = tagList.toArray(new String[0]);
 
             memoryManager.write(
                 MemoryHelper.episodicSquadWrite(Importance.MEDIUM, tags),
@@ -871,6 +922,122 @@ public class TutoringPipeline {
         } catch (RuntimeException e) {
             log.log(Level.DEBUG, "writeTurnMemory failed (non-fatal): {0}", e.getMessage());
         }
+    }
+
+    /**
+     * Build the per-turn {@link TurnContext} from session state. Lives here
+     * so the memory layer doesn't have to know about SessionState shape.
+     *
+     * Read by {@link TutorOsMemoryManager} via its {@code ThreadLocal} —
+     * see the class comment there for why the indirection exists.
+     */
+    private TurnContext buildTurnContext(SessionState session) {
+        String squadId = (ctx != null && ctx.getConfig() != null
+                          && ctx.getConfig().getName() != null)
+            ? ctx.getConfig().getName()
+            : "tutor-os";
+        String subject = session != null && session.profile() != null
+            ? session.profile().subject() : null;
+        String topic   = session != null && session.profile() != null
+            ? session.profile().topic()   : null;
+        String sid     = session != null ? session.sessionId() : null;
+        return TurnContext.of(squadId, subject, topic, sid);
+    }
+
+    /**
+     * Subject/topic disambiguation gate.
+     *
+     * Returns {@code null} when the message is safe to route through the
+     * normal pipeline; returns a {@link PipelineResult#safe} response that
+     * asks the learner for clarification when the message either:
+     *
+     *   (a) targets a different subject from the active session, or
+     *   (b) carries no clear subject signal AND the session has no active
+     *       subject locked in.
+     *
+     * Implementation strategy:
+     *   1. Cheap heuristic first — if the active subject keyword appears
+     *      in the message, accept. Avoids an LLM call on every turn for
+     *      the common case (learner stays on topic).
+     *   2. Otherwise: a single short LLM classification via
+     *      {@link IntentAnalyzerAgent#subjectMatchPrompt}, returning one
+     *      of MATCHES / DIFFERENT / UNKNOWN.
+     *   3. On DIFFERENT or UNKNOWN: emit a clarification MESSAGE so the
+     *      UI shows it on the chat thread, then short-circuit.
+     */
+    private PipelineResult maybeDisambiguateSubject(String sid, SessionState session, String message) {
+        String activeSubject = session.profile().subject();
+        String activeTopic   = session.profile().topic();
+
+        // No active subject yet — ask before producing any content.
+        if (activeSubject == null || activeSubject.isBlank()) {
+            return askForSubjectClarification(sid, session, message,
+                "Which subject would you like to study right now? " +
+                "Reply with the subject (and ideally the topic) so I can " +
+                "stay focused and not mix material from elsewhere.");
+        }
+
+        // Cheap heuristic: subject keyword present → accept.
+        String low = message == null ? "" : message.toLowerCase();
+        if (low.contains(activeSubject.trim().toLowerCase())) {
+            return null;
+        }
+
+        // LLM classification, single small call. Failures fall through to
+        // the safe default (assume MATCHES) so a flaky model never blocks
+        // the learner unnecessarily.
+        //
+        // Uses GuardianAgent (SUPPORT role) because:
+        //   1. It already serves as the input-gate agent — disambiguation
+        //      is a natural extension of input gating.
+        //   2. It has no @StructuredOutput, so the response stays plain text
+        //      (one of MATCHES / DIFFERENT / UNKNOWN) and we parse it
+        //      ourselves — no schema collision with IntentAnalysis or
+        //      StudyPlan.
+        String verdict;
+        try {
+            AgentResponse cls = ctx.submitTo(AgentRole.SUPPORT,
+                guardian.subjectMatchPrompt(message, activeSubject, activeTopic));
+            verdict = GuardianAgent.classifySubjectMatch(
+                cls != null ? cls.content() : null);
+        } catch (RuntimeException e) {
+            log.log(Level.DEBUG, "subject-match classifier failed: {0}", e.getMessage());
+            return null;
+        }
+
+        if ("MATCHES".equals(verdict)) return null;
+
+        if ("DIFFERENT".equals(verdict)) {
+            String body = String.format(
+                "Just to keep things focused — your current subject is **%s**" +
+                "%s, but this question looks like it's about something else.%n%n" +
+                "Would you like me to:%n" +
+                "1. Answer it inside **%s** (if it fits), or%n" +
+                "2. Switch the session to the new subject (tell me which one)?%n%n" +
+                "I'd rather check than mix subjects.",
+                activeSubject,
+                activeTopic != null && !activeTopic.isBlank()
+                    ? " (topic: **" + activeTopic + "**)" : "",
+                activeSubject);
+            return askForSubjectClarification(sid, session, message, body);
+        }
+
+        // UNKNOWN — message subject is genuinely unclear.
+        return askForSubjectClarification(sid, session, message,
+            "I'm not sure which subject this question belongs to. " +
+            "Could you tell me — is it part of **" + activeSubject + "**, " +
+            "or a different subject?");
+    }
+
+    /** Emit a clarification MESSAGE frame and return a safe PipelineResult. */
+    private PipelineResult askForSubjectClarification(
+            String sid, SessionState session, String userMessage, String body) {
+        java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("body", body);
+        payload.put("teachingStyle", "CLARIFY");
+        payload.put("clarification", "subject");
+        events.message(sid, payload);
+        return PipelineResult.safe(body);
     }
 
     /** Returns {@code value} when non-null and non-empty, otherwise {@code fallback}. */
