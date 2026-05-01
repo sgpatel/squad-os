@@ -52,10 +52,13 @@ public class VisualisationAgent {
         // render, fall back to the safer default (plot accepts anything that
         // can be tabulated; chem only accepts molecules).
         String t = (requiredType == null) ? "plot" : requiredType.trim().toLowerCase();
-        if (!"chem".equals(t) && !"plot".equals(t)) t = "plot";
+        if (!"chem".equals(t) && !"plot".equals(t)
+            && !"geometry".equals(t) && !"freebody".equals(t)) {
+            t = "plot";
+        }
 
-        String typeBlock = "chem".equals(t)
-            ? """
+        String typeBlock = switch (t) {
+            case "chem" -> """
               You MUST set type = "chem".
               specJson = {"smiles":"<canonical SMILES for the concept>"}
               Rules:
@@ -65,8 +68,63 @@ public class VisualisationAgent {
                 - Keep SMILES under 120 characters.
                 - If you genuinely cannot recall the SMILES for this concept,
                   set specJson to {"smiles":""} and explain in the caption.
-              """
-            : """
+              """;
+            case "geometry" -> """
+              You MUST set type = "geometry".
+              specJson is a tiny scene graph rendered into a 480×280 viewBox by a
+              deterministic SVG renderer. Coordinate system: y grows DOWNWARD
+              (SVG default). Origin (0,0) is top-left. Keep all coordinates
+              inside [10..470] × [10..270] so labels don't clip.
+
+              Shape:
+                {
+                  "points":   [{"id":"A","x":120,"y":220,"label":"A"}, ...],
+                  "segments": [{"from":"A","to":"B","label":"5cm"}, ...],
+                  "polygons": [{"points":["A","B","C"],"fill":"#eef2ff"}],
+                  "circles":  [{"cx":240,"cy":140,"r":50,"label":"O"}],
+                  "arcs":     [{"cx":120,"cy":220,"r":24,"startDeg":0,"endDeg":60,"label":"60°"}]
+                }
+
+              Rules:
+                - Use ONLY the fields the diagram needs — omit empty arrays.
+                - Reference points by id in segments/polygons (not raw coords).
+                - Arc angles are in degrees, 0 = east, increasing counter-clockwise.
+                - Labels are short (≤ 6 chars). Render lengths/angles, not prose.
+                - Pick coordinates so the shape FITS the concept (e.g. a
+                  right triangle should LOOK right-angled).
+              """;
+            case "freebody" -> """
+              You MUST set type = "freebody".
+              specJson describes a body, an optional supporting surface, and the
+              forces acting on it. Renderer draws the body, surface, and force
+              vectors with arrowheads + labels. 480×280 viewBox.
+
+              Shape:
+                {
+                  "body":    {"shape":"block","x":200,"y":140,"w":80,"h":60,"label":"m"},
+                                // shape ∈ "block" | "sphere" | "point"
+                                // (x,y) is the body's CENTER
+                  "surface": {"type":"ground","y":200}
+                                // OR {"type":"incline","angle":30,"y":230}
+                                // OR null for free-body in mid-air
+                  "forces":  [
+                    {"label":"W","magnitude":80,"angle":270,"color":"#dc2626"},
+                    {"label":"N","magnitude":80,"angle":90, "color":"#2563eb"},
+                    {"label":"F","magnitude":60,"angle":0,  "color":"#16a34a"}
+                  ]
+                }
+
+              Rules:
+                - Force angles use STANDARD MATH convention: 0° = east (+x),
+                  90° = north (+y, drawn UPWARD on screen — the renderer
+                  flips for SVG), 180° = west, 270° = south (downward).
+                - magnitude is in arbitrary units; renderer scales the longest
+                  vector to ~80px, others proportionally.
+                - color is a CSS hex; pick distinct colors for distinct forces.
+                - Labels are short (≤ 4 chars): W, N, T, F, fk, fs, etc.
+                - Always include weight (W) when there's gravity.
+              """;
+            default -> """
               You MUST set type = "plot".
               specJson = a complete Vega-Lite v5 specification with fields:
                 $schema, description, width, height, data, mark, encoding.
@@ -79,6 +137,7 @@ public class VisualisationAgent {
                   concept (≥ 40 points across a sensible domain). Do not
                   default to a sine wave unless the concept IS a sine wave.
               """;
+        };
 
         return """
             You are emitting a tiny renderer spec for the concept below.
@@ -128,6 +187,36 @@ public class VisualisationAgent {
             c.contains("alcohol") || c.contains("carboxylic") || c.contains("ester") ||
             c.contains("amine") || c.contains("amide") || c.contains("aromatic")) {
             return "chem";
+        }
+
+        // Freebody — physics force diagrams. Checked BEFORE geometry because
+        // "free-body diagram of a block on an incline" contains "incline"
+        // (geometry-ish) but is firmly a physics diagram.
+        if (c.contains("free body") || c.contains("free-body") ||
+            c.contains("freebody")  || c.contains("force diagram") ||
+            c.contains("forces on")  || c.contains("forces acting") ||
+            c.contains("newton's second") || c.contains("normal force") ||
+            c.contains("tension") || c.contains("friction force") ||
+            c.contains("incline") || c.contains("inclined plane") ||
+            c.contains("pulley") || c.contains("block on")) {
+            return "freebody";
+        }
+
+        // Geometry — synthetic / Euclidean shapes, angles, triangles, circles
+        // (the geometric figure, not the chemistry-style ring). Checked AFTER
+        // chem so "benzene ring" → chem, but BEFORE plot so "triangle ABC"
+        // doesn't get hijacked by a stray "function" keyword.
+        if (c.contains("triangle") || c.contains("quadrilateral") ||
+            c.contains("polygon")  || c.contains("rhombus") ||
+            c.contains("trapezoid") || c.contains("parallelogram") ||
+            c.contains("congruent") || c.contains("similar triangles") ||
+            c.contains("angle bisector") || c.contains("perpendicular bisector") ||
+            c.contains("pythagoras") || c.contains("pythagorean") ||
+            c.contains("circle theorem") || c.contains("inscribed angle") ||
+            c.contains("tangent to a circle") || c.contains("tangent line to") ||
+            c.contains("chord ") || c.contains("radius ") ||
+            c.contains("euclidean") || c.contains("geometric proof")) {
+            return "geometry";
         }
 
         // Plot — function graphs, data plots, distributions, comparisons,

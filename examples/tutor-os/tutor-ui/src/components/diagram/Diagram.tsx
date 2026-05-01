@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ComponentProps } from 'react';
 import type { VisualAsset } from '@/lib/types';
 
 /**
@@ -17,8 +17,10 @@ import type { VisualAsset } from '@/lib/types';
 
 // Lazy renderers — keep the route chunk small for learners who never
 // trigger a visual. Each chunk is <60 KB gz on its own; loaded on demand.
-const ChemRenderer = lazy(() => import('./renderers/Chem').then(m => ({ default: m.Chem })));
-const PlotRenderer = lazy(() => import('./renderers/Plot').then(m => ({ default: m.Plot })));
+const ChemRenderer     = lazy(() => import('./renderers/Chem').then(m => ({ default: m.Chem })));
+const PlotRenderer     = lazy(() => import('./renderers/Plot').then(m => ({ default: m.Plot })));
+const GeometryRenderer = lazy(() => import('./renderers/Geometry').then(m => ({ default: m.Geometry })));
+const FreebodyRenderer = lazy(() => import('./renderers/Freebody').then(m => ({ default: m.Freebody })));
 
 export function Diagram({ asset }: { asset: VisualAsset }) {
   const { spec, parseError } = parseSpec(asset.specJson);
@@ -44,6 +46,16 @@ export function Diagram({ asset }: { asset: VisualAsset }) {
           <Suspense fallback={<DiagramSkeleton />}>
             {renderer === 'chem' ? (
               <ChemRenderer spec={spec as { smiles?: string }} altText={asset.altText} />
+            ) : renderer === 'geometry' ? (
+              <GeometryRenderer
+                spec={spec as ComponentProps<typeof GeometryRenderer>['spec']}
+                altText={asset.altText}
+              />
+            ) : renderer === 'freebody' ? (
+              <FreebodyRenderer
+                spec={spec as ComponentProps<typeof FreebodyRenderer>['spec']}
+                altText={asset.altText}
+              />
             ) : (
               <PlotRenderer spec={spec as object} altText={asset.altText} />
             )}
@@ -104,10 +116,12 @@ function parseSpec(raw: string | undefined | null): { spec: unknown; parseError:
   }
 }
 
-function pickRenderer(type: VisualAsset['type']): 'chem' | 'plot' | null {
-  if (type === 'chem') return 'chem';
-  if (type === 'plot') return 'plot';
-  return null; // geometry / freebody / flow / circuit — wired in v2
+function pickRenderer(type: VisualAsset['type']): 'chem' | 'plot' | 'geometry' | 'freebody' | null {
+  if (type === 'chem')     return 'chem';
+  if (type === 'plot')     return 'plot';
+  if (type === 'geometry') return 'geometry';
+  if (type === 'freebody') return 'freebody';
+  return null; // flow / circuit — future renderers
 }
 
 function DiagramSkeleton() {

@@ -40,7 +40,7 @@ interface PipelineState {
   pushUserMessage: (body: string) => void;
   /** Inject a tutor message with a hardcoded VisualAsset — for FE demos
    *  while the live agent path that populates `visualAsset` is still TODO. */
-  pushDemoVisual: (kind: 'chem' | 'plot') => void;
+  pushDemoVisual: (kind: 'chem' | 'plot' | 'geometry' | 'freebody') => void;
   reset: () => void;
 }
 
@@ -54,6 +54,114 @@ function saveSessionId(id: string): void {
 }
 function clearSessionId(): void {
   try { localStorage.removeItem(SESSION_ID_KEY); } catch { /* noop */ }
+}
+
+/**
+ * Build a demo VisualAsset for the command-palette "Insert demo …" entries.
+ *
+ * These specs are the same shape the VisualisationAgent emits in production
+ * — they double as visual regression tests for each renderer. When you add
+ * a new domain, add a demo here so the command palette can preview it
+ * without spending an LLM call.
+ */
+function buildDemoVisual(kind: 'chem' | 'plot' | 'geometry' | 'freebody'): {
+  visualAsset: NonNullable<ChatMessage['visualAsset']>;
+  body: string;
+} {
+  switch (kind) {
+    case 'chem':
+      return {
+        visualAsset: {
+          type: 'chem',
+          concept: 'Benzene',
+          title: 'Benzene (C₆H₆)',
+          caption: 'Aromatic ring — six sp² carbons, delocalised π electrons.',
+          specJson: JSON.stringify({ smiles: 'c1ccccc1' }),
+          altText: 'Skeletal structure of benzene: a regular hexagon of six carbons with alternating double bonds.',
+        },
+        body: 'Here is the structure of **benzene** — a planar hexagonal ring of six carbons with delocalised π electrons.',
+      };
+
+    case 'plot':
+      return {
+        visualAsset: {
+          type: 'plot',
+          concept: 'Sine wave',
+          title: 'y = sin(x)',
+          caption: 'One full period from 0 to 2π — note zeros at 0, π, 2π.',
+          specJson: JSON.stringify({
+            $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+            width: 420, height: 220,
+            data: {
+              values: Array.from({ length: 81 }, (_, i) => {
+                const x = (i / 80) * 2 * Math.PI;
+                return { x, y: Math.sin(x) };
+              }),
+            },
+            mark: { type: 'line', strokeWidth: 2 },
+            encoding: {
+              x: { field: 'x', type: 'quantitative', title: 'x (radians)' },
+              y: { field: 'y', type: 'quantitative', title: 'sin(x)' },
+            },
+          }),
+          altText: 'Line plot of y = sin(x) from 0 to 2π.',
+        },
+        body: 'Here is **y = sin(x)** plotted across one full period (0 → 2π). Notice the zeros at 0, π, and 2π.',
+      };
+
+    case 'geometry':
+      // 3-4-5 right triangle with hypotenuse labelled and the right angle marked.
+      return {
+        visualAsset: {
+          type: 'geometry',
+          concept: '3-4-5 triangle',
+          title: 'Pythagorean triangle',
+          caption: 'A right triangle with legs 3 and 4 has hypotenuse 5 — 3² + 4² = 5².',
+          specJson: JSON.stringify({
+            points: [
+              { id: 'A', x: 110, y: 220, label: 'A' },
+              { id: 'B', x: 350, y: 220, label: 'B' },
+              { id: 'C', x: 110, y:  60, label: 'C' },
+            ],
+            polygons: [{ points: ['A', 'B', 'C'], fill: '#eef2ff' }],
+            segments: [
+              { from: 'A', to: 'B', label: '4' },
+              { from: 'A', to: 'C', label: '3' },
+              { from: 'B', to: 'C', label: '5' },
+            ],
+            arcs: [
+              // Right-angle marker at A: a small 0–90° arc.
+              { cx: 110, cy: 220, r: 18, startDeg: 0, endDeg: 90, label: '90°' },
+            ],
+          }),
+          altText: 'Right triangle with vertices A bottom-left, B bottom-right, C top-left; legs 3 and 4, hypotenuse 5.',
+        },
+        body: 'Here is a classic **3-4-5 right triangle** — the simplest Pythagorean triple. The right angle sits at A; the hypotenuse BC has length 5.',
+      };
+
+    case 'freebody':
+      // Block on a horizontal surface with weight, normal, applied force, friction.
+      return {
+        visualAsset: {
+          type: 'freebody',
+          concept: 'Block on ground',
+          title: 'Free-body: block sliding right',
+          caption: 'Weight balances normal force; applied force overcomes kinetic friction.',
+          specJson: JSON.stringify({
+            body:    { shape: 'block', x: 240, y: 150, w: 90, h: 60, label: 'm' },
+            surface: { type: 'ground', y: 200 },
+            forces: [
+              { label: 'W',  magnitude: 80, angle: 270, color: '#dc2626' },  // weight, down
+              { label: 'N',  magnitude: 80, angle:  90, color: '#2563eb' },  // normal, up
+              { label: 'F',  magnitude: 70, angle:   0, color: '#16a34a' },  // applied, right
+              { label: 'fk', magnitude: 35, angle: 180, color: '#9333ea' },  // friction, left
+            ],
+          }),
+          altText: 'Free-body diagram of a block on the ground with weight (down), normal (up), applied force (right), and kinetic friction (left).',
+        },
+        body: 'Here is a **free-body diagram** of a block being pushed along the ground. Weight (W) and the normal force (N) cancel vertically; the applied force (F) is partly opposed by kinetic friction (fk).',
+      };
+  }
 }
 
 export const usePipeline = create<PipelineState>()((set, get) => ({
@@ -125,41 +233,7 @@ export const usePipeline = create<PipelineState>()((set, get) => ({
   pushDemoVisual: (kind) => {
     const now = Date.now();
     const id = `msg_demo_${now.toString(36)}`;
-    const visualAsset = kind === 'chem'
-      ? {
-          type: 'chem' as const,
-          concept: 'Benzene',
-          title: 'Benzene (C₆H₆)',
-          caption: 'Aromatic ring — six sp² carbons, delocalised π electrons.',
-          specJson: JSON.stringify({ smiles: 'c1ccccc1' }),
-          altText: 'Skeletal structure of benzene: a regular hexagon of six carbons with alternating double bonds.',
-        }
-      : {
-          type: 'plot' as const,
-          concept: 'Sine wave',
-          title: 'y = sin(x)',
-          caption: 'One full period from 0 to 2π — note zeros at 0, π, 2π.',
-          specJson: JSON.stringify({
-            $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
-            width: 420, height: 220,
-            data: {
-              values: Array.from({ length: 81 }, (_, i) => {
-                const x = (i / 80) * 2 * Math.PI;
-                return { x, y: Math.sin(x) };
-              }),
-            },
-            mark: { type: 'line', strokeWidth: 2 },
-            encoding: {
-              x: { field: 'x', type: 'quantitative', title: 'x (radians)' },
-              y: { field: 'y', type: 'quantitative', title: 'sin(x)' },
-            },
-          }),
-          altText: 'Line plot of y = sin(x) from 0 to 2π.',
-        };
-
-    const body = kind === 'chem'
-      ? 'Here is the structure of **benzene** — a planar hexagonal ring of six carbons with delocalised π electrons.'
-      : 'Here is **y = sin(x)** plotted across one full period (0 → 2π). Notice the zeros at 0, π, and 2π.';
+    const { visualAsset, body } = buildDemoVisual(kind);
 
     set(s => ({
       messages: [...s.messages, {

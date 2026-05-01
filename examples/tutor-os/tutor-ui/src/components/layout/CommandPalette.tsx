@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Home, BookOpen, FileText, PenLine, Layers, ListChecks,
   CalendarDays, BarChart3, Library, Users, Settings as Cog,
-  Sparkles, FilePlus, Play, ScrollText, FlaskConical, LineChart
+  Sparkles, FilePlus, Play, ScrollText, FlaskConical, LineChart,
+  Triangle, Magnet
 } from 'lucide-react';
 import { useNotes } from '@/store/notes';
 import { usePipeline } from '@/store/pipeline';
@@ -60,10 +61,14 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'run-quiz',     group: 'Action', icon: Play,            label: 'Create new quiz',
       action: () => navigate('/quiz') },
 
-    { id: 'demo-chem',    group: 'Demo',   icon: FlaskConical,    label: 'Visualize: benzene', meta: 'chem renderer',
+    { id: 'demo-chem',     group: 'Demo',   icon: FlaskConical,    label: 'Visualize: benzene', meta: 'chem renderer',
       action: () => { navigate('/tutor'); pushDemoVisual('chem'); } },
-    { id: 'demo-plot',    group: 'Demo',   icon: LineChart,       label: 'Visualize: y = sin(x)', meta: 'plot renderer',
+    { id: 'demo-plot',     group: 'Demo',   icon: LineChart,       label: 'Visualize: y = sin(x)', meta: 'plot renderer',
       action: () => { navigate('/tutor'); pushDemoVisual('plot'); } },
+    { id: 'demo-geometry', group: 'Demo',   icon: Triangle,        label: 'Visualize: 3-4-5 triangle', meta: 'geometry renderer',
+      action: () => { navigate('/tutor'); pushDemoVisual('geometry'); } },
+    { id: 'demo-freebody', group: 'Demo',   icon: Magnet,          label: 'Visualize: free-body diagram', meta: 'freebody renderer',
+      action: () => { navigate('/tutor'); pushDemoVisual('freebody'); } },
   ], [navigate, createNote, startPipeline, pushDemoVisual]);
 
   const filtered = useMemo(() => {
