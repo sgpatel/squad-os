@@ -5,6 +5,8 @@ import io.squados.context.SquadContext;
 import io.squados.agent.AgentResponse;
 import io.squados.debate.DebateEngine;
 import io.squados.debate.DebateResult;
+import io.squados.memory.MemoryManager;
+import io.squados.memory.annotation.Importance;
 import io.tutoros.agent.*;
 import io.tutoros.model.*;
 
@@ -92,6 +94,17 @@ public class TutoringPipeline {
      */
     private final PipelineEventBus  events;
 
+    /**
+     * MemoryManager — nullable. When wired (see tutor-api MemoryConfig),
+     * the pipeline writes a salient end-of-turn record to EPISODIC memory
+     * so future turns retrieve it via every agent's {@code @AgentMemory}.
+     * Null in tests / CLI contexts; the write call short-circuits cleanly.
+     *
+     * Phase 3 (framework PR): replace this explicit write with AOP-driven
+     * automatic writes via method-level {@code @Memory} annotations.
+     */
+    private final MemoryManager memoryManager;
+
     public TutoringPipeline(SquadContext ctx,
                              GuardianAgent guardian,
                              DiagnosticAgent diagnostic,
@@ -110,12 +123,12 @@ public class TutoringPipeline {
                              DebateEngine debateEngine) {
         this(ctx, guardian, diagnostic, planner, content, intentAnalyzer, socratic, direct,
              practice, assessment, progress, escalation, todo, quiz,
-             visualisation, debateEngine, PipelineEventBus.NOOP);
+             visualisation, debateEngine, PipelineEventBus.NOOP, null);
     }
 
     /**
-     * Full constructor with explicit event bus. Use this in production when
-     * a WebSocket-backed bus should observe stage transitions.
+     * Constructor with explicit event bus. Memory is disabled (null manager).
+     * Kept for tests / CLI that don't run a WS or memory subsystem.
      */
     public TutoringPipeline(SquadContext ctx,
                              GuardianAgent guardian,
@@ -134,6 +147,36 @@ public class TutoringPipeline {
                              VisualisationAgent visualisation,
                              DebateEngine debateEngine,
                              PipelineEventBus events) {
+        this(ctx, guardian, diagnostic, planner, content, intentAnalyzer, socratic, direct,
+             practice, assessment, progress, escalation, todo, quiz,
+             visualisation, debateEngine, events, null);
+    }
+
+    /**
+     * Full constructor — production path. Adds {@code memoryManager} so
+     * end-of-turn records persist to EPISODIC memory and are recalled by
+     * every {@code @AgentMemory}-annotated agent on subsequent turns.
+     * Pass {@code null} to disable memory writes (read still works
+     * independently via {@link SquadContext#setMemoryManager}).
+     */
+    public TutoringPipeline(SquadContext ctx,
+                             GuardianAgent guardian,
+                             DiagnosticAgent diagnostic,
+                             CurriculumPlannerAgent planner,
+                             ContentAgent content,
+                             IntentAnalyzerAgent intentAnalyzer,
+                             SocraticTutorAgent socratic,
+                             DirectTutorAgent direct,
+                             PracticeAgent practice,
+                             AssessmentAgent assessment,
+                             ProgressAgent progress,
+                             EscalationAgent escalation,
+                             TodoAgent todo,
+                             QuizAgent quiz,
+                             VisualisationAgent visualisation,
+                             DebateEngine debateEngine,
+                             PipelineEventBus events,
+                             MemoryManager memoryManager) {
         this.ctx           = ctx;
         this.guardian      = guardian;
         this.diagnostic    = diagnostic;
@@ -151,6 +194,7 @@ public class TutoringPipeline {
         this.visualisation = visualisation;
         this.debateEngine  = debateEngine;
         this.events        = events != null ? events : PipelineEventBus.NOOP;
+        this.memoryManager = memoryManager;
     }
 
     /**
@@ -255,6 +299,13 @@ public class TutoringPipeline {
             messagePayload.put("teachingStyle", winnerStyle);
             if (asset != null) messagePayload.put("visualAsset", asset);
             events.message(sid, messagePayload);
+
+            // Persist a salient end-of-turn record so future turns recall
+            // what the learner asked, which style won the debate, and the
+            // shape of the answer. Read path is automatic via @AgentMemory
+            // on every tutor agent. Best-effort — never block the response.
+            writeTurnMemory(session, message, tutorResponse, winnerStyle);
+
             events.done(sid);
 
             return PipelineResult.tutor(tutorResponse, winnerStyle, groundedContent);
@@ -765,6 +816,61 @@ public class TutoringPipeline {
         return m.group(1)
             .replace("\\\"", "\"")
             .replace("\\\\", "\\");
+    }
+
+    /**
+     * Persist a single end-of-turn record to EPISODIC memory.
+     *
+     * Content shape: a compact, retrieval-friendly summary of THIS turn —
+     * what the learner asked, which teaching style won, and the first
+     * 200 chars of the response. The next turn's @AgentMemory read on
+     * any tutor agent will pull this back via cosine similarity against
+     * the new query, so e.g. a learner who asked about "cell membranes"
+     * yesterday will find "[turn 12-Mar] You asked about cell membranes
+     * — DirectTutor explained …" injected into the system prompt today.
+     *
+     * Best-effort:
+     *   - silent no-op when memoryManager is null (tests, CLI, missing config)
+     *   - all exceptions swallowed and logged at DEBUG so a flaky embedder
+     *     or DB outage cannot break the user-visible response
+     *
+     * Squad id: derived from the squad name registered with SquadContext.
+     * Agent id: null (SQUAD scope — any agent in the squad can recall it).
+     */
+    private void writeTurnMemory(SessionState session, String userMessage,
+                                 String tutorResponse, String winnerStyle) {
+        if (memoryManager == null) return;
+        try {
+            String squadId = (ctx != null && ctx.getConfig() != null
+                              && ctx.getConfig().getName() != null)
+                ? ctx.getConfig().getName()
+                : "tutor-os";
+            String sessionId = session.sessionId();
+
+            // Compact, embedding-friendly. Stays well under typical token budgets.
+            String snippet = tutorResponse == null ? ""
+                : tutorResponse.length() <= 240 ? tutorResponse
+                : tutorResponse.substring(0, 240) + "…";
+            String content = String.format(
+                "Learner asked: %s%nTutor (%s style) replied: %s",
+                userMessage, winnerStyle, snippet);
+
+            String[] tags = new String[] {
+                "session:" + sessionId,
+                "style:"   + (winnerStyle != null ? winnerStyle.toLowerCase() : "unknown"),
+                "level:"   + session.profile().level()
+            };
+
+            memoryManager.write(
+                MemoryHelper.episodicSquadWrite(Importance.MEDIUM, tags),
+                /* agentId  */ null,        // SQUAD scope
+                /* squadId  */ squadId,
+                /* sessionId*/ sessionId,
+                /* content  */ content
+            );
+        } catch (RuntimeException e) {
+            log.log(Level.DEBUG, "writeTurnMemory failed (non-fatal): {0}", e.getMessage());
+        }
     }
 
     /** Returns {@code value} when non-null and non-empty, otherwise {@code fallback}. */

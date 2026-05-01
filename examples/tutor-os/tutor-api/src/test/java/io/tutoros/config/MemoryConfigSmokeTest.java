@@ -1,0 +1,128 @@
+package io.tutoros.config;
+
+import io.squados.memory.MemoryManager;
+import io.squados.memory.annotation.MemoryType;
+import io.squados.memory.retrieval.EmbeddingPort;
+import io.squados.memory.retrieval.MemoryRouter;
+import io.squados.memory.store.MemoryRecord;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
+
+import javax.sql.DataSource;
+import java.util.List;
+import java.util.UUID;
+import java.util.function.Consumer;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * MemoryConfigSmokeTest — verifies M1 wiring without booting the full
+ * Spring context (no OPENAI key required).
+ *
+ * Exercises:
+ *   1. MemoryConfig.memoryRouter() builds a router with all four tiers.
+ *   2. MemoryConfig.memoryManager() returns a usable manager.
+ *   3. End-to-end roundtrip: synthetic @Memory annotation → write →
+ *      retrieve → record comes back.
+ *
+ * Uses a fake {@link EmbeddingPort} (deterministic 8-dim vector) so the
+ * cosine-similarity path runs without contacting Spring AI / OpenAI.
+ */
+class MemoryConfigSmokeTest {
+
+    @Test
+    void wiresRouterAndManager_andRoundtripsAnEpisodicRecord() {
+        // ── Build the config beans directly (no Spring context). ──────
+        MemoryConfig cfg = new MemoryConfig();
+
+        // No DataSource → falls back to in-process for episodic.
+        ObjectProvider<DataSource> noDs = emptyProvider();
+
+        MemoryRouter router = cfg.memoryRouter("in-process", 8, noDs);
+        assertNotNull(router, "router bean must not be null");
+        assertEquals(0, router.totalCount(), "router starts empty");
+        assertEquals(0, router.countFor(MemoryType.EPISODIC));
+
+        // Tiny deterministic embedder — same vector for every input is
+        // fine for this test because we only care that retrieval finds
+        // the record we just wrote.
+        EmbeddingPort fakeEmbedder = new EmbeddingPort() {
+            @Override public float[] embed(String text) {
+                return new float[]{0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f};
+            }
+            @Override public int dimensions() { return 8; }
+        };
+
+        MemoryManager manager = cfg.memoryManager(router, fakeEmbedder);
+        assertNotNull(manager, "manager bean must not be null");
+
+        // ── Write one EPISODIC record via the synthetic annotation. ────
+        // We can't import MemoryHelper here (package-private to tutor-core's
+        // pipeline package) so we build the annotation inline using the
+        // same Proxy trick. This also doubles as a guard that future
+        // refactors of MemoryHelper keep the contract stable.
+        io.squados.memory.annotation.Memory ann = synthAnnotation();
+
+        String squadId   = "tutor-os";
+        String sessionId = "session-" + UUID.randomUUID();
+        String content   = "Learner asked: photosynthesis equation. Tutor (DIRECT) replied: 6CO2 + 6H2O → C6H12O6 + 6O2";
+
+        manager.write(ann, /*agentId*/ null, squadId, sessionId, content);
+
+        assertEquals(1, router.countFor(MemoryType.EPISODIC), "one record after write");
+        assertEquals(1, manager.totalMemories());
+
+        // ── Retrieve it back. ──────────────────────────────────────────
+        List<MemoryRecord> hits = router.retrieve(
+            MemoryType.EPISODIC,
+            fakeEmbedder.embed("anything"),  // same fake vector → cosine = 1.0
+            squadId,
+            /*agentId*/ null,
+            /*topK*/    5,
+            /*minScore*/ 0.0f
+        );
+        assertFalse(hits.isEmpty(), "retrieval must find the written record");
+        assertEquals(content, hits.get(0).getContent());
+        assertEquals(squadId, hits.get(0).getSquadId());
+        assertEquals(sessionId, hits.get(0).getSessionId());
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────
+
+    private static io.squados.memory.annotation.Memory synthAnnotation() {
+        return (io.squados.memory.annotation.Memory) java.lang.reflect.Proxy.newProxyInstance(
+            io.squados.memory.annotation.Memory.class.getClassLoader(),
+            new Class<?>[]{ io.squados.memory.annotation.Memory.class },
+            (proxy, method, args) -> switch (method.getName()) {
+                case "type"           -> MemoryType.EPISODIC;
+                case "scope"          -> io.squados.memory.annotation.MemoryScope.SQUAD;
+                case "op"             -> io.squados.memory.annotation.MemoryOp.WRITE;
+                case "topK"           -> 3;
+                case "minScore"       -> 0.0f;
+                case "tags"           -> new String[]{"smoke-test"};
+                case "importance"     -> io.squados.memory.annotation.Importance.MEDIUM;
+                case "promote"        -> false;
+                case "annotationType" -> io.squados.memory.annotation.Memory.class;
+                case "toString"       -> "@Memory(test)";
+                case "hashCode"       -> 0;
+                case "equals"         -> proxy == args[0];
+                default -> {
+                    Object def = method.getDefaultValue();
+                    if (def != null) yield def;
+                    throw new UnsupportedOperationException(method.getName());
+                }
+            });
+    }
+
+    /** ObjectProvider that always says "no bean available". */
+    private static <T> ObjectProvider<T> emptyProvider() {
+        return new ObjectProvider<T>() {
+            @Override public T getObject() { throw new IllegalStateException(); }
+            @Override public T getObject(Object... args) { throw new IllegalStateException(); }
+            @Override public T getIfAvailable() { return null; }
+            @Override public T getIfUnique() { return null; }
+            @Override public void ifAvailable(Consumer<T> dependencyConsumer) { /* no-op */ }
+            @Override public void ifUnique(Consumer<T> dependencyConsumer) { /* no-op */ }
+        };
+    }
+}

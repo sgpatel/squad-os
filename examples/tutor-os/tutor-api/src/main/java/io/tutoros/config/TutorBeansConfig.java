@@ -2,10 +2,12 @@ package io.tutoros.config;
 
 import io.squados.context.SquadContext;
 import io.squados.debate.DebateEngine;
+import io.squados.memory.MemoryManager;
 import io.tutoros.agent.*;
 import io.tutoros.pipeline.*;
 import io.tutoros.pipeline.PipelineEventBus;
 import io.tutoros.websocket.*;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -129,7 +131,12 @@ public class TutorBeansConfig {
             DebateEngine debateEngine,
             // PipelineEventBus is wired below; declared here so Spring
             // resolves it before constructing the pipeline.
-            PipelineEventBus pipelineEventBus) {
+            PipelineEventBus pipelineEventBus,
+            // MemoryManager is created by MemoryConfig only when
+            // squad.memory.enabled=true. ObjectProvider keeps the
+            // pipeline runnable when memory is turned off — the write
+            // call short-circuits cleanly on null.
+            ObjectProvider<MemoryManager> memoryManagerProvider) {
 
         return new TutoringPipeline(
             ctx,
@@ -139,7 +146,8 @@ public class TutorBeansConfig {
             escalationAgent,
             todoAgent, quizAgent, visualisationAgent,
             debateEngine,
-            pipelineEventBus
+            pipelineEventBus,
+            memoryManagerProvider.getIfAvailable()
         );
     }
 
