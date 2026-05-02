@@ -212,6 +212,7 @@ public class SessionState {
         public String gapConcepts()            { return raw.gapConcepts; }
         public String masteredConcepts()       { return raw.masteredConcepts; }
         public boolean atRisk()                { return raw.atRisk; }
+        public io.tutoros.model.Syllabus customSyllabus() { return raw.customSyllabus; }
         @Override public String toString()     {
             return String.format("LearnerProfile{name=%s,level=%s,goal=%s,style=%s}",
                 raw.name, raw.level, raw.goal, raw.learningStyle);

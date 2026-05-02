@@ -191,6 +191,16 @@ public class SessionManager {
             .findFirst().orElse(null);
     }
 
+    /**
+     * Public read accessor for controllers (e.g. SyllabusController) that
+     * need to mutate fields on {@code state.profile().raw()} without
+     * driving the pipeline. Returns null when the session id is unknown
+     * — caller decides whether that's a 404 or a silent no-op.
+     */
+    public SessionState getSession(String sessionId) {
+        return findBySessionId(sessionId);
+    }
+
     private String sessionKey(String learnerId, String subject) {
         return learnerId + ":" + subject.toLowerCase().replace(" ", "-");
     }

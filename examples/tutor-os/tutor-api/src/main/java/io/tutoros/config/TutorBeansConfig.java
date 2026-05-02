@@ -101,6 +101,11 @@ public class TutorBeansConfig {
         return new QuizAgent();
     }
 
+    @Bean
+    public SyllabusSuggesterAgent syllabusSuggesterAgent() {
+        return new SyllabusSuggesterAgent();
+    }
+
     // ── Pipeline ──────────────────────────────────────────────────────────────
 
     /**

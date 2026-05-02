@@ -535,10 +535,16 @@ public class TutoringPipeline {
     }
 
     private PipelineResult runPlanningFlow(SessionState session, String message) {
+        // Prefer the learner's saved syllabus (suggested or pasted) over
+        // the LMS / built-in default — that's how /api/syllabus/save
+        // actually changes downstream planning.
         AgentResponse result = ctx.submitTo(AgentRole.STRATEGIST,
             planner.planningPrompt(
                 session.profile().raw(),
-                planner.fetchSyllabus(session.profile().subject(), session.profile().level())
+                planner.fetchSyllabus(
+                    session.profile().subject(),
+                    session.profile().level(),
+                    session.profile().customSyllabus())
             )
         );
         StudyPlan plan = result.structuredOutput(StudyPlan.class);

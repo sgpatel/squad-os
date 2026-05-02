@@ -83,4 +83,18 @@ public class LearnerProfile {
 
     @OutputField(description = "Whether the learner has shown signs of frustration or disengagement", example = "false")
     public boolean atRisk;
+
+    // ── Curriculum override ─────────────────────────────────────────
+    /**
+     * Learner-provided or LLM-suggested syllabus for the active topic.
+     * Populated by {@code POST /api/syllabus/save} (either after the
+     * learner clicks "Suggest" or pastes their own). When non-null, the
+     * CurriculumPlannerAgent uses this in place of the LMS / built-in
+     * default — the planner sees what the learner actually has to cover.
+     *
+     * Not produced by DiagnosticAgent's @StructuredOutput, so this field
+     * is intentionally NOT annotated with @OutputField — keeps it out of
+     * the schema the LLM sees during diagnostic JSON emission.
+     */
+    public io.tutoros.model.Syllabus customSyllabus;
 }

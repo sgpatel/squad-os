@@ -3,6 +3,7 @@ package io.tutoros.agent;
 import io.squados.annotation.*;
 import io.tutoros.model.LearnerProfile;
 import io.tutoros.model.StudyPlan;
+import io.tutoros.model.Syllabus;
 import io.squados.remote.SquadClient;
 
 /**
@@ -98,6 +99,27 @@ public class CurriculumPlannerAgent {
      * Falls back to a built-in default syllabus if LMS is unavailable.
      */
     public String fetchSyllabus(String subject, String level) {
+        return fetchSyllabus(subject, level, null);
+    }
+
+    /**
+     * Resolve the active syllabus, preferring sources in this order:
+     *   1. {@code learnerSyllabus} — the learner's saved/suggested syllabus
+     *      (populated by SyllabusController) wins over everything. This is
+     *      what makes "I pasted my syllabus" actually take effect.
+     *   2. School LMS via {@code @RemoteSquad} when configured.
+     *   3. Built-in default keyed by subject.
+     *
+     * Returns the chapter list as a single string (the format the
+     * planning prompt is already built for) so callers don't change.
+     */
+    public String fetchSyllabus(String subject, String level, Syllabus learnerSyllabus) {
+        if (learnerSyllabus != null && learnerSyllabus.chapters != null
+            && !learnerSyllabus.chapters.isBlank()) {
+            String marker = (learnerSyllabus.source != null
+                ? learnerSyllabus.source : "CUSTOM");
+            return "[" + marker + " syllabus]\n" + learnerSyllabus.chapters;
+        }
         try {
             return lmsClient.submit("GET_SYLLABUS subject=" + subject + " level=" + level);
         } catch (Exception e) {
