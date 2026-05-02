@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { seedUser, seedWorkspaces, seedSubjects, seedCourses, seedChapters, seedTopics, seedConcepts } from '@/lib/mockData';
-import type { User, Workspace, Subject, Course, Chapter, Topic, Concept } from '@/lib/types';
+import type { User, Workspace, Subject, Course, Chapter, Topic, Concept, Syllabus } from '@/lib/types';
 
 /**
  * Workspace store — currently-active workspace + lookup helpers.
@@ -23,6 +23,18 @@ interface WorkspaceState {
   activeSubjectId: string | null;
   setActiveWorkspace: (id: string) => void;
   setActiveSubject: (id: string | null) => void;
+
+  /**
+   * Cached syllabus for the active tutoring session. Populated when the
+   * SyllabusSheet opens (via {@code api.syllabus.get}) or when the user
+   * saves one (via {@code api.syllabus.save}). Cleared on session reset.
+   *
+   * Not persisted to localStorage — the source of truth is the backend
+   * session profile; we just cache so the sheet can reopen instantly
+   * without refetching.
+   */
+  activeSyllabus: Syllabus | null;
+  setActiveSyllabus: (s: Syllabus | null) => void;
 
   /**
    * Add a user-created subject to the current workspace. Returns the
@@ -59,9 +71,11 @@ export const useWorkspace = create<WorkspaceState>()(
 
       activeWorkspaceId: seedWorkspaces[0]!.id,
       activeSubjectId: null,
+      activeSyllabus: null,
 
       setActiveWorkspace: (id) => set({ activeWorkspaceId: id }),
-      setActiveSubject: (id) => set({ activeSubjectId: id }),
+      setActiveSubject: (id) => set({ activeSubjectId: id, activeSyllabus: null }),
+      setActiveSyllabus: (s) => set({ activeSyllabus: s }),
 
       addSubject: (input) => {
         const id = `s_user_${Date.now().toString(36)}`;

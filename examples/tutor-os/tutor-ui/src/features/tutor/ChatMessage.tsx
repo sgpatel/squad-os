@@ -18,13 +18,22 @@ import { DebateRound } from '@/features/pipeline/DebateRound';
 import { SaveNotePopover } from '@/features/notes/SaveNotePopover';
 import { Diagram } from '@/components/diagram/Diagram';
 
-interface Props { msg: Msg }
+interface Props {
+  msg: Msg;
+  /** Open the SyllabusSheet — wired by TutorPage so the
+      "Open Syllabus" quick-reply on a CLARIFY message can summon it. */
+  onOpenSyllabus?: () => void;
+  /** Send a quick-reply text back through the pipeline. Wired so that
+      buttons inside the ClarificationCard ("Stay in Math", "Switch
+      subject") behave exactly like the user typed those words. */
+  onQuickReply?: (text: string) => void;
+}
 
 /**
  * One message bubble. Tutor messages carry citations, a confidence
  * meter, and (when applicable) the Debate Round that produced them.
  */
-export function ChatMessage({ msg }: Props) {
+export function ChatMessage({ msg, onOpenSyllabus, onQuickReply }: Props) {
   // Identity comes from the authenticated user — avatar/initials/name
   // and learnerId for any backend calls we fan out from this message.
   const authUser = useAuth(s => s.currentUser());
@@ -49,6 +58,12 @@ export function ChatMessage({ msg }: Props) {
   // the verdict summary becomes a human-readable trust badge analogous to
   // the multi-model verification badge GPAI shows on solved problems.
   const verified = !!msg.debate;
+
+  // PR-A's disambiguation gate emits messages with teachingStyle === "CLARIFY".
+  // Render those as a card with quick-reply buttons instead of a normal
+  // markdown bubble so the learner can answer in one click without typing.
+  const isClarification = isTutor && msg.teachingStyle === 'CLARIFY';
+  const subjectNameNow  = (activeSubjectId && getSubject(activeSubjectId)?.name) || null;
 
   // AI follow-ups: re-dispatch the tutor's own answer as context for a
   // focused next turn (simpler / deeper / quiz / flashcards).
@@ -128,7 +143,16 @@ export function ChatMessage({ msg }: Props) {
       <div className="msg__body">
         <div className="msg__role">{isTutor ? 'Tutor' : user.name}</div>
         <div className="msg__content">
-          <Markdown>{msg.body}</Markdown>
+          {isClarification ? (
+            <ClarificationCard
+              body={msg.body}
+              subjectName={subjectNameNow}
+              onOpenSyllabus={onOpenSyllabus}
+              onQuickReply={onQuickReply}
+            />
+          ) : (
+            <Markdown>{msg.body}</Markdown>
+          )}
           {msg.visualAsset && <Diagram asset={msg.visualAsset} />}
         </div>
 
@@ -259,6 +283,78 @@ export function ChatMessage({ msg }: Props) {
           onSaved={markSaved}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * `<ClarificationCard />` — special render for messages where the
+ * backend disambiguation gate (PR-A) returned `teachingStyle === "CLARIFY"`.
+ *
+ * Why a dedicated card (not just a bubble): the message is a question
+ * waiting for an answer, and asking the learner to TYPE one re-introduces
+ * exactly the ambiguity we just refused to guess on. Quick-reply buttons
+ * collapse the answer into a single click and route through the same
+ * pipeline as a typed message — so the next backend turn sees a clear,
+ * subject-tagged reply.
+ *
+ * Three actions:
+ *   1. "Stay in <subject>"   → "Continue inside <subject>"
+ *   2. "Switch subject"      → "I'd like to study a different subject"
+ *   3. "Open Syllabus"       → opens SyllabusSheet so the learner can
+ *                              shape the curriculum directly instead of
+ *                              answering in chat.
+ */
+function ClarificationCard(props: {
+  body: string;
+  subjectName: string | null;
+  onOpenSyllabus?: () => void;
+  onQuickReply?: (text: string) => void;
+}) {
+  const { body, subjectName, onOpenSyllabus, onQuickReply } = props;
+  const stayLabel   = subjectName ? `Stay in ${subjectName}` : 'Use current subject';
+  const stayMsg     = subjectName
+    ? `Yes — please continue inside ${subjectName}.`
+    : 'Yes — continue with the current subject.';
+  const switchMsg   = "I'd like to study a different subject — please ask me which.";
+
+  return (
+    <div className="clarify-card" role="region" aria-label="Clarification needed">
+      <div className="clarify-card__icon" aria-hidden>
+        <HelpCircle size={16} />
+      </div>
+      <div className="clarify-card__body">
+        <Markdown>{body}</Markdown>
+        <div className="clarify-card__actions" role="group" aria-label="Quick replies">
+          {onQuickReply && (
+            <button
+              type="button"
+              className="btn btn--primary btn--sm"
+              onClick={() => onQuickReply(stayMsg)}
+            >
+              {stayLabel}
+            </button>
+          )}
+          {onQuickReply && (
+            <button
+              type="button"
+              className="btn btn--sm"
+              onClick={() => onQuickReply(switchMsg)}
+            >
+              Switch subject
+            </button>
+          )}
+          {onOpenSyllabus && (
+            <button
+              type="button"
+              className="btn btn--sm"
+              onClick={onOpenSyllabus}
+            >
+              <ListTree size={12} /> Open syllabus
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

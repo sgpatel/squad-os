@@ -15,7 +15,8 @@ import type {
   PipelineEvent,
 } from './pipeline';
 import type {
-  ChatMessage, DebateRound, PipelineRun, PipelineStep, PipelineStageKey, VisualAsset
+  ChatMessage, DebateRound, PipelineRun, PipelineStep, PipelineStageKey,
+  Syllabus, VisualAsset
 } from './types';
 import { PIPELINE_STAGES } from './mockData';
 import type { PipelineStageDef } from './types';
@@ -203,6 +204,51 @@ export const api = {
       `/session/${encodeURIComponent(sessionId)}/answer`,
       { method: 'POST', body: JSON.stringify({ question, answer, attemptNumber }) }
     );
+  },
+
+  // ── Syllabus (PR-B) ──────────────────────────────────────────────
+  // Backend: SyllabusController.
+  //   POST /api/syllabus/suggest   — generate via SyllabusSuggesterAgent
+  //   POST /api/syllabus/save      — persist onto LearnerProfile
+  //   GET  /api/syllabus/{sid}     — read back saved syllabus
+  //
+  // The /suggest body accepts EITHER a sessionId (server resolves the
+  // active subject/topic/level from the profile) OR all three explicit
+  // fields for a session-less preview.
+
+  syllabus: {
+    suggest(
+      req: { sessionId?: string; subject?: string; topic?: string; level?: string }
+    ): Promise<Syllabus> {
+      return apiFetch('/api/syllabus/suggest', {
+        method: 'POST',
+        body: JSON.stringify(req),
+      });
+    },
+
+    save(sessionId: string, syllabus: Partial<Syllabus>): Promise<Syllabus> {
+      return apiFetch('/api/syllabus/save', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId, syllabus }),
+      });
+    },
+
+    /**
+     * Returns null when the backend reports 204 (session exists but no
+     * syllabus saved yet) so callers don't have to special-case it.
+     * Throws on 404 (unknown session) and other non-2xx via apiFetch.
+     */
+    async get(sessionId: string): Promise<Syllabus | null> {
+      try {
+        return await apiFetch<Syllabus>(
+          `/api/syllabus/${encodeURIComponent(sessionId)}`,
+          { method: 'GET' });
+      } catch (err) {
+        // apiFetch throws ApiError on non-2xx; treat 204 (no body) as null.
+        if (err instanceof ApiError && err.status === 204) return null;
+        throw err;
+      }
+    },
   },
 };
 
@@ -631,6 +677,11 @@ export class FrameTranslator {
       citations: p.citations,
       debate: p.debate,
       visualAsset,
+      // Forward backend disambiguation flags so the UI can render
+      // teachingStyle === 'CLARIFY' messages as ClarificationCards
+      // instead of plain markdown bubbles.
+      teachingStyle: p.teachingStyle ?? this.tutorMsg?.teachingStyle,
+      clarification: p.clarification ?? this.tutorMsg?.clarification,
       pipelineRunId: this.runId,
       createdAt: this.tutorMsg?.createdAt ?? Date.now(),
     };

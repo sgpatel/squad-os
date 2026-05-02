@@ -259,7 +259,41 @@ export interface ChatMessage {
   debate?: DebateRound;
   /** A diagram emitted by VisualisationAgent (gpai-style domain spec). */
   visualAsset?: VisualAsset;
+  /**
+   * Teaching style this turn used. Free-form for normal turns
+   * ("DIRECT" / "SOCRATIC" / etc.), but the special value "CLARIFY"
+   * signals that the message is the disambiguation gate asking the
+   * learner about subject/topic — the UI renders it differently
+   * (ClarificationCard with quick replies) instead of plain markdown.
+   */
+  teachingStyle?: string;
+  /**
+   * Clarification kind, set by the backend when teachingStyle === "CLARIFY".
+   * Today only "subject" is emitted (subject/topic gate). Future kinds
+   * (level, syllabus-confirm, …) extend this discriminator.
+   */
+  clarification?: string;
   createdAt: number;
+}
+
+/**
+ * Syllabus — wire shape mirroring the backend Syllabus model.
+ *
+ * Lives client-side so the SyllabusSheet can edit it before /save and the
+ * workspace store can cache the active one. The {@code source} field is
+ * one of:
+ *   - SUGGESTED  → emitted by SyllabusSuggesterAgent
+ *   - CUSTOM     → pasted by the learner
+ *   - LMS        → fetched from school LMS (server-only today)
+ */
+export interface Syllabus {
+  subject: string;
+  topic: string;
+  level: string;
+  /** Newline-separated chapter list with "- " bullets (see backend model) */
+  chapters: string;
+  rationale?: string;
+  source: 'SUGGESTED' | 'CUSTOM' | 'LMS' | string;
 }
 
 /**
