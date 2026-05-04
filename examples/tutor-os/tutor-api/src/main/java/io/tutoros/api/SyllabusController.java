@@ -11,6 +11,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 /**
  * Syllabus Controller — lets the learner either
@@ -40,16 +43,19 @@ public class SyllabusController {
 
     private static final Logger log = LoggerFactory.getLogger(SyllabusController.class);
 
-    private final SquadContext            ctx;
-    private final SyllabusSuggesterAgent  suggester;
-    private final SessionManager          sessions;
+    private final SquadContext              ctx;
+    private final SyllabusSuggesterAgent    suggester;
+    private final SessionManager            sessions;
+    private final SyllabusExtractionService extractor;
 
     public SyllabusController(SquadContext ctx,
                                SyllabusSuggesterAgent suggester,
-                               SessionManager sessions) {
+                               SessionManager sessions,
+                               SyllabusExtractionService extractor) {
         this.ctx       = ctx;
         this.suggester = suggester;
         this.sessions  = sessions;
+        this.extractor = extractor;
     }
 
     // ── DTOs ─────────────────────────────────────────────────────────
@@ -130,6 +136,105 @@ public class SyllabusController {
             if (s.topic   == null || s.topic.isBlank())   s.topic   = scope.topic;
             if (s.level   == null || s.level.isBlank())   s.level   = scope.level;
         }
+        return ResponseEntity.ok(s);
+    }
+
+    // ── /extract ────────────────────────────────────────────────────
+
+    /**
+     * POST /api/syllabus/extract
+     *
+     * Multipart upload — accepts a PDF or image (PNG/JPEG/WEBP) of the
+     * learner's syllabus, extracts plain text, and runs it through
+     * {@link SyllabusSuggesterAgent#extractFromTextPrompt} to emit a
+     * typed Syllabus. The response is the same shape as /suggest, so
+     * the SyllabusSheet's review-and-edit flow handles both paths.
+     *
+     * Optional form parts:
+     *   - sessionId — used to resolve a subject hint from the session
+     *                 profile (helps the LLM disambiguate documents
+     *                 that span multiple subjects)
+     *   - subject   — explicit subject hint (overrides session)
+     *
+     * Status codes:
+     *   200 — Syllabus body
+     *   400 — empty / oversized / unsupported MIME type
+     *   415 — image upload but no vision-capable ChatModel configured
+     *   502 — agent call failed (LLM provider down etc.)
+     */
+    @PostMapping(value = "/extract", consumes = "multipart/form-data")
+    public ResponseEntity<Syllabus> extract(
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(value = "sessionId", required = false) String sessionId,
+            @RequestParam(value = "subject",   required = false) String subjectHint) {
+
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        // Resolve a subject hint: explicit > session > none.
+        String hint = subjectHint;
+        if ((hint == null || hint.isBlank()) && sessionId != null) {
+            SessionState state = sessions.getSession(sessionId);
+            if (state != null) hint = state.profile().subject();
+        }
+
+        // 1. Bytes → plain text (PDF: PDFBox; image: vision LLM).
+        SyllabusExtractionService.Extracted ext;
+        try {
+            ext = extractor.extract(
+                file.getBytes(),
+                file.getContentType(),
+                file.getOriginalFilename());
+        } catch (UnsupportedOperationException missingVision) {
+            log.info("image extraction declined: {}", missingVision.getMessage());
+            return ResponseEntity.status(415).build();
+        } catch (IllegalArgumentException badInput) {
+            log.info("extract bad input: {}", badInput.getMessage());
+            return ResponseEntity.badRequest().build();
+        } catch (IOException ioe) {
+            log.warn("extract io error", ioe);
+            return ResponseEntity.status(502).build();
+        }
+
+        if (ext.text() == null || ext.text().isBlank()) {
+            log.info("extract produced empty text from {}", ext.sourceKind());
+            return ResponseEntity.badRequest().build();
+        }
+
+        // 2. Plain text → structured Syllabus via the suggester agent's
+        //    extract prompt. Reuses the same WILDCARD-routed @StructuredOutput.
+        AgentResponse resp;
+        try {
+            resp = ctx.submitTo(AgentRole.WILDCARD,
+                suggester.extractFromTextPrompt(ext.text(), hint));
+        } catch (RuntimeException e) {
+            log.warn("syllabus extractor agent failed", e);
+            return ResponseEntity.status(502).build();
+        }
+
+        Syllabus s = resp != null ? resp.structuredOutput(Syllabus.class) : null;
+        if (s == null) {
+            // Same fallback shape as /suggest — keep the raw text so the
+            // UI can render + edit even on parse failure.
+            s = new Syllabus();
+            s.subject   = hint != null ? hint : "";
+            s.topic     = "";
+            s.level     = "SENIOR_SCHOOL";
+            s.chapters  = resp != null ? resp.content() : "";
+            s.rationale = "(LLM response did not match Syllabus schema; raw text preserved)";
+            s.source    = "CUSTOM";
+        } else {
+            // The extract path always represents learner-owned material,
+            // even if the doc came from an institution — stamp CUSTOM.
+            s.source = "CUSTOM";
+            if (s.level == null || s.level.isBlank()) s.level = "SENIOR_SCHOOL";
+        }
+
+        log.info("extracted syllabus from {} ({} chars) → subject={} topic={} chapters≈{}chars",
+            ext.sourceKind(), ext.charCount(),
+            s.subject, s.topic,
+            s.chapters != null ? s.chapters.length() : 0);
         return ResponseEntity.ok(s);
     }
 

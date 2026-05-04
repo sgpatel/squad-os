@@ -249,6 +249,46 @@ export const api = {
         throw err;
       }
     },
+
+    /**
+     * POST /api/syllabus/extract — upload a PDF or image and get a
+     * Syllabus back. Bypasses {@link apiFetch} because multipart needs
+     * the browser to set the Content-Type with the right boundary;
+     * forcing application/json would break the upload.
+     *
+     * Throws {@link ApiError} on non-2xx, including 415 when the
+     * backend has no vision-capable ChatModel for image uploads.
+     */
+    async extract(opts: {
+      file: File;
+      sessionId?: string;
+      subject?: string;
+    }): Promise<Syllabus> {
+      const form = new FormData();
+      form.append('file', opts.file);
+      if (opts.sessionId) form.append('sessionId', opts.sessionId);
+      if (opts.subject)   form.append('subject',   opts.subject);
+
+      const res = await fetch(`${HTTP_BASE}/api/syllabus/extract`, {
+        method: 'POST',
+        body: form,
+        // NOTE: do not set Content-Type. Browsers add multipart boundary.
+      });
+      if (!res.ok) {
+        const body = await safeJson(res);
+        const hint =
+          res.status === 415
+            ? 'Image uploads require a vision-capable LLM. Try a PDF, or set OPENAI_API_KEY with a vision model.'
+            : res.status === 400
+              ? 'The file looked unsupported, empty, or unreadable. Try a clearer PDF or image.'
+              : '';
+        throw new ApiError(
+          res.status,
+          body,
+          `POST /api/syllabus/extract → ${res.status}${hint ? ' — ' + hint : ''}`);
+      }
+      return (await res.json()) as Syllabus;
+    },
   },
 };
 

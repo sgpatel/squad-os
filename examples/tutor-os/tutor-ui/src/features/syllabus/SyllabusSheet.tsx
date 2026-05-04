@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Sparkles, ClipboardPaste, Save, X, RefreshCw, BookOpen } from 'lucide-react';
+import {
+  Sparkles, ClipboardPaste, Save, X, RefreshCw, BookOpen,
+  Upload, FileText
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import { usePipeline } from '@/store/pipeline';
 import { useWorkspace } from '@/store/workspace';
@@ -30,7 +33,7 @@ export function SyllabusSheet({ open, onClose }: { open: boolean; onClose: () =>
 
   // Tab state — local; we deliberately don't push it to the URL so that
   // closing + reopening the sheet always lands on Suggest first.
-  const [tab, setTab] = useState<'suggest' | 'paste'>('suggest');
+  const [tab, setTab] = useState<'suggest' | 'paste' | 'upload'>('suggest');
 
   // Form state. Topic and level are editable — pasting a syllabus from
   // a different course is a legitimate use case, and the learner may
@@ -84,6 +87,48 @@ export function SyllabusSheet({ open, onClose }: { open: boolean; onClose: () =>
   if (!open) return null;
 
   // ── Actions ──────────────────────────────────────────────────────
+
+  /**
+   * Upload path — multipart POST to /api/syllabus/extract. Backend
+   * runs PDFBox (PDFs) or Spring AI vision (images) → text →
+   * SyllabusSuggesterAgent.extractFromTextPrompt → Syllabus. We
+   * then jump to the Paste tab so the learner reviews/edits/saves.
+   *
+   * 8 MiB cap mirrors the backend so we fail fast in the browser
+   * rather than after the upload round-trip.
+   */
+  const runUpload = async (file: File) => {
+    setError(null);
+    if (file.size > 8 * 1024 * 1024) {
+      setError(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB, max 8 MB).`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const s = await api.syllabus.extract({
+        file,
+        sessionId: sessionId ?? undefined,
+        subject:   subject || undefined,
+      });
+      setTopic(s.topic);
+      setLevel(s.level);
+      setChapters(s.chapters);
+      setRationale(s.rationale ?? '');
+      // If the LLM returned an empty chapters string the document was
+      // probably not a syllabus — keep the user on Upload with the
+      // rationale shown instead of silently jumping tabs.
+      if (s.chapters && s.chapters.trim()) {
+        setTab('paste');
+      } else {
+        setError(s.rationale
+          || 'No syllabus structure detected in the file.');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const runSuggest = async () => {
     setError(null);
@@ -169,7 +214,16 @@ export function SyllabusSheet({ open, onClose }: { open: boolean; onClose: () =>
               className={'syllabus-tab' + (tab === 'suggest' ? ' syllabus-tab--on' : '')}
               onClick={() => setTab('suggest')}
             >
-              <Sparkles size={13} /> Suggest a syllabus
+              <Sparkles size={13} /> Suggest
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'upload'}
+              className={'syllabus-tab' + (tab === 'upload' ? ' syllabus-tab--on' : '')}
+              onClick={() => setTab('upload')}
+            >
+              <Upload size={13} /> Upload PDF / image
             </button>
             <button
               type="button"
@@ -178,7 +232,7 @@ export function SyllabusSheet({ open, onClose }: { open: boolean; onClose: () =>
               className={'syllabus-tab' + (tab === 'paste' ? ' syllabus-tab--on' : '')}
               onClick={() => setTab('paste')}
             >
-              <ClipboardPaste size={13} /> Paste my syllabus
+              <ClipboardPaste size={13} /> Paste / edit
             </button>
           </div>
         </div>
@@ -215,7 +269,7 @@ export function SyllabusSheet({ open, onClose }: { open: boolean; onClose: () =>
           </div>
 
           {/* Tab body */}
-          {tab === 'suggest' ? (
+          {tab === 'suggest' && (
             <div className="syllabus-suggest" style={{ marginTop: 8 }}>
               <p className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
                 The tutor will draft 4–8 chapters with bullet sub-points,
@@ -232,11 +286,17 @@ export function SyllabusSheet({ open, onClose }: { open: boolean; onClose: () =>
               </button>
               {chapters && (
                 <p className="muted" style={{ fontSize: 11, marginTop: 8 }}>
-                  Draft ready — switch to <i>Paste my syllabus</i> to review and save.
+                  Draft ready — switch to <i>Paste / edit</i> to review and save.
                 </p>
               )}
             </div>
-          ) : (
+          )}
+
+          {tab === 'upload' && (
+            <UploadDropzone busy={busy} onFile={runUpload} />
+          )}
+
+          {tab === 'paste' && (
             <>
               <label className="field">
                 <span className="field__label">Chapters (one per line, "- " for bullets)</span>
@@ -285,6 +345,69 @@ export function SyllabusSheet({ open, onClose }: { open: boolean; onClose: () =>
           </button>
         </footer>
       </div>
+    </div>
+  );
+}
+
+/**
+ * `<UploadDropzone />` — drag/drop + click-to-browse target for the
+ * Upload tab. Accepts a single file (PDF / PNG / JPEG / WEBP) and hands
+ * it to the parent's {@code onFile} handler, which posts to
+ * {@code /api/syllabus/extract}.
+ *
+ * Why a dedicated component (not just an `<input type="file">`):
+ *   - the drag-over / drag-leave styling is isolated here,
+ *   - the click target spans the whole dropzone via the
+ *     `<label htmlFor>` pattern (no hidden-input click forwarding hack),
+ *   - the parent stays focused on the syllabus form state.
+ */
+function UploadDropzone(props: { busy: boolean; onFile: (f: File) => void }) {
+  const { busy, onFile } = props;
+  const [over, setOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFiles = (files: FileList | null) => {
+    if (busy || !files || files.length === 0) return;
+    onFile(files[0]!);
+  };
+
+  return (
+    <div
+      className={'syllabus-drop' + (over ? ' syllabus-drop--over' : '')
+        + (busy ? ' syllabus-drop--busy' : '')}
+      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        handleFiles(e.dataTransfer.files);
+      }}
+    >
+      <input
+        ref={inputRef}
+        id="syllabus-file"
+        type="file"
+        accept="application/pdf,image/png,image/jpeg,image/webp"
+        style={{ display: 'none' }}
+        onChange={(e) => handleFiles(e.target.files)}
+      />
+      <label htmlFor="syllabus-file" className="syllabus-drop__inner">
+        <div className="syllabus-drop__icon">
+          {busy ? <RefreshCw size={20} className="spin" /> : <FileText size={20} />}
+        </div>
+        <div className="syllabus-drop__text">
+          <strong>{busy ? 'Reading your syllabus…' : 'Drop a PDF or image here'}</strong>
+          <span className="muted">
+            {busy
+              ? 'Extracting text and building chapter list'
+              : 'or click to browse — PDF / PNG / JPEG / WEBP up to 8 MB'}
+          </span>
+        </div>
+      </label>
+      <p className="muted" style={{ fontSize: 11, marginTop: 8 }}>
+        We extract the chapter list and detect the subject + topic
+        automatically. You'll review the result before saving.
+      </p>
     </div>
   );
 }

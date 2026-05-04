@@ -53,6 +53,15 @@
       <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
     </dependency>
 
+    <!-- PDF text extraction for /api/syllabus/extract.
+         PDFBox is the lightest mainstream option for this — pure Java,
+         no Tika cascade, no native deps. Used only on the upload path. -->
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>3.0.3</version>
+    </dependency>
+
     <!-- Test scope — JUnit + Spring test harness for the memory smoke test
          and any future end-to-end pipeline tests. -->
     <dependency>
