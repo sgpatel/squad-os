@@ -1,5 +1,6 @@
 package io.tutoros.api;
 
+import io.tutoros.mastery.MasteryService;
 import io.tutoros.model.AssessmentFeedback;
 import io.tutoros.model.PracticeQuestion;
 import io.tutoros.model.Quiz;
@@ -42,8 +43,11 @@ public class QuizController {
     /** Active (in-progress) quizzes keyed by quizId. */
     private final Map<String, ActiveQuiz> activeQuizStore = new ConcurrentHashMap<>();
 
-    public QuizController(SessionManager sessionManager) {
+    private final MasteryService mastery;
+
+    public QuizController(SessionManager sessionManager, MasteryService mastery) {
         this.sessionManager = sessionManager;
+        this.mastery        = mastery;
     }
 
     // ── Generate ──────────────────────────────────────────────────────────────
@@ -190,6 +194,19 @@ public class QuizController {
                 masteredConcepts.add(entry.conceptTag());
             } else if (feedback.masteryDelta < -0.02) {
                 revisitConcepts.add(entry.conceptTag());
+            }
+
+            // Feed quiz outcomes into the mastery graph so the SM-2
+            // scheduler + review queue see them alongside tutor-turn
+            // answers. Best-effort — never fails the submission.
+            // source="quiz" lets UI charts split tutor vs quiz history.
+            try {
+                if (entry.conceptTag() != null && !entry.conceptTag().isBlank()) {
+                    mastery.recordFromFeedback(
+                        learnerId, subject, entry.conceptTag(), feedback, "quiz");
+                }
+            } catch (RuntimeException e) {
+                log.warn("mastery write from quiz failed (non-fatal): {}", e.toString());
             }
 
             String bloom = feedback.bloomsDemonstrated == null ? "UNKNOWN" : feedback.bloomsDemonstrated;
