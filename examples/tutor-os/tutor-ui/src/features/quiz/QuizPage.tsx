@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/Input';
 import { Tag, SectionLabel } from '@/components/ui/Misc';
 import { fmtMinutes } from '@/lib/format';
 import { LIVE_BACKEND, api, DEMO_LEARNER_ID } from '@/lib/api';
+import { masteryToast } from '@/components/ui/Toaster';
 import type { QuizQuestion } from '@/lib/types';
 import { QuizHome } from './QuizHome';
 
@@ -273,6 +274,17 @@ async function gradeAnswer(
           1
         );
         const score01 = Math.max(0, Math.min(1, (feedback.score ?? 0) / 100));
+        // Mastery announcement — feedback.masteryDelta is on the SM-2
+        // scale (-0.10 to +0.20). Convert to percent for display. The
+        // backend's QuizController.submit also writes this through to
+        // the mastery graph (M3-Quiz), so the toast is just surfacing
+        // a side effect that already happened on the server.
+        if (feedback.masteryDelta != null && Math.abs(feedback.masteryDelta) >= 0.01) {
+          masteryToast({
+            concept:  q.conceptId || 'this concept',
+            deltaPct: feedback.masteryDelta * 100,
+          });
+        }
         return {
           correct: feedback.correct ?? score01 >= 0.7,
           rubric: {

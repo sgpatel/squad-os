@@ -369,6 +369,68 @@ html { font-size: calc(var(--text-base) * var(--font-scale, 1)); }
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
+/* ── Toaster (global) ───────────────────────────────────────────── */
+/* Bottom-right stack. Pointer-events:none on the wrapper so toasts
+   don't block clicks on the page underneath; individual .toast cards
+   re-enable pointer events on themselves. */
+.toaster {
+  position: fixed;
+  bottom: var(--space-4);
+  right: var(--space-4);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  pointer-events: none;
+  max-width: min(360px, calc(100vw - var(--space-6)));
+}
+.toast {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  animation: toast-in 160ms ease-out both;
+  cursor: pointer;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.toast__icon { color: var(--color-text-subtle); margin-top: 1px; }
+.toast__body { display: grid; gap: 2px; min-width: 0; }
+.toast__title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toast__text { font-size: 12px; color: var(--color-text-subtle); }
+.toast__close {
+  background: none;
+  border: none;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  align-self: start;
+}
+.toast__close:hover { background: var(--color-bg-subtle); color: var(--color-text); }
+
+/* Per-kind colour accents — matches the existing semantic tokens. */
+.toast--success  { border-color: color-mix(in oklab, var(--color-success, #16a34a) 35%, var(--color-border)); }
+.toast--success  .toast__icon { color: var(--color-success, #16a34a); }
+.toast--error    { border-color: color-mix(in oklab, var(--color-danger,  #dc2626) 35%, var(--color-border)); }
+.toast--error    .toast__icon { color: var(--color-danger,  #dc2626); }
+.toast--mastery  { border-color: color-mix(in oklab, var(--color-accent)             40%, var(--color-border)); }
+.toast--mastery  .toast__icon { color: var(--color-accent); }
+
 /* Tutor-header right-side action cluster — the syllabus button plus the
    review-due pill from M3-B. */
 .tutor-header__actions {

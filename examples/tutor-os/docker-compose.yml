@@ -122,7 +122,12 @@ services:
     ports:
       - "${TUTOR_API_PORT:-8080}:8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || curl -fsS http://localhost:8080/ || exit 1"]
+      # /actuator/health is real readiness — exposed by spring-boot-
+      # starter-actuator (added to tutor-api pom). Returns {"status":"UP"}
+      # only after every Spring bean has finished init, including the
+      # MasteryService + MemoryManager + (in selfhost mode) the JDBC
+      # DataSource pool warm-up. tutor-ui's depends_on uses this gate.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q 'UP' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12

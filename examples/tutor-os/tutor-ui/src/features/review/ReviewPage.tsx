@@ -7,6 +7,7 @@ import {
 import { api } from '@/lib/api';
 import { useAuth } from '@/store/auth';
 import { Markdown } from '@/components/ui/Markdown';
+import { masteryToast } from '@/components/ui/Toaster';
 import { useReviewQueue } from './useReviewQueue';
 import type { MasteryGrade, PracticeCardQuestion, ReviewQueueItem } from '@/lib/types';
 
@@ -96,8 +97,12 @@ export function ReviewPage() {
     if (!current || !subject || busy) return;
     setBusy(true);
     setPostError(null);
+    // Capture the pre-grade score so we can show a real delta in the
+    // toast — the answer endpoint returns the AFTER score; the delta
+    // is the diff against this snapshot.
+    const beforePct = Math.round(current.score * 100);
     try {
-      await api.review.answer(learnerId, subject, {
+      const updated = await api.review.answer(learnerId, subject, {
         concept: current.concept,
         grade:   g,
         // Source defaults to "review" server-side; we omit it here to
@@ -105,6 +110,19 @@ export function ReviewPage() {
       });
       setQueue(q => q.slice(1));
       setDoneCount(n => n + 1);
+      // Mastery announcement — sign-aware delta, current absolute
+      // score. Skipped silently when the row is brand-new (the AGAIN
+      // path on a never-seen concept can produce a 0→0 delta which
+      // isn't worth a toast).
+      const afterPct = Math.round((updated?.score ?? current.score) * 100);
+      const delta = afterPct - beforePct;
+      if (delta !== 0) {
+        masteryToast({
+          concept:  current.concept,
+          deltaPct: delta,
+          scorePct: afterPct,
+        });
+      }
     } catch (e) {
       setPostError(e instanceof Error ? e.message : String(e));
     } finally {

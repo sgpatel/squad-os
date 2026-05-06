@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Topbar } from './Topbar';
 import { SideNav } from './SideNav';
 import { CommandPalette } from './CommandPalette';
+import { Toaster } from '@/components/ui/Toaster';
 import { useShortcut } from '@/hooks/useShortcut';
 
 /**
@@ -30,6 +31,10 @@ export function AppShell() {
         <Outlet />
       </main>
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+      {/* Global toast region — mounted once at the shell level so every
+          route (Review, Quiz, Tutor, …) can fire mastery announcements
+          without prop-drilling. */}
+      <Toaster />
     </div>
   );
 }
