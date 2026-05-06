@@ -1,5 +1,7 @@
 package io.tutoros.api;
 
+import io.tutoros.mastery.ConceptMastery;
+import io.tutoros.mastery.MasteryService;
 import io.tutoros.model.*;
 import io.tutoros.pipeline.SessionManager;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +40,14 @@ import java.util.*;
 public class ProgressController {
 
     private final SessionManager sessionManager;
+    /**
+     * Source of truth for per-concept mastery as of M3-A. Reads now go
+     * through this; the legacy {@link #masteryTimeline} map is kept as a
+     * write-through cache for any caller that still uses
+     * {@link #recordMastery} so its trend calculation keeps working
+     * during the transition.
+     */
+    private final MasteryService mastery;
 
     /** In-memory stores — production uses a time-series DB */
     private final Map<String, List<SessionSummary>>       sessionHistory  = new HashMap<>();
@@ -45,8 +55,9 @@ public class ProgressController {
     private final Map<String, List<QuizRecord>>           quizHistory     = new HashMap<>();
     private final Map<String, List<LocalDate>>            sessionDates    = new HashMap<>();
 
-    public ProgressController(SessionManager sessionManager) {
+    public ProgressController(SessionManager sessionManager, MasteryService mastery) {
         this.sessionManager = sessionManager;
+        this.mastery        = mastery;
     }
 
     // ── Dashboard summary ─────────────────────────────────────────────
@@ -118,28 +129,62 @@ public class ProgressController {
             @PathVariable String learnerId,
             @PathVariable String subject) {
 
-        String key = progressKey(learnerId, subject);
-        Map<String, List<Double>> timeline = masteryTimeline.getOrDefault(key, Map.of());
-
+        // Prefer the MasteryService graph (M3-A) — the answer-submission
+        // path writes there now, so it's the live source of truth. Fall
+        // back to the legacy in-memory timeline only when the graph is
+        // empty for this learner+subject (e.g. demo mode, or a fresh
+        // boot with no answers yet).
         List<ConceptMasteryItem> items = new ArrayList<>();
-        timeline.forEach((concept, history) -> {
-            int currentPct = history.isEmpty() ? 0
-                             : (int) Math.round(history.getLast() * 100);
-            items.add(new ConceptMasteryItem(
-                concept, currentPct,
-                computeTrend(history),
-                history.size(),
-                "Today" // production: track actual date
-            ));
-        });
 
-        // Seed realistic data if empty (demo mode)
+        for (ConceptMastery row : mastery.listForSubject(learnerId, subject)) {
+            int currentPct = (int) Math.round(row.score * 100);
+            items.add(new ConceptMasteryItem(
+                row.concept, currentPct,
+                computeTrendFromHistory(row),
+                row.history != null ? row.history.size() : 0,
+                row.lastSeenAt != null
+                    ? row.lastSeenAt.atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+                    : "Today"
+            ));
+        }
+
+        // Legacy fallback — keeps existing demo behaviour while the
+        // graph warms up. Removed in a follow-up once the answer-write
+        // path has been live long enough to backfill all subjects.
+        if (items.isEmpty()) {
+            String key = progressKey(learnerId, subject);
+            Map<String, List<Double>> timeline = masteryTimeline.getOrDefault(key, Map.of());
+            timeline.forEach((concept, history) -> {
+                int currentPct = history.isEmpty() ? 0
+                                 : (int) Math.round(history.getLast() * 100);
+                items.add(new ConceptMasteryItem(
+                    concept, currentPct,
+                    computeTrend(history),
+                    history.size(),
+                    "Today"
+                ));
+            });
+        }
+
+        // Seed realistic data if STILL empty (demo mode, no real data anywhere)
         if (items.isEmpty()) items.addAll(seedConceptData(subject));
 
         // Sort by mastery ascending (weakest first — most actionable)
         items.sort(Comparator.comparingInt(ConceptMasteryItem::masteryPct));
 
         return ResponseEntity.ok(new ConceptMasteryResponse(subject, items));
+    }
+
+    /**
+     * Trend over the last few mastery history entries. Uses the same
+     * thresholds as {@link #computeTrend(List)} so UI labels stay stable
+     * regardless of which read path produced the row.
+     */
+    private String computeTrendFromHistory(ConceptMastery row) {
+        if (row.history == null || row.history.size() < 2) return "STABLE";
+        List<Double> scores = new ArrayList<>(row.history.size());
+        for (var h : row.history) scores.add(h.score);
+        return computeTrend(scores);
     }
 
     // ── Session history ───────────────────────────────────────────────
@@ -454,13 +499,22 @@ public class ProgressController {
                                     k -> new ArrayList<>()).add(0, record);
     }
 
-    /** Store mastery update (called by TutoringPipeline) */
+    /**
+     * Store mastery update — legacy entry point. Kept so callers that
+     * pre-date M3-A's MasteryService keep compiling, but the canonical
+     * write path is now {@code SessionController.submitAnswer} →
+     * {@link MasteryService#recordFromFeedback}, which feeds the
+     * persistent graph this controller reads from.
+     *
+     * Writes here continue to populate the legacy timeline so any
+     * caller that hasn't migrated still sees its history.
+     */
     public void recordMastery(String learnerId, String subject,
-                               String concept, double mastery) {
+                               String concept, double masteryScore) {
         masteryTimeline
             .computeIfAbsent(progressKey(learnerId, subject), k -> new LinkedHashMap<>())
             .computeIfAbsent(concept, k -> new ArrayList<>())
-            .add(mastery);
+            .add(masteryScore);
     }
 
     // ── Request / Response records ────────────────────────────────────

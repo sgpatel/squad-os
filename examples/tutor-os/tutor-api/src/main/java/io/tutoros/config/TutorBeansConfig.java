@@ -4,10 +4,14 @@ import io.squados.context.SquadContext;
 import io.squados.debate.DebateEngine;
 import io.squados.memory.MemoryManager;
 import io.tutoros.agent.*;
+import io.tutoros.mastery.InProcessMasteryGraphStore;
+import io.tutoros.mastery.MasteryGraphStore;
+import io.tutoros.mastery.MasteryService;
 import io.tutoros.pipeline.*;
 import io.tutoros.pipeline.PipelineEventBus;
 import io.tutoros.websocket.*;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -104,6 +108,25 @@ public class TutorBeansConfig {
     @Bean
     public SyllabusSuggesterAgent syllabusSuggesterAgent() {
         return new SyllabusSuggesterAgent();
+    }
+
+    // ── Mastery (M3-A) ────────────────────────────────────────────────
+    /**
+     * MasteryGraphStore default — in-process map. Marked
+     * {@link ConditionalOnMissingBean} so a follow-up PR can drop in a
+     * JDBC-backed store (PgVectorEpisodicStore-style recipe) without
+     * touching this config.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public MasteryGraphStore masteryGraphStore() {
+        return new InProcessMasteryGraphStore();
+    }
+
+    /** Owns SM-2 + score updates + due-queue resolution. */
+    @Bean
+    public MasteryService masteryService(MasteryGraphStore store) {
+        return new MasteryService(store);
     }
 
     // ── Pipeline ──────────────────────────────────────────────────────────────

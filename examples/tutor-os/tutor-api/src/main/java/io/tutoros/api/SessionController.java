@@ -1,5 +1,6 @@
 package io.tutoros.api;
 
+import io.tutoros.mastery.MasteryService;
 import io.tutoros.model.*;
 import io.tutoros.pipeline.*;
 import org.slf4j.Logger;
@@ -30,9 +31,11 @@ public class SessionController {
     private static final Logger log = LoggerFactory.getLogger(SessionController.class);
 
     private final SessionManager sessionManager;
+    private final MasteryService mastery;
 
-    public SessionController(SessionManager sessionManager) {
+    public SessionController(SessionManager sessionManager, MasteryService mastery) {
         this.sessionManager = sessionManager;
+        this.mastery        = mastery;
     }
 
     /**
@@ -151,6 +154,26 @@ public class SessionController {
         );
 
         if (result instanceof PipelineResult.FeedbackResult fr) {
+            // Record this outcome into the mastery graph so the review
+            // queue + UI heatmaps + planner gap detection see the same
+            // ground truth. Best-effort — never fail the response if
+            // the mastery write hiccups (e.g. missing learnerId).
+            try {
+                SessionState state = sessionManager.getSession(sessionId);
+                if (state != null && fr.feedback() != null && request.question() != null) {
+                    String concept = request.question().conceptTag;
+                    String subject = state.profile().subject();
+                    String learner = state.learnerId();
+                    if (concept != null && !concept.isBlank()
+                        && subject != null && !subject.isBlank()
+                        && learner != null && !learner.isBlank()) {
+                        mastery.recordFromFeedback(
+                            learner, subject, concept, fr.feedback(), "tutor");
+                    }
+                }
+            } catch (RuntimeException e) {
+                log.warn("mastery write failed (non-fatal): {}", e.toString());
+            }
             return ResponseEntity.ok(new FeedbackResponse(fr.feedback()));
         }
         return ResponseEntity.internalServerError().build();
