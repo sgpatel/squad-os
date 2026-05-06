@@ -15,8 +15,8 @@ import type {
   PipelineEvent,
 } from './pipeline';
 import type {
-  ChatMessage, DebateRound, PipelineRun, PipelineStep, PipelineStageKey,
-  Syllabus, VisualAsset
+  ChatMessage, ConceptMasteryRow, DebateRound, PipelineRun, PipelineStep,
+  PipelineStageKey, ReviewAnswer, ReviewQueueItem, Syllabus, VisualAsset
 } from './types';
 import { PIPELINE_STAGES } from './mockData';
 import type { PipelineStageDef } from './types';
@@ -288,6 +288,34 @@ export const api = {
           `POST /api/syllabus/extract → ${res.status}${hint ? ' — ' + hint : ''}`);
       }
       return (await res.json()) as Syllabus;
+    },
+  },
+
+  // ── Review queue (M3-B) ──────────────────────────────────────────
+  // Backend: ReviewController.
+  //   GET  /api/review/queue/{learnerId}/{subject}?limit=N
+  //        → ReviewQueueItem[]  (most overdue first, never-seen first of all)
+  //   POST /api/review/{learnerId}/{subject}/answer
+  //        → ConceptMasteryRow  (full row after the SM-2 step)
+  //
+  // No client-side caching — the queue is short-lived per session and
+  // the answer call mutates server state, so we always read-through.
+
+  review: {
+    queue(learnerId: string, subject: string, limit = 20): Promise<ReviewQueueItem[]> {
+      return apiFetch<ReviewQueueItem[]>(
+        `/api/review/queue/${encodeURIComponent(learnerId)}/${encodeURIComponent(subject)}?limit=${limit}`,
+        { method: 'GET' });
+    },
+
+    answer(
+      learnerId: string,
+      subject: string,
+      body: ReviewAnswer
+    ): Promise<ConceptMasteryRow> {
+      return apiFetch<ConceptMasteryRow>(
+        `/api/review/${encodeURIComponent(learnerId)}/${encodeURIComponent(subject)}/answer`,
+        { method: 'POST', body: JSON.stringify(body) });
     },
   },
 };

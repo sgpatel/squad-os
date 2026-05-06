@@ -23,6 +23,7 @@ const CheatsheetPage = lazy(() => import('@/features/cheatsheet/CheatsheetPage')
 const RoughWorkPage = lazy(() => import('@/features/roughwork/RoughWorkPage').then(m => ({ default: m.RoughWorkPage })));
 const PracticePage  = lazy(() => import('@/features/practice/PracticePage').then(m => ({ default: m.PracticePage })));
 const QuizPage      = lazy(() => import('@/features/quiz/QuizPage').then(m => ({ default: m.QuizPage })));
+const ReviewPage    = lazy(() => import('@/features/review/ReviewPage').then(m => ({ default: m.ReviewPage })));
 const ProgressPage  = lazy(() => import('@/features/progress/ProgressPage').then(m => ({ default: m.ProgressPage })));
 const PlanPage      = lazy(() => import('@/features/plan/PlanPage').then(m => ({ default: m.PlanPage })));
 const LibraryPage   = lazy(() => import('@/features/library/LibraryPage').then(m => ({ default: m.LibraryPage })));
@@ -88,6 +89,7 @@ export function App() {
         <Route path="scratch"             element={<Lazy><RoughWorkPage /></Lazy>} />
         <Route path="practice"            element={<Lazy><PracticePage /></Lazy>} />
         <Route path="quiz"                element={<Lazy><QuizPage /></Lazy>} />
+        <Route path="review"              element={<Lazy><ReviewPage /></Lazy>} />
         <Route path="quiz/:quizId"        element={<Lazy><QuizPage /></Lazy>} />
 
         <Route path="progress"            element={<Lazy><ProgressPage /></Lazy>} />

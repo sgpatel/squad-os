@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, GraduationCap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { usePipeline } from '@/store/pipeline';
 import { useSettings } from '@/store/settings';
 import { useWorkspace } from '@/store/workspace';
@@ -7,6 +8,7 @@ import { ChatMessage } from './ChatMessage';
 import { ChatComposer } from './ChatComposer';
 import { AgentActivity } from '@/features/pipeline/AgentActivity';
 import { SyllabusSheet } from '@/features/syllabus/SyllabusSheet';
+import { useReviewQueue } from '@/features/review/useReviewQueue';
 
 /**
  * Tutor — the active chat canvas.
@@ -24,12 +26,28 @@ export function TutorPage() {
   const threadEndRef    = useRef<HTMLDivElement>(null);
   const [syllabusOpen, setSyllabusOpen] = useState(false);
 
+  // Pull the live review-queue count for the "N due" pill. Refreshes
+  // automatically when the active subject changes; we also refresh
+  // after every tutor turn (effect below) since a graded answer may
+  // have produced a new mastery write.
+  const { count: reviewDue, refresh: refreshReview } = useReviewQueue();
+  const navigate = useNavigate();
+
   const subjectName = activeSubjectId ? getSubject(activeSubjectId)?.name : null;
 
   // Pin scroll to bottom on new messages.
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages.length, currentRun?.active]);
+
+  // After a tutor turn ends, refresh the review queue — answer
+  // submissions and quiz writes may have added new due cards. Cheap
+  // (one short GET) and keeps the pill honest without polling.
+  useEffect(() => {
+    if (!isRunning && messages.length > 0) {
+      void refreshReview();
+    }
+  }, [isRunning, messages.length, refreshReview]);
 
   return (
     <div className="chat">
@@ -58,14 +76,31 @@ export function TutorPage() {
             </>
           )}
         </div>
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={() => setSyllabusOpen(true)}
-        >
-          <BookOpen size={13} />
-          {activeSyllabus ? 'Syllabus' : 'Suggest a syllabus'}
-        </button>
+        <div className="tutor-header__actions">
+          {/* Review-due pill — visible when at least one card is overdue.
+              Clicking deep-links to /review where the learner can grade
+              cards with the SM-2 4-button scale. Hidden at zero so the
+              header stays minimal during normal study. */}
+          {reviewDue > 0 && (
+            <button
+              type="button"
+              className="tutor-header__due"
+              onClick={() => navigate('/review')}
+              title={`${reviewDue} concept${reviewDue === 1 ? '' : 's'} due for review`}
+            >
+              <GraduationCap size={13} />
+              <span>{reviewDue} due</span>
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => setSyllabusOpen(true)}
+          >
+            <BookOpen size={13} />
+            {activeSyllabus ? 'Syllabus' : 'Suggest a syllabus'}
+          </button>
+        </div>
       </header>
 
       <div className="chat__thread">

@@ -369,6 +369,179 @@ html { font-size: calc(var(--text-base) * var(--font-scale, 1)); }
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
+/* Tutor-header right-side action cluster — the syllabus button plus the
+   review-due pill from M3-B. */
+.tutor-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Review-due pill (M3-B) — only rendered when count > 0, so it doubles
+   as a soft notification dot. Color leans on --color-warning so it
+   stands apart from the active subject pill. */
+.tutor-header__due {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-warning, #d97706) 40%, var(--color-border));
+  background: color-mix(in oklab, var(--color-warning, #d97706) 12%, var(--color-bg));
+  color: var(--color-warning, #b45309);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.tutor-header__due:hover {
+  background: color-mix(in oklab, var(--color-warning, #d97706) 20%, var(--color-bg));
+}
+
+/* ── Review page (M3-B) ──────────────────────────────────────────── */
+.review {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-6);
+  display: grid;
+  gap: var(--space-5);
+}
+.review__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.review__title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1 1 auto;
+}
+.review__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-subtle);
+  font-size: 12px;
+}
+.review__error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-danger, #dc2626) 8%, var(--color-bg));
+  color: var(--color-danger, #b91c1c);
+  font-size: 12px;
+}
+.review__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-4);
+  text-align: center;
+  color: var(--color-text-subtle);
+}
+.review__empty-icon--ok { color: var(--color-success, #16a34a); }
+
+.review__stage {
+  display: grid;
+  gap: var(--space-4);
+}
+.review__grades {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+}
+
+/* Mastery card */
+.review-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  background: var(--color-bg);
+  display: grid;
+  gap: var(--space-3);
+  /* Subtle left-edge band that picks up the band color for quick scanning. */
+  border-left-width: 4px;
+}
+.review-card--weak     { border-left-color: var(--color-danger, #dc2626); }
+.review-card--learning { border-left-color: var(--color-warning, #d97706); }
+.review-card--mastered { border-left-color: var(--color-success, #16a34a); }
+.review-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+}
+.review-card__band {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.review-card__band--weak     { background: color-mix(in oklab, var(--color-danger, #dc2626) 14%, transparent);  color: var(--color-danger, #b91c1c); }
+.review-card__band--learning { background: color-mix(in oklab, var(--color-warning, #d97706) 16%, transparent); color: var(--color-warning, #b45309); }
+.review-card__band--mastered { background: color-mix(in oklab, var(--color-success, #16a34a) 14%, transparent); color: var(--color-success, #15803d); }
+
+.review-card__concept {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.3;
+}
+.review-card__meta {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 12px;
+}
+.review-card__meta dt {
+  color: var(--color-text-subtle);
+  margin-bottom: 2px;
+}
+.review-card__meta dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Grade buttons — match SM-2 4-grade scale. */
+.grade {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  cursor: pointer;
+  transition: transform 80ms ease, background 120ms ease, border-color 120ms ease;
+}
+.grade:hover  { transform: translateY(-1px); }
+.grade:active { transform: translateY(0); }
+.grade:disabled { opacity: 0.55; cursor: progress; }
+.grade__label { font-size: 13px; font-weight: 600; }
+.grade kbd {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-subtle);
+}
+.grade--again { color: var(--color-danger, #dc2626);  border-color: color-mix(in oklab, var(--color-danger,  #dc2626) 30%, var(--color-border)); }
+.grade--hard  { color: var(--color-warning, #d97706); border-color: color-mix(in oklab, var(--color-warning, #d97706) 30%, var(--color-border)); }
+.grade--good  { color: var(--color-success, #16a34a); border-color: color-mix(in oklab, var(--color-success, #16a34a) 30%, var(--color-border)); }
+.grade--easy  { color: var(--color-accent);            border-color: color-mix(in oklab, var(--color-accent)               30%, var(--color-border)); }
+
 /* Syllabus upload dropzone (PDF / image → /api/syllabus/extract). */
 .syllabus-drop {
   border: 1.5px dashed var(--color-border-strong, var(--color-border));

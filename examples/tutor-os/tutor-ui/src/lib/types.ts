@@ -276,6 +276,68 @@ export interface ChatMessage {
   createdAt: number;
 }
 
+// ── Review queue (M3-B) ─────────────────────────────────────────────
+
+/**
+ * Anki-style 4-grade scale the backend's MasteryService uses.
+ *   AGAIN  — wrong, or right with significant effort/hints
+ *   HARD   — right but the learner struggled
+ *   GOOD   — right with normal effort (default for "got it")
+ *   EASY   — right effortlessly (longer interval + ease bump)
+ */
+export type MasteryGrade = 'AGAIN' | 'HARD' | 'GOOD' | 'EASY';
+
+/**
+ * Compact concept-mastery row returned by GET /api/review/queue.
+ * Mirrors {@code ReviewController.QueueItem} exactly — fields kept
+ * minimal so the wire payload stays small even on long subjects.
+ */
+export interface ReviewQueueItem {
+  concept: string;
+  /** 0..1 smoothed mastery score (UI bands: <.40 weak / .40-.80 learning / >=.80 mastered). */
+  score: number;
+  /** SM-2 interval in days that produced the current schedule. */
+  intervalDays: number;
+  lastSeenAt: string | null;     // ISO-8601 instant or null
+  nextReviewAt: string | null;
+  /** Milliseconds past nextReviewAt as of the server's response. Sort key. */
+  overdueMillis: number;
+}
+
+/**
+ * Wire payload for POST /api/review/{learnerId}/{subject}/answer.
+ */
+export interface ReviewAnswer {
+  concept: string;
+  grade: MasteryGrade;
+  /** Defaults to "review" on the server when omitted. */
+  source?: string;
+}
+
+/**
+ * Returned by POST /answer — the FULL ConceptMastery row after the
+ * SM-2 step. Fields beyond ReviewQueueItem are read by the UI for
+ * the "next due" pill that pops up on the card after grading.
+ */
+export interface ConceptMasteryRow {
+  learnerId: string;
+  subject: string;
+  concept: string;
+  score: number;
+  ease: number;
+  intervalDays: number;
+  reps: number;
+  lastSeenAt: string | null;
+  nextReviewAt: string | null;
+  /** Bounded history (newest at the end) — exposed for charts later. */
+  history?: Array<{
+    at: string;
+    grade: MasteryGrade;
+    score: number;
+    source: string;
+  }>;
+}
+
 /**
  * Syllabus — wire shape mirroring the backend Syllabus model.
  *
