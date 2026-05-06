@@ -1,8 +1,13 @@
 package io.tutoros.api;
 
+import io.squados.agent.AgentResponse;
+import io.squados.annotation.AgentRole;
+import io.squados.context.SquadContext;
+import io.tutoros.agent.PracticeAgent;
 import io.tutoros.mastery.ConceptMastery;
 import io.tutoros.mastery.MasteryGrade;
 import io.tutoros.mastery.MasteryService;
+import io.tutoros.model.PracticeQuestion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -10,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Review Controller — surfaces the spaced-repetition state held by
@@ -39,9 +45,15 @@ public class ReviewController {
     private static final Logger log = LoggerFactory.getLogger(ReviewController.class);
 
     private final MasteryService mastery;
+    private final SquadContext   ctx;
+    private final PracticeAgent  practice;
 
-    public ReviewController(MasteryService mastery) {
-        this.mastery = mastery;
+    public ReviewController(MasteryService mastery,
+                             SquadContext ctx,
+                             PracticeAgent practice) {
+        this.mastery  = mastery;
+        this.ctx      = ctx;
+        this.practice = practice;
     }
 
     // ── DTOs ────────────────────────────────────────────────────────
@@ -133,6 +145,91 @@ public class ReviewController {
         log.debug("review answer learner={} subject={} concept={} grade={} → score={} nextDue={}",
             learnerId, subject, body.concept, grade, updated.score, updated.nextReviewAt);
         return ResponseEntity.ok(updated);
+    }
+
+    // ── /card ───────────────────────────────────────────────────────
+
+    /**
+     * POST /api/review/{learnerId}/{subject}/card
+     *
+     * Materialises a practice question for the supplied concept via
+     * {@link PracticeAgent}. The learner answers it (in their head, on
+     * paper, or in chat), then self-grades with the existing
+     * {@link #answer} endpoint — same Anki flow.
+     *
+     * Difficulty + Bloom's level are calibrated from the learner's
+     * current {@link ConceptMastery#score}, so a weak concept gets an
+     * easier prompt than a mastered one. If the row hasn't been seen
+     * before we default to a neutral mid-range mastery so the question
+     * isn't artificially easy on first encounter.
+     *
+     * Status codes:
+     *   200 — PracticeQuestion body
+     *   400 — empty concept
+     *   502 — agent call failed (LLM provider down etc.)
+     */
+    @PostMapping("/{learnerId}/{subject}/card")
+    public ResponseEntity<PracticeQuestion> card(
+            @PathVariable String learnerId,
+            @PathVariable String subject,
+            @RequestBody  CardRequest body) {
+
+        if (body == null || body.concept == null || body.concept.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        // Pull the row to calibrate difficulty. Missing → defaults.
+        Optional<ConceptMastery> rowOpt = mastery.find(learnerId, subject, body.concept);
+        int masteryPct = rowOpt.map(r -> (int) Math.round(r.score * 100)).orElse(50);
+        String level   = nullSafe(body.level,        "SENIOR_SCHOOL");
+        String blooms  = nullSafe(body.bloomsLevel,  "UNDERSTAND");
+        String style   = nullSafe(body.learningStyle, "ANALYTICAL");
+        String goal    = nullSafe(body.goal,         "DEEP_UNDERSTANDING");
+
+        // Memory context is intentionally empty here — @AgentMemory on
+        // the agent class auto-injects retrieved memories on the read
+        // path. Passing a redundant string would just inflate the prompt.
+        String prompt = practice.generatePrompt(
+            body.concept, blooms, masteryPct, level, style, goal, "");
+
+        AgentResponse resp;
+        try {
+            resp = ctx.submitTo(AgentRole.EXECUTOR, prompt);
+        } catch (RuntimeException e) {
+            log.warn("review card generation failed", e);
+            return ResponseEntity.status(502).build();
+        }
+
+        PracticeQuestion q = resp != null ? resp.structuredOutput(PracticeQuestion.class) : null;
+        if (q == null) {
+            // Fallback: minimal stub so the UI can still render something
+            // and the learner can self-grade against the concept name.
+            q = new PracticeQuestion();
+            q.question     = "Recall what you know about: " + body.concept;
+            q.answer       = "(Generation failed — grade yourself based on your recall.)";
+            q.conceptTag   = body.concept;
+            q.bloomsLevel  = blooms;
+            q.difficulty   = "MEDIUM";
+            q.type         = "SHORT_ANSWER";
+            q.marks        = 1;
+        } else if (q.conceptTag == null || q.conceptTag.isBlank()) {
+            // Defensive normalisation — the LLM occasionally drops fields.
+            q.conceptTag = body.concept;
+        }
+        return ResponseEntity.ok(q);
+    }
+
+    public record CardRequest(
+        String concept,
+        /** Optional learner-level override (defaults to SENIOR_SCHOOL). */
+        String level,
+        String bloomsLevel,
+        String learningStyle,
+        String goal
+    ) {}
+
+    private static String nullSafe(String v, String fallback) {
+        return (v == null || v.isBlank()) ? fallback : v;
     }
 
     // ── helpers ─────────────────────────────────────────────────────

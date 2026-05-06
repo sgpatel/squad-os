@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   RefreshCw, ArrowLeft, AlertCircle, CheckCircle2,
-  Sparkles, X, ThumbsUp, Zap
+  Sparkles, X, ThumbsUp, Zap, Eye
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/store/auth';
+import { Markdown } from '@/components/ui/Markdown';
 import { useReviewQueue } from './useReviewQueue';
-import type { MasteryGrade, ReviewQueueItem } from '@/lib/types';
+import type { MasteryGrade, PracticeCardQuestion, ReviewQueueItem } from '@/lib/types';
 
 /**
  * `<ReviewPage />` — the spaced-repetition surface backed by the M3-A
@@ -43,9 +45,50 @@ export function ReviewPage() {
   const [doneCount, setDoneCount] = useState(0);
   const [postError, setPostError] = useState<string | null>(null);
 
+  // M3-C card-question state. `card` is the materialised question for
+  // the front-of-queue concept (null while loading or before fetch).
+  // `revealed` toggles when the learner clicks "Show answer".
+  const [card, setCard] = useState<PracticeCardQuestion | null>(null);
+  const [cardLoading, setCardLoading] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+  const userLevel = useAuth(s => s.currentUser()?.level ?? 'higher-sec');
+
   useEffect(() => { setQueue(items); setDoneCount(0); }, [items]);
 
   const current = queue[0] ?? null;
+
+  // Fetch a question for the current card whenever the front of the
+  // queue changes. Bypasses if subject/learnerId aren't ready yet —
+  // the empty-state branches will render a friendly fallback.
+  useEffect(() => {
+    if (!current || !subject || !learnerId) {
+      setCard(null);
+      setRevealed(false);
+      return;
+    }
+    let cancelled = false;
+    setCard(null);
+    setRevealed(false);
+    setCardLoading(true);
+    api.review.card(learnerId, subject, {
+      concept: current.concept,
+      level:   mapLevelToBackend(userLevel),
+    }).then((q) => {
+      if (!cancelled) setCard(q);
+    }).catch((e) => {
+      if (cancelled) return;
+      // Stub a card so the learner can still self-grade against the
+      // concept name when generation fails.
+      setCard({
+        question: `Recall what you know about: ${current.concept}`,
+        answer:   `(Could not generate a question — ${e instanceof Error ? e.message : String(e)})`,
+        conceptTag: current.concept,
+      });
+    }).finally(() => {
+      if (!cancelled) setCardLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [current?.concept, subject, learnerId, userLevel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Grade handler ───────────────────────────────────────────────
 
@@ -69,10 +112,19 @@ export function ReviewPage() {
     }
   };
 
-  // Keyboard: 1=AGAIN, 2=HARD, 3=GOOD, 4=EASY (matches Anki).
+  // Keyboard:
+  //   space    → Show answer (when hidden)
+  //   1/2/3/4  → AGAIN / HARD / GOOD / EASY (Anki muscle memory)
+  // Grading is gated until the answer has been revealed so the learner
+  // can't accidentally mark themselves correct without seeing it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (busy || !current) return;
+      if (e.key === ' ' || e.key === 'Spacebar') {
+        if (!revealed) { e.preventDefault(); setRevealed(true); }
+        return;
+      }
+      if (!revealed) return;
       if (e.key === '1') void grade('AGAIN');
       else if (e.key === '2') void grade('HARD');
       else if (e.key === '3') void grade('GOOD');
@@ -80,8 +132,8 @@ export function ReviewPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // grade closes over current+busy — re-bind when those change.
-  }, [busy, current]); // eslint-disable-line react-hooks/exhaustive-deps
+    // grade closes over current+busy+revealed — re-bind when those change.
+  }, [busy, current, revealed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Render ──────────────────────────────────────────────────────
 
@@ -160,7 +212,14 @@ export function ReviewPage() {
         </div>
       ) : (
         <main className="review__stage">
-          <ReviewCard item={current!} subject={subject} />
+          <ReviewCard
+            item={current!}
+            subject={subject}
+            card={card}
+            cardLoading={cardLoading}
+            revealed={revealed}
+            onReveal={() => setRevealed(true)}
+          />
 
           {postError && (
             <div className="review__error" role="alert">
@@ -168,57 +227,78 @@ export function ReviewPage() {
             </div>
           )}
 
-          <div
-            className="review__grades"
-            role="group"
-            aria-label="How well did you know this?"
-          >
-            <button
-              type="button"
-              className="grade grade--again"
-              disabled={busy}
-              onClick={() => void grade('AGAIN')}
-            >
-              <X size={14} />
-              <span className="grade__label">Again</span>
-              <kbd>1</kbd>
-            </button>
-            <button
-              type="button"
-              className="grade grade--hard"
-              disabled={busy}
-              onClick={() => void grade('HARD')}
-            >
-              <ThumbsUp size={14} style={{ transform: 'rotate(-25deg)' }} />
-              <span className="grade__label">Hard</span>
-              <kbd>2</kbd>
-            </button>
-            <button
-              type="button"
-              className="grade grade--good"
-              disabled={busy}
-              onClick={() => void grade('GOOD')}
-            >
-              <ThumbsUp size={14} />
-              <span className="grade__label">Good</span>
-              <kbd>3</kbd>
-            </button>
-            <button
-              type="button"
-              className="grade grade--easy"
-              disabled={busy}
-              onClick={() => void grade('EASY')}
-            >
-              <Zap size={14} />
-              <span className="grade__label">Easy</span>
-              <kbd>4</kbd>
-            </button>
-          </div>
-
-          <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
-            <Sparkles size={11} style={{ verticalAlign: 'middle' }} />{' '}
-            Use 1/2/3/4 keys for fast review.
-          </p>
+          {/* Grade buttons gated on revealed — peeking would defeat
+              the point of self-grading. Show-answer is the only
+              affordance until the learner reveals. */}
+          {revealed ? (
+            <>
+              <div
+                className="review__grades"
+                role="group"
+                aria-label="How well did you know this?"
+              >
+                <button
+                  type="button"
+                  className="grade grade--again"
+                  disabled={busy}
+                  onClick={() => void grade('AGAIN')}
+                >
+                  <X size={14} />
+                  <span className="grade__label">Again</span>
+                  <kbd>1</kbd>
+                </button>
+                <button
+                  type="button"
+                  className="grade grade--hard"
+                  disabled={busy}
+                  onClick={() => void grade('HARD')}
+                >
+                  <ThumbsUp size={14} style={{ transform: 'rotate(-25deg)' }} />
+                  <span className="grade__label">Hard</span>
+                  <kbd>2</kbd>
+                </button>
+                <button
+                  type="button"
+                  className="grade grade--good"
+                  disabled={busy}
+                  onClick={() => void grade('GOOD')}
+                >
+                  <ThumbsUp size={14} />
+                  <span className="grade__label">Good</span>
+                  <kbd>3</kbd>
+                </button>
+                <button
+                  type="button"
+                  className="grade grade--easy"
+                  disabled={busy}
+                  onClick={() => void grade('EASY')}
+                >
+                  <Zap size={14} />
+                  <span className="grade__label">Easy</span>
+                  <kbd>4</kbd>
+                </button>
+              </div>
+              <p className="muted" style={{ fontSize: 11, marginTop: 6 }}>
+                <Sparkles size={11} style={{ verticalAlign: 'middle' }} />{' '}
+                Use 1/2/3/4 keys for fast review.
+              </p>
+            </>
+          ) : (
+            <div className="review__reveal">
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => setRevealed(true)}
+                disabled={cardLoading}
+              >
+                <Eye size={14} /> Show answer
+                <kbd style={{ marginLeft: 8 }}>Space</kbd>
+              </button>
+              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                Try to recall before peeking — that's the bit that builds memory.
+              </p>
+            </div>
+          )}
         </main>
       )}
     </div>
@@ -228,12 +308,27 @@ export function ReviewPage() {
 // ── Card ──────────────────────────────────────────────────────────
 
 /**
- * One concept card. The wire shape is intentionally lean — this is a
- * spaced-repetition surface, not a quiz-question surface — so we lean
- * on the concept name + a band indicator + a humanised "last seen" /
- * "due" pair to give the learner enough signal to grade.
+ * Card front (always visible): subject + band + concept name + meta.
+ *
+ * M3-C extends this with a question body materialised by PracticeAgent.
+ * The {@code revealed} flag toggles between two surfaces:
+ *
+ *   - hidden  → question + hint of an answer block, "Show answer" CTA below
+ *   - revealed → question + model answer + worked solution (markdown)
+ *
+ * Self-grading lives in the parent so the four grade buttons can stay
+ * adjacent to the answer block without prop-drilling state through here.
  */
-function ReviewCard({ item, subject }: { item: ReviewQueueItem; subject: string }) {
+function ReviewCard({
+  item, subject, card, cardLoading, revealed, onReveal,
+}: {
+  item: ReviewQueueItem;
+  subject: string;
+  card: PracticeCardQuestion | null;
+  cardLoading: boolean;
+  revealed: boolean;
+  onReveal: () => void;
+}) {
   const band     = bandFor(item.score);
   const overdue  = humanizeOverdue(item.overdueMillis);
   const lastSeen = item.lastSeenAt ? humanizeAgo(item.lastSeenAt) : 'never seen';
@@ -244,6 +339,49 @@ function ReviewCard({ item, subject }: { item: ReviewQueueItem; subject: string 
         <span className={'review-card__band review-card__band--' + band}>{band}</span>
       </header>
       <h2 className="review-card__concept">{item.concept}</h2>
+
+      {/* Question / answer block (M3-C). Falls back to nothing while
+          loading so the card stays the same height across reveal. */}
+      {cardLoading && !card ? (
+        <div className="review-card__question review-card__question--loading">
+          <RefreshCw size={14} className="spin" />
+          <span>Drafting a question for {item.concept}…</span>
+        </div>
+      ) : card ? (
+        <section className="review-card__question">
+          <h3 className="review-card__q-label">Question</h3>
+          <Markdown>{card.question}</Markdown>
+          {card.options && (
+            <ul className="review-card__options">
+              {card.options.split('|').map((opt, i) => (
+                <li key={i}>{opt.trim()}</li>
+              ))}
+            </ul>
+          )}
+          {revealed && (
+            <div className="review-card__answer">
+              <h3 className="review-card__a-label">Answer</h3>
+              <Markdown>{card.answer}</Markdown>
+              {card.workedSolution && card.workedSolution !== card.answer && (
+                <details className="review-card__worked">
+                  <summary>Worked solution</summary>
+                  <Markdown>{card.workedSolution}</Markdown>
+                </details>
+              )}
+            </div>
+          )}
+          {!revealed && (
+            <button
+              type="button"
+              className="review-card__hint-show"
+              onClick={onReveal}
+            >
+              Tap to reveal answer
+            </button>
+          )}
+        </section>
+      ) : null}
+
       <dl className="review-card__meta">
         <div>
           <dt>Last seen</dt><dd>{lastSeen}</dd>
@@ -260,6 +398,24 @@ function ReviewCard({ item, subject }: { item: ReviewQueueItem; subject: string 
 }
 
 // ── helpers ──────────────────────────────────────────────────────
+
+/**
+ * Translate the auth store's casual level vocabulary
+ * ("primary" / "middle" / "higher-sec" / "college" / "pro") into the
+ * backend's enum strings the LearnerProfile + PracticeAgent expect.
+ * Mirrors {@code SyllabusSheet.mapLevelToBackend}; once we have a
+ * shared mapping helper we'll dedupe.
+ */
+function mapLevelToBackend(level: string): string {
+  switch (level) {
+    case 'primary':    return 'PRIMARY';
+    case 'middle':     return 'MIDDLE_SCHOOL';
+    case 'higher-sec': return 'SENIOR_SCHOOL';
+    case 'college':    return 'UNIVERSITY';
+    case 'pro':        return 'PROFESSIONAL';
+    default:           return 'SENIOR_SCHOOL';
+  }
+}
 
 /** UI mastery bands — match ProgressPage thresholds. */
 function bandFor(score: number): 'weak' | 'learning' | 'mastered' {

@@ -5,15 +5,19 @@ import io.squados.debate.DebateEngine;
 import io.squados.memory.MemoryManager;
 import io.tutoros.agent.*;
 import io.tutoros.mastery.InProcessMasteryGraphStore;
+import io.tutoros.mastery.JdbcMasteryGraphStore;
 import io.tutoros.mastery.MasteryGraphStore;
 import io.tutoros.mastery.MasteryService;
 import io.tutoros.pipeline.*;
 import io.tutoros.pipeline.PipelineEventBus;
 import io.tutoros.websocket.*;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import javax.sql.DataSource;
 
 /**
  * Spring @Configuration that wires all TutorOS beans.
@@ -112,14 +116,43 @@ public class TutorBeansConfig {
 
     // ── Mastery (M3-A) ────────────────────────────────────────────────
     /**
-     * MasteryGraphStore default — in-process map. Marked
-     * {@link ConditionalOnMissingBean} so a follow-up PR can drop in a
-     * JDBC-backed store (PgVectorEpisodicStore-style recipe) without
-     * touching this config.
+     * MasteryGraphStore — backend selection driven by {@code tutor.mastery.store}.
+     *
+     *   in-process (default) → ephemeral, in-memory map. Zero-config.
+     *   jdbc                 → {@link JdbcMasteryGraphStore} bound to the
+     *                          available {@link DataSource}. Survives restarts.
+     *
+     * Falls back to in-process if {@code jdbc} is requested but no
+     * DataSource bean exists, so dev / CI without a database doesn't
+     * break — same forgiving pattern as M1's {@code MemoryConfig} for
+     * pgvector episodic memory.
      */
     @Bean
     @ConditionalOnMissingBean
-    public MasteryGraphStore masteryGraphStore() {
+    public MasteryGraphStore masteryGraphStore(
+            @Value("${tutor.mastery.store:in-process}") String backend,
+            ObjectProvider<DataSource> dataSourceProvider) {
+        String b = backend == null ? "in-process" : backend.trim().toLowerCase();
+        if ("jdbc".equals(b)) {
+            DataSource ds = dataSourceProvider.getIfAvailable();
+            if (ds == null) {
+                System.err.println(
+                    "[TutorOS] tutor.mastery.store=jdbc but no DataSource bean — " +
+                    "falling back to in-process. Add spring.datasource.* config to " +
+                    "enable persistent mastery.");
+                return new InProcessMasteryGraphStore();
+            }
+            try {
+                System.out.println("[TutorOS] MasteryGraphStore: jdbc (persistent)");
+                return new JdbcMasteryGraphStore(ds);
+            } catch (RuntimeException init) {
+                System.err.println(
+                    "[TutorOS] JdbcMasteryGraphStore init failed (" + init.getMessage() +
+                    ") — falling back to in-process.");
+                return new InProcessMasteryGraphStore();
+            }
+        }
+        System.out.println("[TutorOS] MasteryGraphStore: in-process (ephemeral)");
         return new InProcessMasteryGraphStore();
     }
 

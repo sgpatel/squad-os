@@ -70,6 +70,16 @@
       <scope>test</scope>
     </dependency>
 
+    <!-- Embedded H2 — used by JdbcMasteryGraphStoreTest (M3-JDBC) so the
+         JDBC store can be exercised without a Postgres container. The
+         store's DDL is portable (TEXT for the history blob, no jsonb)
+         so the same SQL runs on H2 in tests and Postgres in production. -->
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <scope>test</scope>
+    </dependency>
+
   </dependencies>
 
   <build>

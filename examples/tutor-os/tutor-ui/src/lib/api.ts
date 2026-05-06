@@ -16,7 +16,8 @@ import type {
 } from './pipeline';
 import type {
   ChatMessage, ConceptMasteryRow, DebateRound, PipelineRun, PipelineStep,
-  PipelineStageKey, ReviewAnswer, ReviewQueueItem, Syllabus, VisualAsset
+  PipelineStageKey, PracticeCardQuestion, ReviewAnswer, ReviewQueueItem,
+  Syllabus, VisualAsset
 } from './types';
 import { PIPELINE_STAGES } from './mockData';
 import type { PipelineStageDef } from './types';
@@ -315,6 +316,24 @@ export const api = {
     ): Promise<ConceptMasteryRow> {
       return apiFetch<ConceptMasteryRow>(
         `/api/review/${encodeURIComponent(learnerId)}/${encodeURIComponent(subject)}/answer`,
+        { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    /**
+     * POST /api/review/{learnerId}/{subject}/card — materialise a
+     * PracticeQuestion for the supplied concept via PracticeAgent.
+     * Difficulty + Bloom's level calibrate from the row's current
+     * score. Returns a stub (with `answer` containing an error note)
+     * if generation fails so the UI can still show a card.
+     */
+    card(
+      learnerId: string,
+      subject: string,
+      body: { concept: string; level?: string; bloomsLevel?: string;
+              learningStyle?: string; goal?: string }
+    ): Promise<PracticeCardQuestion> {
+      return apiFetch<PracticeCardQuestion>(
+        `/api/review/${encodeURIComponent(learnerId)}/${encodeURIComponent(subject)}/card`,
         { method: 'POST', body: JSON.stringify(body) });
     },
   },

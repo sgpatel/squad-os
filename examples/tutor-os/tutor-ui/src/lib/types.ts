@@ -276,6 +276,28 @@ export interface ChatMessage {
   createdAt: number;
 }
 
+// ── Practice / review card question (mirrors backend PracticeQuestion) ─
+
+/**
+ * Wire shape for backend PracticeQuestion. Used by both the review
+ * card materialisation path (POST /api/review/.../card) and any
+ * future practice-page integration. Only the fields the review UI
+ * actually renders are typed required; everything else is optional.
+ */
+export interface PracticeCardQuestion {
+  question: string;
+  type?: string;
+  options?: string;
+  answer: string;
+  bloomsLevel?: string;
+  difficulty?: string;
+  conceptTag?: string;
+  hints?: string;
+  workedSolution?: string;
+  diagramDescription?: string;
+  marks?: number;
+}
+
 // ── Review queue (M3-B) ─────────────────────────────────────────────
 
 /**
