@@ -115,7 +115,7 @@ export function NoteEditor() {
     const out: Array<{ level: number; text: string; line: number }> = [];
     body.split('\n').forEach((l, i) => {
       const m = /^(#{1,6})\s+(.+)$/.exec(l);
-      if (m) out.push({ level: m[1].length, text: m[2].trim(), line: i });
+      if (m && m[1] && m[2]) out.push({ level: m[1].length, text: m[2].trim(), line: i });
     });
     return out;
   }, [body]);
@@ -235,7 +235,7 @@ export function NoteEditor() {
     if (mode === 'preview') setMode('split');
     const lines = ta.value.split('\n');
     let charPos = 0;
-    for (let i = 0; i < line && i < lines.length; i++) charPos += lines[i].length + 1;
+    for (let i = 0; i < line && i < lines.length; i++) charPos += (lines[i] ?? '').length + 1;
     ta.focus();
     ta.setSelectionRange(charPos, charPos);
     // Approximate scroll — textarea has line-height × lines.

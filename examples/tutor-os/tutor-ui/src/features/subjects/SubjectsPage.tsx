@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Atom, Book, Cloud, Code, FlaskConical, Leaf, Sigma, BookOpen } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useWorkspace } from '@/store/workspace';

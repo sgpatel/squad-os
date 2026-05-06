@@ -132,7 +132,7 @@ export function HomePage() {
     const label = (attachLabel.trim() ||
       (kind === 'url'
         ? new URL(body).hostname
-        : body.split('\n')[0].slice(0, 40))) || 'snippet';
+        : (body.split('\n')[0] ?? '').slice(0, 40))) || 'snippet';
     setAttachments(prev => [...prev, {
       id: `att_${Date.now().toString(36)}`,
       label, body, kind

@@ -47,10 +47,22 @@
       <artifactId>spring-boot-starter-websocket</artifactId>
     </dependency>
 
-    <!-- LLM provider (OpenAI for production) -->
+    <!-- LLM provider — OpenAI (cloud default) -->
     <dependency>
       <groupId>org.springframework.ai</groupId>
       <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+    </dependency>
+
+    <!-- LLM provider — Ollama (self-hosted, activated by the
+         "selfhost" Spring profile via application-selfhost.properties).
+         Both starters can coexist on the classpath because Spring AI's
+         auto-config gates each set of beans on its own properties:
+         OpenAI needs spring.ai.openai.api-key; Ollama needs
+         spring.ai.ollama.base-url. The compose stack sets only the
+         Ollama property, so only Ollama beans get created there. -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-ollama-spring-boot-starter</artifactId>
     </dependency>
 
     <!-- PDF text extraction for /api/syllabus/extract.
@@ -60,6 +72,21 @@
       <groupId>org.apache.pdfbox</groupId>
       <artifactId>pdfbox</artifactId>
       <version>3.0.3</version>
+    </dependency>
+
+    <!-- JDBC stack for the M3-JDBC mastery store + M1's pgvector
+         episodic memory in selfhost mode. Pulls in HikariCP +
+         spring-jdbc transitively. The driver is only needed when
+         spring.datasource.url is set; without it the auto-config
+         skips DataSource creation, so cloud / dev mode is unaffected. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
     </dependency>
 
     <!-- Test scope — JUnit + Spring test harness for the memory smoke test
