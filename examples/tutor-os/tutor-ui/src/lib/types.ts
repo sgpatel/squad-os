@@ -276,6 +276,86 @@ export interface ChatMessage {
   createdAt: number;
 }
 
+// ── BookCoach (PR-1/2/3) ────────────────────────────────────────────
+
+/**
+ * One chapter as returned by /api/books/{learnerId}/{bookId}/chapter/{n}.
+ * Mirrors backend {@code io.tutoros.book.Chapter}.
+ */
+export interface BookChapter {
+  number: number;
+  title: string;
+  summary: string;
+  pageStart: number;
+  pageEnd: number;
+  /** Capped at MAX_BODY_CHARS (6000) on the backend. */
+  body: string;
+  concepts: string[];
+}
+
+/**
+ * Compact chapter view used by list + detail endpoints (no body).
+ * Mirrors backend {@code BookController.ChapterSummary}.
+ */
+export interface BookChapterSummary {
+  number: number;
+  title: string;
+  summary: string;
+  pageStart: number;
+  pageEnd: number;
+  concepts: string[];
+}
+
+/**
+ * Book summary returned by /upload, /list, /detail. Chapter bodies
+ * are NOT included here — fetch /chapter/{n} when the learner opens
+ * a specific chapter (PR-1 design: keeps library payloads small).
+ *
+ * Mirrors backend {@code BookController.BookSummary}.
+ */
+export interface BookSummary {
+  id: string;
+  learnerId: string;
+  subject: string;
+  title: string;
+  author: string;
+  totalPages: number;
+  /** ISO-8601 instant. */
+  uploadedAt: string | null;
+  chapters: BookChapterSummary[];
+}
+
+/**
+ * The six BookCoach lenses. Quiz lenses (basic/intermediate/advanced)
+ * carry a question + modelAnswer; context lenses (usage/history/future)
+ * are markdown explanations with no quiz.
+ */
+export type BookCoachMode =
+  | 'basic'
+  | 'intermediate'
+  | 'advanced'
+  | 'usage'
+  | 'history'
+  | 'future';
+
+/**
+ * Structured insight returned by POST /chapter/{n}/ask.
+ * Mirrors backend {@code io.tutoros.model.LearningInsight}.
+ */
+export interface LearningInsight {
+  mode: BookCoachMode | string;
+  concept: string;
+  body: string;
+  /** Populated only on quiz lenses. */
+  question?: string;
+  modelAnswer?: string;
+  difficulty?: string;
+  /** Newline-separated follow-up prompts. */
+  followUps?: string;
+  /** "pp. 42–47" or empty for history/future. */
+  sourcePages?: string;
+}
+
 // ── Practice / review card question (mirrors backend PracticeQuestion) ─
 
 /**

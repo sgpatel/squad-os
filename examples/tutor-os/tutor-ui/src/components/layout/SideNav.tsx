@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   Sparkles, Library as LibraryIcon, FileText, Layers, BarChart3,
-  Users, Settings as Cog
+  Users, Settings as Cog, BookOpen
 } from 'lucide-react';
 import { usePractice } from '@/store/practice';
 import { useNotes } from '@/store/notes';
@@ -43,6 +43,7 @@ export function SideNav() {
       badge: noteCount > 0 ? noteCount : undefined },
     { to: '/practice', label: 'Practice', icon: Layers,      hint: 'Flashcards · Quizzes',
       badge: dueCount > 0 ? dueCount : undefined },
+    { to: '/books',    label: 'Books',    icon: BookOpen,    hint: 'Upload · Read · Coach' },
     { to: '/progress', label: 'Progress', icon: BarChart3,   hint: 'Stats · Plan' },
   ];
 

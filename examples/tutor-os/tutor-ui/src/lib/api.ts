@@ -15,9 +15,9 @@ import type {
   PipelineEvent,
 } from './pipeline';
 import type {
-  ChatMessage, ConceptMasteryRow, DebateRound, PipelineRun, PipelineStep,
-  PipelineStageKey, PracticeCardQuestion, ReviewAnswer, ReviewQueueItem,
-  Syllabus, VisualAsset
+  BookChapter, BookCoachMode, BookSummary, ChatMessage, ConceptMasteryRow,
+  DebateRound, LearningInsight, PipelineRun, PipelineStep, PipelineStageKey,
+  PracticeCardQuestion, ReviewAnswer, ReviewQueueItem, Syllabus, VisualAsset
 } from './types';
 import { PIPELINE_STAGES } from './mockData';
 import type { PipelineStageDef } from './types';
@@ -334,6 +334,116 @@ export const api = {
     ): Promise<PracticeCardQuestion> {
       return apiFetch<PracticeCardQuestion>(
         `/api/review/${encodeURIComponent(learnerId)}/${encodeURIComponent(subject)}/card`,
+        { method: 'POST', body: JSON.stringify(body) });
+    },
+  },
+
+  // ── Books / BookCoach (PR-1/2) ───────────────────────────────────
+  // Backend: BookController.
+  //   POST /api/books/upload                                          multipart
+  //   GET  /api/books/{learnerId}                                     list
+  //   GET  /api/books/{learnerId}/{bookId}                            detail
+  //   GET  /api/books/{learnerId}/{bookId}/chapter/{n}                full chapter
+  //   POST /api/books/{learnerId}/{bookId}/chapter/{n}/ask?mode=...   LearningInsight
+  //   POST /api/books/{learnerId}/{bookId}/chapter/{n}/answer         {concept,grade}
+  //
+  // Each endpoint mirrors the backend exactly — the controller's DTOs
+  // are reused as TypeScript types in lib/types.ts so wire breakage
+  // surfaces at typecheck time, not at runtime.
+
+  books: {
+    list(learnerId: string): Promise<BookSummary[]> {
+      return apiFetch<BookSummary[]>(
+        `/api/books/${encodeURIComponent(learnerId)}`,
+        { method: 'GET' });
+    },
+
+    get(learnerId: string, bookId: string): Promise<BookSummary> {
+      return apiFetch<BookSummary>(
+        `/api/books/${encodeURIComponent(learnerId)}/${encodeURIComponent(bookId)}`,
+        { method: 'GET' });
+    },
+
+    chapter(learnerId: string, bookId: string, n: number): Promise<BookChapter> {
+      return apiFetch<BookChapter>(
+        `/api/books/${encodeURIComponent(learnerId)}/${encodeURIComponent(bookId)}/chapter/${n}`,
+        { method: 'GET' });
+    },
+
+    /**
+     * Multipart upload — bypasses {@link apiFetch} for the same
+     * reason api.syllabus.extract does (browser must set the
+     * multipart Content-Type with boundary).
+     */
+    async upload(opts: {
+      file: File;
+      learnerId: string;
+      subject: string;
+      title: string;
+      author?: string;
+    }): Promise<BookSummary> {
+      const form = new FormData();
+      form.append('file', opts.file);
+      form.append('learnerId', opts.learnerId);
+      form.append('subject',   opts.subject);
+      form.append('title',     opts.title);
+      if (opts.author) form.append('author', opts.author);
+
+      const res = await fetch(`${HTTP_BASE}/api/books/upload`, {
+        method: 'POST',
+        body: form,
+        // NOTE: do not set Content-Type. Browser adds multipart boundary.
+      });
+      if (!res.ok) {
+        const body = await safeJson(res);
+        const hint = res.status === 400
+          ? 'The file looked unreadable, oversized (>32 MB), or required fields are missing.'
+          : '';
+        throw new ApiError(
+          res.status, body,
+          `POST /api/books/upload → ${res.status}${hint ? ' — ' + hint : ''}`);
+      }
+      return (await res.json()) as BookSummary;
+    },
+
+    /**
+     * POST /api/books/.../chapter/{n}/ask?mode=...
+     *
+     * Materialises a LearningInsight through one of the six lenses.
+     * The concept query param is optional — when absent the backend
+     * picks the first concept the extractor found for the chapter,
+     * which is enough to anchor mastery writes.
+     */
+    ask(
+      learnerId: string,
+      bookId: string,
+      n: number,
+      opts: { mode: BookCoachMode; concept?: string; level?: string }
+    ): Promise<LearningInsight> {
+      const qs = new URLSearchParams();
+      qs.set('mode', opts.mode);
+      if (opts.concept) qs.set('concept', opts.concept);
+      if (opts.level)   qs.set('level',   opts.level);
+      return apiFetch<LearningInsight>(
+        `/api/books/${encodeURIComponent(learnerId)}/${encodeURIComponent(bookId)}/chapter/${n}/ask?${qs}`,
+        { method: 'POST' });
+    },
+
+    /**
+     * POST /api/books/.../chapter/{n}/answer — self-graded SM-2 outcome
+     * for one of the quiz lenses. Returns 204 (no body) — the toast
+     * delta is computed UI-side from the difference between the
+     * mastery score before grading and the (eventually-fetched) score
+     * after. For PR-3 we just fire a sign-aware toast based on grade.
+     */
+    answer(
+      learnerId: string,
+      bookId: string,
+      n: number,
+      body: { concept: string; grade: 'AGAIN' | 'HARD' | 'GOOD' | 'EASY' }
+    ): Promise<void> {
+      return apiFetch<void>(
+        `/api/books/${encodeURIComponent(learnerId)}/${encodeURIComponent(bookId)}/chapter/${n}/answer`,
         { method: 'POST', body: JSON.stringify(body) });
     },
   },

@@ -24,6 +24,9 @@ const RoughWorkPage = lazy(() => import('@/features/roughwork/RoughWorkPage').th
 const PracticePage  = lazy(() => import('@/features/practice/PracticePage').then(m => ({ default: m.PracticePage })));
 const QuizPage      = lazy(() => import('@/features/quiz/QuizPage').then(m => ({ default: m.QuizPage })));
 const ReviewPage    = lazy(() => import('@/features/review/ReviewPage').then(m => ({ default: m.ReviewPage })));
+const BooksListPage = lazy(() => import('@/features/books/BooksListPage').then(m => ({ default: m.BooksListPage })));
+const BookDetailPage  = lazy(() => import('@/features/books/BookDetailPage').then(m => ({ default: m.BookDetailPage })));
+const ChapterCoachPage = lazy(() => import('@/features/books/ChapterCoachPage').then(m => ({ default: m.ChapterCoachPage })));
 const ProgressPage  = lazy(() => import('@/features/progress/ProgressPage').then(m => ({ default: m.ProgressPage })));
 const PlanPage      = lazy(() => import('@/features/plan/PlanPage').then(m => ({ default: m.PlanPage })));
 const LibraryPage   = lazy(() => import('@/features/library/LibraryPage').then(m => ({ default: m.LibraryPage })));
@@ -90,6 +93,11 @@ export function App() {
         <Route path="practice"            element={<Lazy><PracticePage /></Lazy>} />
         <Route path="quiz"                element={<Lazy><QuizPage /></Lazy>} />
         <Route path="review"              element={<Lazy><ReviewPage /></Lazy>} />
+
+        {/* BookCoach (PR-3) — textbook upload + chapter-wise learning panel. */}
+        <Route path="books"                                element={<Lazy><BooksListPage /></Lazy>} />
+        <Route path="books/:bookId"                        element={<Lazy><BookDetailPage /></Lazy>} />
+        <Route path="books/:bookId/chapter/:n"             element={<Lazy><ChapterCoachPage /></Lazy>} />
         <Route path="quiz/:quizId"        element={<Lazy><QuizPage /></Lazy>} />
 
         <Route path="progress"            element={<Lazy><ProgressPage /></Lazy>} />
