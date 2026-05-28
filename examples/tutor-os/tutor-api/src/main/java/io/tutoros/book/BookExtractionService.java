@@ -160,6 +160,10 @@ public class BookExtractionService {
         Book book = buildBookFromPages(pages, learnerId, subject, title, author);
         book.id = freshBookId();
         book.uploadedAt = Instant.now();
+        // Retain a copy of the original PDF so the UI can stream it
+        // back to the learner. Defensive clone — callers might reuse
+        // the byte[] for other purposes after extract() returns.
+        book.pdfBytes = bytes.clone();
         return book;
     }
 

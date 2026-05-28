@@ -684,6 +684,58 @@ public class BookController {
         return ch.concepts().isEmpty() ? null : ch.concepts().get(0);
     }
 
+    // ── /pdf — serve original bytes ─────────────────────────────────
+
+    /**
+     * GET /api/books/{learnerId}/{bookId}/pdf
+     *
+     * Streams the original uploaded PDF back to the browser with
+     * {@code Content-Type: application/pdf} + inline disposition so
+     * the browser's built-in PDF viewer renders it in-place. Combined
+     * with a {@code #page=N} URL fragment from the UI ("Open at p. 80"),
+     * the viewer scrolls straight to the right page.
+     *
+     * <p>Heavy payloads (Murphy's PML is ~98 MB) are sent as a single
+     * {@code byte[]} for simplicity — Spring buffers and Tomcat
+     * chunked-transfer handle the streaming. For multi-GB textbooks
+     * we'd want a {@code StreamingResponseBody} version; out of scope
+     * for v1.
+     *
+     * <p>Status codes
+     * <ul>
+     *   <li>200 — PDF bytes</li>
+     *   <li>404 — unknown book/learner, OR a book uploaded before this
+     *       feature shipped (no bytes persisted)</li>
+     * </ul>
+     */
+    @GetMapping("/{learnerId}/{bookId}/pdf")
+    public ResponseEntity<byte[]> pdf(
+            @PathVariable String learnerId,
+            @PathVariable String bookId) {
+        Book b = repo.findById(bookId).orElse(null);
+        if (b == null || !learnerId.equals(b.learnerId)) {
+            return ResponseEntity.notFound().build();
+        }
+        byte[] bytes = repo.findPdfBytes(bookId);
+        if (bytes == null || bytes.length == 0) return ResponseEntity.notFound().build();
+
+        String safeName = (b.title != null && !b.title.isBlank() ? b.title : "book")
+            .replaceAll("[^a-zA-Z0-9 .-]", "_") + ".pdf";
+        org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+        headers.setContentType(org.springframework.http.MediaType.APPLICATION_PDF);
+        headers.setContentLength(bytes.length);
+        // inline → browser viewer renders the PDF; attachment would
+        // force-download. We want viewer behaviour for the "Open PDF
+        // at page N" affordance.
+        headers.setContentDisposition(org.springframework.http.ContentDisposition
+            .inline().filename(safeName).build());
+        // Cache the PDF aggressively in the browser — bytes never
+        // change after upload, so subsequent jumps to different pages
+        // hit the local cache instead of streaming from the server.
+        headers.setCacheControl("private, max-age=86400, immutable");
+        return new ResponseEntity<>(bytes, headers, org.springframework.http.HttpStatus.OK);
+    }
+
     // ── DELETE ───────────────────────────────────────────────────────
 
     /**

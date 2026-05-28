@@ -1025,6 +1025,77 @@ button.concept-chip { font: inherit; }
   padding: 0;
 }
 .coach-source__toggle:hover { text-decoration: underline; }
+
+/* "Open PDF" link in the source panel header — sits to the right of
+   the citation so the affordance is right where the eye already is. */
+.coach-source__open-pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-accent) 40%, var(--color-border));
+  background: var(--color-bg);
+  color: var(--color-accent);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.coach-source__open-pdf:hover {
+  background: color-mix(in oklab, var(--color-accent) 10%, var(--color-bg));
+  text-decoration: none;
+}
+
+/* "What to do next" strip — closes the learning loop. */
+.recommended {
+  display: grid;
+  gap: 6px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-border);
+  background: color-mix(in oklab, var(--color-accent) 4%, var(--color-bg));
+}
+.recommended__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-subtle);
+}
+.recommended__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.recommended__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 100ms ease, background 100ms ease, color 100ms ease;
+}
+.recommended__btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-bg));
+}
+.recommended__btn--ok {
+  border-color: var(--color-success, #16a34a);
+  color: var(--color-success, #15803d);
+  background: color-mix(in oklab, var(--color-success, #16a34a) 10%, var(--color-bg));
+}
 .lens-panel__quiz {
   display: grid;
   gap: var(--space-3);

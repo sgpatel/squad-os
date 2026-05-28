@@ -50,6 +50,21 @@ public class Book {
     /** Chapters in document order. */
     public List<Chapter> chapters = new ArrayList<>();
 
+    /**
+     * Original PDF bytes — stored so the UI can offer a "View original"
+     * affordance and the learner can read the textbook directly.
+     *
+     * <p>Lazy-loaded: list and detail endpoints intentionally do NOT
+     * include this in their response payloads (it can be hundreds of
+     * MB). Only the dedicated {@code GET /api/books/.../pdf} endpoint
+     * streams the bytes.
+     *
+     * <p>Null for books uploaded before the PDF-bytes feature shipped
+     * — the UI surfaces that as "re-upload to enable PDF view"
+     * rather than a broken-looking button.
+     */
+    public byte[] pdfBytes;
+
     /** Read-only view of chapters. */
     public List<Chapter> chapters() {
         return chapters == null ? Collections.emptyList()

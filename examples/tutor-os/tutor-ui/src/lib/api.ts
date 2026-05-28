@@ -371,6 +371,17 @@ export const api = {
     },
 
     /**
+     * Absolute URL to the PDF stream, with a {@code #page=N} fragment
+     * the browser's built-in PDF viewer reads to jump to the right
+     * page. NOT an apiFetch — the UI passes this string to
+     * {@code window.open(...)} so the browser navigates directly.
+     */
+    pdfUrl(learnerId: string, bookId: string, page?: number): string {
+      const base = `${HTTP_BASE}/api/books/${encodeURIComponent(learnerId)}/${encodeURIComponent(bookId)}/pdf`;
+      return page && page > 0 ? `${base}#page=${page}` : base;
+    },
+
+    /**
      * Multipart upload — bypasses {@link apiFetch} for the same
      * reason api.syllabus.extract does (browser must set the
      * multipart Content-Type with boundary).

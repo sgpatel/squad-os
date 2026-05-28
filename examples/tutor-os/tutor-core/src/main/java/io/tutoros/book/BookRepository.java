@@ -47,4 +47,16 @@ public interface BookRepository {
 
     /** Total books for a learner — cheaper than {@code listForLearner().size()} on JDBC. */
     int countForLearner(String learnerId);
+
+    /**
+     * Read just the original PDF bytes for one book. Separated from
+     * {@link #findById} so the heavy payload isn't loaded when we
+     * only need metadata + chapters. Returns null when the book is
+     * unknown or was uploaded before the PDF-bytes feature shipped
+     * (in-process: byte[] never persisted across restarts;
+     * JDBC: pre-migration rows have pdf_bytes IS NULL).
+     */
+    default byte[] findPdfBytes(String bookId) {
+        return findById(bookId).map(b -> b.pdfBytes).orElse(null);
+    }
 }

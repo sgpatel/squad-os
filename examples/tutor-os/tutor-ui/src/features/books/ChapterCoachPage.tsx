@@ -3,8 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, AlertCircle, RefreshCw, Eye, X, ThumbsUp, Zap,
   BookOpen, Lightbulb, Hammer, Brain, Activity, Clock, Compass,
-  Quote, ChevronDown, ChevronUp,
+  Quote, ChevronDown, ChevronUp, ExternalLink, MessageSquare,
+  StickyNote, Sparkles as SparkleIcon,
 } from 'lucide-react';
+import { useNotes } from '@/store/notes';
+import { usePipeline } from '@/store/pipeline';
 import type { LucideIcon } from 'lucide-react';
 import { api, DEMO_LEARNER_ID } from '@/lib/api';
 import { useAuth } from '@/store/auth';
@@ -261,6 +264,7 @@ export function ChapterCoachPage() {
                 bookTitle={book.title}
                 chapterTitle={chapter.title}
                 sourcePages={insight.sourcePages || `pp. ${chapter.pageStart}–${chapter.pageEnd}`}
+                pdfUrl={api.books.pdfUrl(learnerId, book.id, chapter.pageStart)}
               />
             )}
 
@@ -332,6 +336,21 @@ export function ChapterCoachPage() {
                 </ul>
               </details>
             )}
+
+            {/* STEP 4 — momentum.
+                Lens-aware recommendations so the screen exit always
+                has a 1-click next move. See RecommendedActions
+                comment for the pedagogical rationale. */}
+            <RecommendedActions
+              mode={mode}
+              concept={insight.concept}
+              bookTitle={book.title}
+              chapterTitle={chapter.title}
+              sourceExcerpt={insight.sourceExcerpt}
+              sourcePages={insight.sourcePages}
+              pdfUrl={api.books.pdfUrl(learnerId, book.id, chapter.pageStart)}
+              onSwitchMode={setMode}
+            />
           </>
         ) : null}
       </main>
@@ -361,8 +380,10 @@ function CoachSourcePanel(props: {
   bookTitle:    string;
   chapterTitle: string;
   sourcePages:  string;
+  /** When provided, an "Open PDF" button jumps to this URL in a new tab. */
+  pdfUrl?:      string;
 }) {
-  const { excerpt, bookTitle, chapterTitle, sourcePages } = props;
+  const { excerpt, bookTitle, chapterTitle, sourcePages, pdfUrl } = props;
   const SHORT_LIMIT = 600;
   const [expanded, setExpanded] = useState(false);
   const isLong  = excerpt.length > SHORT_LIMIT;
@@ -378,6 +399,17 @@ function CoachSourcePanel(props: {
         <span className="coach-source__cite">
           {bookTitle} · {chapterTitle} · {sourcePages}
         </span>
+        {pdfUrl && (
+          <a
+            href={pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="coach-source__open-pdf"
+            title="Open the original PDF at this page"
+          >
+            <ExternalLink size={12} /> Open PDF
+          </a>
+        )}
       </header>
       <blockquote className="coach-source__body">
         <Markdown>{visible}</Markdown>
@@ -394,6 +426,138 @@ function CoachSourcePanel(props: {
       )}
     </section>
   );
+}
+
+// ── Recommended next actions ─────────────────────────────────────
+
+/**
+ * `<RecommendedActions />` — small horizontal strip below the lens
+ * content suggesting where to go next. Three to four lens-aware
+ * affordances:
+ *
+ *   • Try {next lens}      — quiz lens → next quiz lens; context
+ *                             lens → first quiz lens to test recall
+ *   • Open PDF at page N    — same target as the panel header
+ *                             button, repeated here so the strip is
+ *                             self-contained at the bottom of a
+ *                             long page
+ *   • Ask the tutor         — pipes the excerpt + concept into the
+ *                             main /tutor chat as a starting prompt
+ *   • Save as note          — calls the existing notes store so the
+ *                             insight is captured for later study
+ *
+ * Pedagogical role: closes the learning loop. Without it, the learner
+ * finishes a lens with nowhere obvious to go. With it, every screen
+ * exit has 1-click momentum into the next study action.
+ */
+function RecommendedActions(props: {
+  mode:         BookCoachMode;
+  concept:      string;
+  bookTitle:    string;
+  chapterTitle: string;
+  sourceExcerpt?: string;
+  sourcePages?: string;
+  pdfUrl?:      string;
+  onSwitchMode: (next: BookCoachMode) => void;
+}) {
+  const { mode, concept, bookTitle, chapterTitle, sourceExcerpt, pdfUrl, onSwitchMode } = props;
+  const navigate     = useNavigate();
+  const createNote   = useNotes(s => s.create);
+  const startTutor   = usePipeline(s => s.start);
+  const [savedNote, setSavedNote] = useState(false);
+
+  const nextMode = NEXT_LENS[mode];
+
+  const askTutor = () => {
+    // Prefill the main tutor pipeline with the concept + excerpt as
+    // context. The chat will then pick up where the lens left off —
+    // perfect for "go deeper than the lens allowed" follow-ups.
+    const prompt =
+      `Help me understand "${concept}" from ${bookTitle} (${chapterTitle}). ` +
+      `Here is the relevant passage I'm reading:\n\n` +
+      (sourceExcerpt ? '> ' + sourceExcerpt.split('\n').join('\n> ') : '(no excerpt)') +
+      `\n\nWhat are the most important things to take away?`;
+    void startTutor(prompt);
+    navigate('/tutor');
+  };
+
+  const saveAsNote = () => {
+    if (savedNote) return;
+    const title = `${concept} — ${chapterTitle}`;
+    const body =
+      `**From ${bookTitle} · ${chapterTitle}**\n\n` +
+      (sourceExcerpt ? '> ' + sourceExcerpt.split('\n').join('\n> ') + '\n\n' : '') +
+      `**Concept:** ${concept}`;
+    createNote({ title, body });
+    setSavedNote(true);
+    window.setTimeout(() => setSavedNote(false), 2000);
+  };
+
+  return (
+    <section className="recommended" aria-label="Recommended next actions">
+      <div className="recommended__head">
+        <SparkleIcon size={12} aria-hidden />
+        <span>What to do next</span>
+      </div>
+      <div className="recommended__actions">
+        {nextMode && (
+          <button
+            type="button"
+            className="recommended__btn"
+            onClick={() => onSwitchMode(nextMode)}
+            title={`Move to the ${nextMode} lens`}
+          >
+            <Zap size={12} /> Try {capitalize(nextMode)}
+          </button>
+        )}
+        {pdfUrl && (
+          <a
+            href={pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="recommended__btn"
+            title="Open the original PDF in a new tab"
+          >
+            <ExternalLink size={12} /> Read in PDF
+          </a>
+        )}
+        <button
+          type="button"
+          className="recommended__btn"
+          onClick={askTutor}
+          title="Ask the main tutor about this passage"
+        >
+          <MessageSquare size={12} /> Ask the tutor
+        </button>
+        <button
+          type="button"
+          className={'recommended__btn' + (savedNote ? ' recommended__btn--ok' : '')}
+          onClick={saveAsNote}
+          title="Save this insight as a note for later review"
+        >
+          <StickyNote size={12} /> {savedNote ? 'Saved ✓' : 'Save as note'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Lens-progression map for the "Try {next}" button. Quiz lenses move
+ * to the next harder lens; context lenses funnel back to Basic so
+ * the learner closes the loop with a recall check.
+ */
+const NEXT_LENS: Record<BookCoachMode, BookCoachMode | null> = {
+  basic:        'intermediate',
+  intermediate: 'advanced',
+  advanced:     'usage',
+  usage:        'history',
+  history:      'future',
+  future:       'basic',
+};
+
+function capitalize(s: string): string {
+  return s.length === 0 ? s : s[0]!.toUpperCase() + s.slice(1);
 }
 
 // ── Tab button ────────────────────────────────────────────────────

@@ -148,6 +148,10 @@ public class JdbcBookStore implements BookRepository {
             "  total_pages INT          NOT NULL DEFAULT 0, " +
             "  uploaded_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP" +
             ")",
+            // pdf_bytes added as a separate ALTER so existing tutor_books
+            // tables migrate cleanly. "ADD COLUMN IF NOT EXISTS" is the
+            // portable form for Postgres + H2 in PostgreSQL mode.
+            "ALTER TABLE tutor_books ADD COLUMN IF NOT EXISTS pdf_bytes BYTEA",
             "CREATE INDEX IF NOT EXISTS tutor_books_learner_idx " +
             "ON tutor_books (learner_id, uploaded_at DESC)",
             "CREATE TABLE IF NOT EXISTS tutor_chapters (" +
@@ -169,6 +173,28 @@ public class JdbcBookStore implements BookRepository {
             }
         } catch (SQLException e) {
             System.err.println("[TutorOS] book schema bootstrap failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Read just the PDF bytes for one book. Separate query so the
+     * usual list/get path doesn't load the heavy payload (Murphy's
+     * PML is ~98 MB — pulling it on every detail call would crush
+     * the connection pool).
+     */
+    @Override
+    public byte[] findPdfBytes(String bookId) {
+        if (bookId == null) return null;
+        try (Connection c = ds.getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                 "SELECT pdf_bytes FROM tutor_books WHERE id = ?")) {
+            ps.setString(1, bookId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                return rs.getBytes(1);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("[TutorOS] book pdf read failed: " + e.getMessage(), e);
         }
     }
 
@@ -230,14 +256,17 @@ public class JdbcBookStore implements BookRepository {
     }
 
     private void upsertBook(Connection c, String product, Book b) throws SQLException {
+        // PDF bytes column added in a later migration — written here so
+        // re-uploads / fresh uploads always carry the original PDF along.
         String sql = product.contains("postgres")
             ? "INSERT INTO tutor_books (id, learner_id, subject, title, author, " +
-              "  total_pages, uploaded_at) VALUES (?,?,?,?,?,?,?) " +
+              "  total_pages, uploaded_at, pdf_bytes) VALUES (?,?,?,?,?,?,?,?) " +
               "ON CONFLICT (id) DO UPDATE SET " +
               "  learner_id=EXCLUDED.learner_id, subject=EXCLUDED.subject, " +
               "  title=EXCLUDED.title, author=EXCLUDED.author, " +
-              "  total_pages=EXCLUDED.total_pages, uploaded_at=EXCLUDED.uploaded_at"
-            : "MERGE INTO tutor_books KEY(id) VALUES (?,?,?,?,?,?,?)";
+              "  total_pages=EXCLUDED.total_pages, uploaded_at=EXCLUDED.uploaded_at, " +
+              "  pdf_bytes=COALESCE(EXCLUDED.pdf_bytes, tutor_books.pdf_bytes)"
+            : "MERGE INTO tutor_books KEY(id) VALUES (?,?,?,?,?,?,?,?)";
         try (PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setString(1, b.id);
             ps.setString(2, b.learnerId);
@@ -246,6 +275,11 @@ public class JdbcBookStore implements BookRepository {
             ps.setString(5, b.author);
             ps.setInt(6, b.totalPages);
             ps.setTimestamp(7, Timestamp.from(b.uploadedAt != null ? b.uploadedAt : Instant.now()));
+            if (b.pdfBytes != null && b.pdfBytes.length > 0) {
+                ps.setBytes(8, b.pdfBytes);
+            } else {
+                ps.setNull(8, java.sql.Types.BINARY);
+            }
             ps.executeUpdate();
         }
     }
