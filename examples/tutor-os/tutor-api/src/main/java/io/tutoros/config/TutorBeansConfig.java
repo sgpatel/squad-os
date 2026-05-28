@@ -4,6 +4,10 @@ import io.squados.context.SquadContext;
 import io.squados.debate.DebateEngine;
 import io.squados.memory.MemoryManager;
 import io.tutoros.agent.*;
+import io.tutoros.book.BookExtractionService;
+import io.tutoros.book.BookRepository;
+import io.tutoros.book.InProcessBookStore;
+import io.tutoros.book.JdbcBookStore;
 import io.tutoros.mastery.InProcessMasteryGraphStore;
 import io.tutoros.mastery.JdbcMasteryGraphStore;
 import io.tutoros.mastery.MasteryGraphStore;
@@ -160,6 +164,50 @@ public class TutorBeansConfig {
     @Bean
     public MasteryService masteryService(MasteryGraphStore store) {
         return new MasteryService(store);
+    }
+
+    // ── Books (PR-1: BookCoach foundation) ────────────────────────────
+
+    /**
+     * BookRepository — backend selection driven by {@code tutor.book.store}.
+     *
+     * Same pattern as the mastery store above: in-process default,
+     * jdbc opt-in, fall back to in-process if jdbc is requested but
+     * no DataSource is present so dev stays unblocked.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public BookRepository bookRepository(
+            @Value("${tutor.book.store:in-process}") String backend,
+            ObjectProvider<DataSource> dataSourceProvider) {
+        String b = backend == null ? "in-process" : backend.trim().toLowerCase();
+        if ("jdbc".equals(b)) {
+            DataSource ds = dataSourceProvider.getIfAvailable();
+            if (ds == null) {
+                System.err.println(
+                    "[TutorOS] tutor.book.store=jdbc but no DataSource bean — " +
+                    "falling back to in-process. Add spring.datasource.* config to " +
+                    "enable persistent book storage.");
+                return new InProcessBookStore();
+            }
+            try {
+                System.out.println("[TutorOS] BookRepository: jdbc (persistent)");
+                return new JdbcBookStore(ds);
+            } catch (RuntimeException init) {
+                System.err.println(
+                    "[TutorOS] JdbcBookStore init failed (" + init.getMessage() +
+                    ") — falling back to in-process.");
+                return new InProcessBookStore();
+            }
+        }
+        System.out.println("[TutorOS] BookRepository: in-process (ephemeral)");
+        return new InProcessBookStore();
+    }
+
+    /** Stateless — pure PDFBox + regex. One singleton per app context. */
+    @Bean
+    public BookExtractionService bookExtractionService() {
+        return new BookExtractionService();
     }
 
     // ── Pipeline ──────────────────────────────────────────────────────────────
