@@ -286,15 +286,33 @@ public class BookController {
         }
 
         LearningInsight insight = null;
+        AgentResponse   rawResp = null;
         Throwable lastError = null;
         long t0 = System.nanoTime();
         try {
             TaskContext taskCtx = new TaskContext(
                 prompt, UUID.randomUUID().toString(), ctx.getConfig().getProfile());
-            AgentResponse resp = wrapper.execute(taskCtx);
+            rawResp = wrapper.execute(taskCtx);
             // structuredOutput can throw on parse failure — keep it
             // inside the try so the catch's stub fallback covers it.
-            if (resp != null) insight = resp.structuredOutput(LearningInsight.class);
+            if (rawResp != null) insight = rawResp.structuredOutput(LearningInsight.class);
+            if (insight == null && rawResp != null) {
+                // structuredOutput returned null (not threw) — agent
+                // exhausted @StructuredOutput retries. Log a snippet of
+                // the raw text so we can diagnose what shape the LLM
+                // actually emitted vs. what the schema expects.
+                String raw = rawResp.content();
+                log.warn(
+                    "BookCoach response did not match LearningInsight schema: " +
+                    "book={} chapter={} mode={} concept={} promptChars={} " +
+                    "elapsedMs={} rawLen={} rawHead={}",
+                    bookId, n, normalisedMode, targetConcept,
+                    prompt.length(),
+                    (System.nanoTime() - t0) / 1_000_000L,
+                    raw != null ? raw.length() : 0,
+                    raw != null ? raw.substring(0, Math.min(500, raw.length()))
+                                        .replace('\n', ' ') : "(null)");
+            }
         } catch (Throwable e) {
             // Catch Throwable (not just RuntimeException) so OOM,
             // schema-parse Errors, or any wrapper rethrow can't leak

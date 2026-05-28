@@ -160,22 +160,21 @@ public class BookCoachAgent {
             %s
             ----
 
-            Output a LearningInsight JSON with:
-              mode         = "basic"
-              concept      = "%s"
-              body         = 2–3 short paragraphs (markdown). Define
-                             the concept, name its parts, and pin down
-                             ONE concrete example FROM THE CHAPTER.
-              question     = a recall question that asks the learner
-                             to RESTATE the core idea in their own
-                             words. One sentence.
-              modelAnswer  = the ideal short-answer response (2–3
-                             sentences). Used by the grader.
-              difficulty   = "EASY"
-              followUps    = 1–3 follow-up questions (newline-separated)
-                             that push toward intermediate / advanced
-                             understanding.
-              sourcePages  = "%s"
+            Respond with ONLY a JSON object in this exact shape — no
+            prose before or after, no markdown code fences, no comments.
+            Every field is required; use an empty string "" if a field
+            genuinely doesn't apply, never omit it.
+
+            {
+              "mode":        "basic",
+              "concept":     "%s",
+              "body":        "<2–3 short paragraphs in markdown. Define the concept, name its parts, and pin down ONE concrete example FROM THE CHAPTER.>",
+              "question":    "<one-sentence recall question asking the learner to restate the core idea in their own words>",
+              "modelAnswer": "<the ideal short-answer response, 2–3 sentences. Used by the grader.>",
+              "difficulty":  "EASY",
+              "followUps":   "<1–3 follow-up questions, newline-separated, pushing toward intermediate / advanced>",
+              "sourcePages": "%s"
+            }
             """.formatted(
                 concept, learnerLevel, bookTitle, chapterTitle,
                 chapterBody, concept, pages);
@@ -200,20 +199,21 @@ public class BookCoachAgent {
             %s
             ----
 
-            Output a LearningInsight JSON with:
-              mode         = "intermediate"
-              concept      = "%s"
-              body         = ONE worked example (markdown) that applies
-                             %s to a problem. Show the steps. Use the
-                             same notation / vocabulary as the chapter.
-              question     = a fresh problem the learner solves with the
-                             same method (NOT identical to the worked
-                             example). Specific, not vague.
-              modelAnswer  = the worked solution to the question (4–6
-                             lines, step-by-step).
-              difficulty   = "MEDIUM"
-              followUps    = 1–2 harder variants of the same problem.
-              sourcePages  = "%s"
+            Respond with ONLY a JSON object in this exact shape — no
+            prose before or after, no markdown code fences, no comments.
+            Every field is required; use an empty string "" if a field
+            genuinely doesn't apply, never omit it.
+
+            {
+              "mode":        "intermediate",
+              "concept":     "%s",
+              "body":        "<ONE worked example in markdown that applies %s to a problem. Show the steps. Use the chapter's notation.>",
+              "question":    "<a fresh problem solved with the same method (NOT identical to the worked example). Specific, not vague.>",
+              "modelAnswer": "<the worked solution to the question, 4–6 lines, step-by-step>",
+              "difficulty":  "MEDIUM",
+              "followUps":   "<1–2 harder variants of the same problem, newline-separated>",
+              "sourcePages": "%s"
+            }
             """.formatted(
                 learnerLevel, concept, bookTitle, chapterTitle,
                 chapterBody, concept, concept, pages);
@@ -240,26 +240,24 @@ public class BookCoachAgent {
             %s
             ----
 
-            Output a LearningInsight JSON with:
-              mode         = "advanced"
-              concept      = "%s"
-              body         = 2 paragraphs that surface a non-obvious
-                             aspect of %s — a limitation, an edge case,
-                             a connection to another concept the
-                             learner has likely seen.
-              question     = a question that asks the learner to either
-                             (a) compare %s to a related concept and
-                             explain when each applies, or (b) evaluate
-                             a non-trivial claim about %s. Open-ended.
-              modelAnswer  = a model answer (4–6 sentences) showing the
-                             kind of reasoning a strong learner would
-                             produce.
-              difficulty   = "HARD"
-              followUps    = 1–2 even-harder variants.
-              sourcePages  = "%s"
+            Respond with ONLY a JSON object in this exact shape — no
+            prose before or after, no markdown code fences, no comments.
+            Every field is required; use an empty string "" if a field
+            genuinely doesn't apply, never omit it.
+
+            {
+              "mode":        "advanced",
+              "concept":     "%s",
+              "body":        "<2 paragraphs surfacing a non-obvious aspect of %s — a limitation, an edge case, or a connection to another concept the learner has likely seen.>",
+              "question":    "<an open-ended question asking the learner to either compare %s to a related concept (when does each apply?) or evaluate a non-trivial claim about it>",
+              "modelAnswer": "<a 4–6 sentence model answer showing the reasoning a strong learner would produce>",
+              "difficulty":  "HARD",
+              "followUps":   "<1–2 even-harder variants, newline-separated>",
+              "sourcePages": "%s"
+            }
             """.formatted(
                 learnerLevel, concept, bookTitle, chapterTitle,
-                chapterBody, concept, concept, concept, concept, pages);
+                chapterBody, concept, concept, concept, pages);
     }
 
     // ── Context lenses (no quiz attached) ───────────────────────────
@@ -286,24 +284,21 @@ public class BookCoachAgent {
             %s
             ----
 
-            Output a LearningInsight JSON with:
-              mode         = "usage"
-              concept      = "%s"
-              body         = 3 short markdown sections (### headings):
-                              1. "Today" — 2 concrete present-day uses,
-                                 each one paragraph naming a specific
-                                 industry / product / scenario.
-                              2. "Adjacent fields" — 1 paragraph on
-                                 disciplines that depend on %s.
-                              3. "Why it matters" — 1 paragraph stating
-                                 the stakes / what changes if no-one
-                                 understands this.
-              question     = ""        (no quiz on the usage lens)
-              modelAnswer  = ""
-              difficulty   = ""
-              followUps    = 1–2 questions the learner could research
-                             to dig deeper.
-              sourcePages  = "%s"
+            Respond with ONLY a JSON object in this exact shape — no
+            prose before or after, no markdown code fences, no comments.
+            Every field is required; use an empty string "" if a field
+            genuinely doesn't apply, never omit it.
+
+            {
+              "mode":        "usage",
+              "concept":     "%s",
+              "body":        "<3 short markdown sections under ### headings:  ### Today  (2 paragraphs naming specific industries/products/scenarios that use %s today)  ### Adjacent fields  (1 paragraph on disciplines depending on it)  ### Why it matters  (1 paragraph stating the stakes)>",
+              "question":    "",
+              "modelAnswer": "",
+              "difficulty":  "",
+              "followUps":   "<1–2 questions the learner could research to go deeper, newline-separated>",
+              "sourcePages": "%s"
+            }
             """.formatted(
                 learnerLevel, concept, bookTitle, chapterTitle,
                 chapterBody, concept, concept, pages);
@@ -331,24 +326,21 @@ public class BookCoachAgent {
             %s
             ----
 
-            Output a LearningInsight JSON with:
-              mode         = "history"
-              concept      = "%s"
-              body         = 3 short markdown sections (### headings):
-                              1. "Discovery" — who first proposed it,
-                                 roughly when, and what problem they
-                                 were trying to solve.
-                              2. "Evolution" — 2–3 key milestones that
-                                 refined / generalised the idea.
-                              3. "Today's understanding" — one sentence
-                                 connecting back to the chapter's
-                                 framing.
-              question     = ""
-              modelAnswer  = ""
-              difficulty   = ""
-              followUps    = 1–2 historical figures the learner could
-                             read more about.
-              sourcePages  = ""   (history extends beyond the chapter)
+            Respond with ONLY a JSON object in this exact shape — no
+            prose before or after, no markdown code fences, no comments.
+            Every field is required; use an empty string "" if a field
+            genuinely doesn't apply, never omit it.
+
+            {
+              "mode":        "history",
+              "concept":     "%s",
+              "body":        "<3 short markdown sections under ### headings:  ### Discovery  (who first proposed it, roughly when, what problem they were solving)  ### Evolution  (2–3 key milestones that refined or generalised the idea)  ### Today's understanding  (one sentence connecting back to the chapter's framing)>",
+              "question":    "",
+              "modelAnswer": "",
+              "difficulty":  "",
+              "followUps":   "<1–2 historical figures the learner could read more about, newline-separated>",
+              "sourcePages": ""
+            }
             """.formatted(
                 learnerLevel, concept, bookTitle, chapterTitle,
                 chapterBody, concept);
@@ -376,23 +368,21 @@ public class BookCoachAgent {
             %s
             ----
 
-            Output a LearningInsight JSON with:
-              mode         = "future"
-              concept      = "%s"
-              body         = 3 short markdown sections (### headings):
-                              1. "Open problems" — 2 specific questions
-                                 researchers are still working on.
-                              2. "Where it's heading" — 1 paragraph on
-                                 trends shaping the next decade.
-                              3. "Careers" — 1 paragraph naming 2–3
-                                 specific jobs / fields that need
-                                 strong understanding of %s.
-              question     = ""
-              modelAnswer  = ""
-              difficulty   = ""
-              followUps    = 1–2 areas the learner could dive into
-                             to pursue this further.
-              sourcePages  = ""
+            Respond with ONLY a JSON object in this exact shape — no
+            prose before or after, no markdown code fences, no comments.
+            Every field is required; use an empty string "" if a field
+            genuinely doesn't apply, never omit it.
+
+            {
+              "mode":        "future",
+              "concept":     "%s",
+              "body":        "<3 short markdown sections under ### headings:  ### Open problems  (2 specific questions researchers are still working on)  ### Where it's heading  (1 paragraph on trends shaping the next decade)  ### Careers  (1 paragraph naming 2–3 specific jobs/fields needing strong understanding of %s)>",
+              "question":    "",
+              "modelAnswer": "",
+              "difficulty":  "",
+              "followUps":   "<1–2 areas the learner could dive into, newline-separated>",
+              "sourcePages": ""
+            }
             """.formatted(
                 learnerLevel, concept, bookTitle, chapterTitle,
                 chapterBody, concept, concept);

@@ -77,9 +77,9 @@ class BookCoachAgentTest {
     void quizLensesInstructQuestionAndModelAnswer() {
         for (String mode : new String[]{ "basic","intermediate","advanced" }) {
             String p = agent.buildPrompt(mode, BOOK, CHAPTER, BODY, CONCEPT, LEVEL, 1, 10);
-            assertTrue(p.contains("question"),
+            assertTrue(p.contains("\"question\""),
                 mode + " must instruct the agent to populate the question field");
-            assertTrue(p.contains("modelAnswer"),
+            assertTrue(p.contains("\"modelAnswer\""),
                 mode + " must instruct the agent to populate modelAnswer");
         }
     }
@@ -94,19 +94,40 @@ class BookCoachAgentTest {
             .contains("\"HARD\""), "advanced must pin difficulty = HARD");
     }
 
+    @Test
+    void allLensesAskForOnlyJsonNoFencesNoProse() {
+        // The single biggest source of "didn't match expected shape"
+        // parse failures was the LLM emitting prose / fences around
+        // the JSON. Every lens must spell out the contract.
+        for (String mode : new String[]{ "basic","intermediate","advanced","usage","history","future" }) {
+            String p = agent.buildPrompt(mode, BOOK, CHAPTER, BODY, CONCEPT, LEVEL, 1, 10);
+            assertTrue(p.contains("ONLY a JSON object"),
+                mode + " prompt must say 'ONLY a JSON object'");
+            assertTrue(p.contains("no markdown code fences"),
+                mode + " prompt must explicitly ban markdown fences");
+            // "no\nprose before or after," in the prompt (text-block
+            // newline between "no" and "prose"). Test the substring that
+            // actually stays contiguous after Java text block rendering.
+            assertTrue(p.contains("prose before or after"),
+                mode + " prompt must explicitly ban prose before/after");
+        }
+    }
+
     // ── Context lenses tell the agent NOT to attach a quiz ──────────
 
     @Test
     void contextLensesExplicitlyClearQuestionFields() {
         for (String mode : new String[]{ "usage", "history", "future" }) {
             String p = agent.buildPrompt(mode, BOOK, CHAPTER, BODY, CONCEPT, LEVEL, 1, 10);
-            // Each context-lens prompt pins the three quiz fields to "".
-            assertTrue(p.contains("question     = \"\""),
-                mode + " must tell the agent to leave question empty");
-            assertTrue(p.contains("modelAnswer  = \"\""),
-                mode + " must tell the agent to leave modelAnswer empty");
-            assertTrue(p.contains("difficulty   = \"\""),
-                mode + " must tell the agent to leave difficulty empty");
+            // Each context-lens prompt pins the three quiz fields to "" in
+            // the literal JSON skeleton — the LLM should emit empty strings
+            // there rather than try to invent a question.
+            assertTrue(p.contains("\"question\":    \"\""),
+                mode + " must pin question to empty string in the JSON skeleton");
+            assertTrue(p.contains("\"modelAnswer\": \"\""),
+                mode + " must pin modelAnswer to empty string");
+            assertTrue(p.contains("\"difficulty\":  \"\""),
+                mode + " must pin difficulty to empty string");
         }
     }
 
@@ -133,10 +154,12 @@ class BookCoachAgentTest {
     void historyAndFutureClearSourcePagesField() {
         // sourcePages should be empty for these modes since the body
         // can extend beyond the chapter — false attribution would be
-        // worse than no citation.
+        // worse than no citation. Test against the literal JSON
+        // skeleton in the prompt (matches the post-PR-2-tightening
+        // format: "sourcePages": "" — the trailing empty string).
         for (String mode : new String[]{ "history", "future" }) {
             String p = agent.buildPrompt(mode, BOOK, CHAPTER, BODY, CONCEPT, LEVEL, 1, 10);
-            assertTrue(p.contains("sourcePages  = \"\""),
+            assertTrue(p.contains("\"sourcePages\": \"\""),
                 mode + " must clear sourcePages — wider context isn't from the chapter");
         }
     }
