@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Upload, FileText, RefreshCw } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/store/workspace';
@@ -30,7 +30,20 @@ export function BookUploadModal({
   /** Subject pulled from the active workspace subject; learner can override. */
   defaultSubject: string;
 }) {
-  const subjects = useWorkspace(s => s.workspaceSubjects());
+  // IMPORTANT: do NOT do `useWorkspace(s => s.workspaceSubjects())` here.
+  // That selector returns a freshly-`.filter()`-ed array on every call,
+  // so zustand's useSyncExternalStore sees a new snapshot reference each
+  // render and schedules another update → "Maximum update depth exceeded".
+  // Subscribe to stable primitives instead and derive the filtered list
+  // with useMemo so the reference is stable when nothing actually changed.
+  const activeWorkspaceId = useWorkspace(s => s.activeWorkspaceId);
+  const allSubjects       = useWorkspace(s => s.subjects);
+  const workspaces        = useWorkspace(s => s.workspaces);
+  const subjects = useMemo(() => {
+    const ws = workspaces.find(w => w.id === activeWorkspaceId);
+    if (!ws) return allSubjects;
+    return allSubjects.filter(s => ws.subjectIds.includes(s.id));
+  }, [activeWorkspaceId, allSubjects, workspaces]);
 
   const [title,   setTitle]   = useState('');
   const [author,  setAuthor]  = useState('');
