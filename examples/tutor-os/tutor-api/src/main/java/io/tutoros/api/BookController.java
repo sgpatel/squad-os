@@ -288,6 +288,11 @@ public class BookController {
         LearningInsight insight = null;
         AgentResponse   rawResp = null;
         Throwable lastError = null;
+        // Tri-state failure mode so the user-visible body can carry an
+        // actionable diagnosis. UPSTREAM = empty response from the LLM
+        // (auth, quota, transport); PARSE = LLM returned text but it
+        // didn't match the schema; THROWN = an exception bubbled out.
+        Failure failure = Failure.NONE;
         long t0 = System.nanoTime();
         try {
             TaskContext taskCtx = new TaskContext(
@@ -297,23 +302,28 @@ public class BookController {
             // inside the try so the catch's stub fallback covers it.
             if (rawResp != null) insight = rawResp.structuredOutput(LearningInsight.class);
             if (insight == null && rawResp != null) {
-                // structuredOutput returned null (not threw) — agent
-                // exhausted @StructuredOutput retries. Log a snippet of
-                // the raw text so we can diagnose what shape the LLM
-                // actually emitted vs. what the schema expects.
                 String raw = rawResp.content();
+                int rawLen = raw != null ? raw.length() : 0;
+                // EMPTY response → almost always an upstream problem
+                // (Spring AI's retry mechanism eats the exception and
+                // returns blank content when OpenAI rejects with 401 /
+                // 429 / network error). Different cause + different
+                // fix vs a non-empty-but-unparseable response.
+                failure = (rawLen == 0) ? Failure.UPSTREAM : Failure.PARSE;
                 log.warn(
-                    "BookCoach response did not match LearningInsight schema: " +
-                    "book={} chapter={} mode={} concept={} promptChars={} " +
-                    "elapsedMs={} rawLen={} rawHead={}",
+                    "BookCoach response not usable: book={} chapter={} mode={} " +
+                    "concept={} promptChars={} elapsedMs={} rawLen={} " +
+                    "failure={} rawHead={}",
                     bookId, n, normalisedMode, targetConcept,
                     prompt.length(),
                     (System.nanoTime() - t0) / 1_000_000L,
-                    raw != null ? raw.length() : 0,
-                    raw != null ? raw.substring(0, Math.min(500, raw.length()))
-                                        .replace('\n', ' ') : "(null)");
+                    rawLen, failure,
+                    raw != null && rawLen > 0
+                        ? raw.substring(0, Math.min(500, rawLen)).replace('\n', ' ')
+                        : "(empty)");
             }
         } catch (Throwable e) {
+            failure = Failure.THROWN;
             // Catch Throwable (not just RuntimeException) so OOM,
             // schema-parse Errors, or any wrapper rethrow can't leak
             // past us as a raw 500/502 with no body.
@@ -339,27 +349,69 @@ public class BookController {
             // the learner, no actionable info), return 200 with a stub
             // insight whose body explains what failed. The UI renders
             // it like any other lens — markdown + retry button — so the
-            // learner can pick a different lens or retry.
+            // learner can pick a different lens or retry. Each failure
+            // mode names the right knob to turn.
             insight = new LearningInsight();
             insight.mode    = normalisedMode;
             insight.concept = targetConcept;
-            insight.body    = lastError != null
-                ? "_The tutor couldn't draft this insight right now._\n\n" +
-                  "**Error:** " + rootCauseSummary(lastError) + "\n\n" +
-                  "Try again, switch to a different lens, or check that the " +
-                  "LLM provider (Ollama / OpenAI) is reachable. " +
-                  "If the error persists, the chapter may be too long for the " +
-                  "model's context window — try a different chapter."
-                : "_The tutor's response didn't match the expected shape._\n\n" +
-                  "This can happen with weaker models on complex chapters. " +
-                  "Try a different lens (the **History** and **Future** views " +
-                  "are usually the most forgiving), or retry.";
+            insight.body    = switch (failure) {
+                case THROWN -> "_The tutor couldn't draft this insight right now._\n\n" +
+                    "**Error:** " + rootCauseSummary(lastError) + "\n\n" +
+                    "Try again, or check that the LLM provider " +
+                    "(Ollama / OpenAI) is reachable.";
+                case UPSTREAM ->
+                    "_The LLM returned an empty response._\n\n" +
+                    "This almost always means the upstream provider rejected " +
+                    "the call but didn't surface the reason. Common causes:\n\n" +
+                    "- **Invalid or expired `OPENAI_API_KEY`** — verify with " +
+                    "`curl https://api.openai.com/v1/models -H \"Authorization: Bearer $OPENAI_API_KEY\"`\n" +
+                    "- **Rate limit / quota exceeded** — check your OpenAI usage page\n" +
+                    "- **Auth challenge during a streaming upload** — Spring AI's " +
+                    "transport sometimes swallows 401/429 as `HttpRetryException: " +
+                    "cannot retry due to server authentication, in streaming mode`\n\n" +
+                    "Server log carries the full stack — look for `Retry error` " +
+                    "or `cannot retry due to server authentication`.";
+                case PARSE ->
+                    "_The tutor's response didn't match the expected shape._\n\n" +
+                    "The LLM returned content but it wasn't valid JSON. This " +
+                    "happens with weaker models on complex chapters. Try a " +
+                    "different lens (**History** and **Future** are the most " +
+                    "forgiving schemas), or retry. The server log shows the " +
+                    "first 500 chars the model emitted — that's the fastest " +
+                    "way to diagnose what's drifting.";
+                case NONE -> "_Empty insight (this shouldn't happen — please file a bug)._";
+            };
         } else {
             // Defensive normalisation — LLM occasionally drops fields.
             if (insight.mode    == null || insight.mode.isBlank())    insight.mode    = normalisedMode;
             if (insight.concept == null || insight.concept.isBlank()) insight.concept = targetConcept;
         }
         return ResponseEntity.ok(insight);
+    }
+
+    /**
+     * Failure classes used by {@link #ask} to pick the right user-visible
+     * diagnosis. Kept private — the controller is the only place that
+     * cares about the distinction.
+     */
+    private enum Failure {
+        NONE,
+        /** An exception bubbled out of the agent call (timeout, transport, etc). */
+        THROWN,
+        /**
+         * The LLM call "succeeded" but returned an empty body. Almost
+         * always means Spring AI's retry mechanism swallowed an
+         * upstream 401/429/transport error and recovered with blanks.
+         * Different fix vs PARSE — the operator should check provider
+         * auth / quota, not the prompt.
+         */
+        UPSTREAM,
+        /**
+         * The LLM returned content but it didn't match the
+         * {@code LearningInsight} schema. Suggests a prompt issue;
+         * the server log carries the first 500 chars of the emission.
+         */
+        PARSE
     }
 
     /**
