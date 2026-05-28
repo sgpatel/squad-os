@@ -85,6 +85,20 @@ public class BookExtractionService {
     /** Cap on per-chapter concept extraction. */
     static final int MAX_CONCEPTS_PER_CHAPTER = 8;
 
+    /**
+     * Safety net for textbooks where heading detection succeeds at the
+     * top level but misses sub-sections — e.g. Murphy's "Probabilistic
+     * Machine Learning" where each chapter spans 50+ pages but the
+     * sub-section style ("2.1 Random variables") didn't initially
+     * match the standalone-numbered-heading regex.
+     *
+     * <p>If any detected chapter spans more pages than this, we replace
+     * it with N page-bucket sub-segments so a learner doesn't end up
+     * with one 290-page "chapter" that drowns out any specific concept
+     * in the LLM context window.
+     */
+    static final int CHAPTER_PAGE_SAFETY = 40;
+
     // ── Pre-compiled patterns ────────────────────────────────────────
 
     /** Chapter heading — most confident layer. */
@@ -98,12 +112,22 @@ public class BookExtractionService {
         Pattern.MULTILINE);
 
     /**
-     * Standalone numbered heading: "3. Title", "3.0 Title", "3) Title".
-     * Anchored to start of line + must be followed by a capitalised
-     * word to avoid matching prose like "see 3. above".
+     * Standalone numbered heading. Matches all of these on their own line:
+     *
+     *   3. Title              (legacy single-level, trailing period)
+     *   3.1 Title             (dotted-decimal, NO trailing period — Murphy's
+     *                          PML book uses this)
+     *   3.1.4 Title           (three-level dotted decimal)
+     *   3) Title              (alternate single-level)
+     *
+     * The capture group keeps the FULL numeric prefix (e.g. "3.1.4") so
+     * downstream code can detect hierarchy if it ever wants to. The
+     * trailing-period requirement of the previous regex was the reason
+     * Murphy's "2.1 Random variables" never matched and chapter 2
+     * ballooned to 290 pages.
      */
     private static final Pattern NUMBERED_PATTERN = Pattern.compile(
-        "^\\s*(\\d{1,2})(?:\\.\\d+)?[.)]\\s+([A-Z][\\w\\- ,]{2,80})\\s*$",
+        "^\\s*(\\d{1,2}(?:\\.\\d{1,2}){0,3})[.)]?\\s+([A-Z][\\w\\- ,'’]{2,80})\\s*$",
         Pattern.MULTILINE);
 
     /** Capitalised noun-phrase (2–4 words) used for concept extraction. */
@@ -198,8 +222,70 @@ public class BookExtractionService {
             book.chapters = fallbackBucketChapters(pages);
         } else {
             book.chapters = chaptersFromHeadings(headings, text, pageEnds);
+            // Safety net: replace any detected chapter that spans more
+            // pages than CHAPTER_PAGE_SAFETY with page-bucket sub-segments.
+            // Catches the failure mode where top-level chapter detection
+            // works but sub-section detection misses, leaving the learner
+            // with one 290-page mega-chapter whose body excerpt is too
+            // generic for the LLM to ground on.
+            book.chapters = splitOversizedChapters(book.chapters, pages);
         }
         return book;
+    }
+
+    /**
+     * Detect any chapter that's wider than {@link #CHAPTER_PAGE_SAFETY}
+     * and replace it with a sequence of page-bucket sub-chapters. The
+     * label format makes the split visible to the learner so they
+     * understand why a "chapter 2" became "Chapter 2 — Section 1",
+     * "Section 2", etc.
+     *
+     * <p>Re-numbers chapters across the whole result so the UI gets
+     * a contiguous 1..N sequence after expansion.
+     */
+    static List<Chapter> splitOversizedChapters(List<Chapter> in, List<String> pages) {
+        List<Chapter> out = new ArrayList<>();
+        for (Chapter ch : in) {
+            int span = ch.pageEnd - ch.pageStart + 1;
+            if (span <= CHAPTER_PAGE_SAFETY) {
+                out.add(ch);
+                continue;
+            }
+            // How many sub-segments? Choose so each is ~CHAPTER_PAGE_SAFETY/2
+            // wide — keeps focus tight without producing 50 sub-chapters
+            // for a 300-page mega-chapter.
+            int buckets = Math.max(2, (int) Math.ceil(span / (double) (CHAPTER_PAGE_SAFETY / 2)));
+            int perBucket = (int) Math.ceil(span / (double) buckets);
+            for (int b = 0; b < buckets; b++) {
+                int p0 = ch.pageStart + b * perBucket;
+                int p1 = Math.min(ch.pageEnd, p0 + perBucket - 1);
+                if (p0 > ch.pageEnd) break;
+                // Slice the page-text we already have rather than the
+                // (already-truncated) chapter body — the body cap may
+                // have eaten content we need here.
+                int pIdx0 = Math.max(0, p0 - 1);
+                int pIdx1 = Math.min(pages.size(), p1);
+                StringBuilder body = new StringBuilder();
+                for (int p = pIdx0; p < pIdx1; p++) {
+                    body.append(pages.get(p));
+                    if (!pages.get(p).endsWith("\n")) body.append('\n');
+                }
+                Chapter sub = new Chapter();
+                sub.number    = 0;                 // re-numbered below
+                sub.title     = ch.title + " — Section " + (b + 1) +
+                                " (pp. " + p0 + "–" + p1 + ")";
+                sub.body      = trimBody(body.toString().trim());
+                sub.summary   = Chapter.defaultSummary(sub.body);
+                sub.pageStart = p0;
+                sub.pageEnd   = p1;
+                sub.setConcepts(extractConcepts(sub.body));
+                out.add(sub);
+            }
+        }
+        // Re-number all chapters contiguously so the UI shows a clean
+        // 1..N sequence after the safety split fires.
+        for (int i = 0; i < out.size(); i++) out.get(i).number = i + 1;
+        return out;
     }
 
     /**

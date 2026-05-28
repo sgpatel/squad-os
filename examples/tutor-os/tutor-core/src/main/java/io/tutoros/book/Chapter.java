@@ -25,12 +25,23 @@ import java.util.List;
 public class Chapter {
 
     /**
-     * Body cap. ~6k chars ≈ ~1.5k tokens at typical English. Enough to
-     * ground BookCoach across all six lenses without blowing the LLM
-     * context. Books with longer chapters get truncated at character
-     * boundaries (preserving sentence start) by {@code BookExtractionService}.
+     * Body cap. 16k chars ≈ ~4k tokens at typical English — leaves
+     * comfortable headroom inside a 128k context window for the
+     * system prompt, the schema instructions, and the agent's reply.
+     *
+     * <p>The original 6k cap was tuned for short Cliff-Notes-style
+     * chapters; when textbooks like Murphy's "Probabilistic Machine
+     * Learning" got loaded, top-level chapters spanning many sections
+     * still over-filled the cap and the LLM saw only the chapter
+     * intro — too generic to ground anything specific. 16k catches
+     * a typical sub-section in full.
+     *
+     * <p>Pair this with {@code BookExtractionService}'s sub-section
+     * heading detector (matches "2.1 Title" / "2.1.3 Title") so deep-
+     * hierarchy textbooks split into smaller, focused chapters that
+     * fit comfortably in this cap.
      */
-    public static final int MAX_BODY_CHARS = 6_000;
+    public static final int MAX_BODY_CHARS = 16_000;
 
     /** 1-based chapter number, in document order. */
     public int number;

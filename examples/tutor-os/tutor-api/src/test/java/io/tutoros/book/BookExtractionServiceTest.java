@@ -88,6 +88,100 @@ class BookExtractionServiceTest {
         assertTrue(book.chapters().get(2).title.endsWith("Advanced Topics"));
     }
 
+    @Test
+    void detectsDottedDecimalSubsectionsWithoutTrailingPeriod() {
+        // Murphy's PML and many textbooks use "2.1 Title" (no trailing
+        // period) for sub-sections. Previous regex required `[.)]`
+        // after the number and would miss this entirely — chapters
+        // ended up dozens of pages long because sub-headings never
+        // matched. This test locks the new regex in.
+        List<String> pages = List.of(
+            "2.1 Random Variables\nA random variable is a function...\n",
+            "2.2 Bayes Rule\nBayes' rule relates conditional probabilities...\n",
+            "2.3 Gaussian Distribution\nThe Gaussian (or normal) distribution is...\n",
+            "2.4 Bernoulli Distribution\nFor a binary outcome...\n"
+        );
+        Book book = svc.buildBookFromPages(pages, L, S, "PML", null);
+        assertEquals(4, book.chapters().size(),
+            "dotted-decimal headings without trailing period must be detected");
+        assertTrue(book.chapters().get(0).title.endsWith("Random Variables"));
+        assertTrue(book.chapters().get(1).title.endsWith("Bayes Rule"));
+        assertTrue(book.chapters().get(2).title.endsWith("Gaussian Distribution"));
+    }
+
+    @Test
+    void detectsThreeLevelDottedDecimalHeadings() {
+        // Some textbooks go three deep: "2.1.3 Title". The regex
+        // should still match — capture group keeps the full numeric
+        // prefix.
+        List<String> pages = List.of(
+            "2.1.1 First Bit\nSub-sub content here.\n",
+            "2.1.2 Second Bit\nMore sub-sub content.\n",
+            "2.1.3 Third Bit\nFinal sub-sub.\n"
+        );
+        Book book = svc.buildBookFromPages(pages, L, S, "Deep", null);
+        assertEquals(3, book.chapters().size());
+        assertTrue(book.chapters().get(0).title.endsWith("First Bit"));
+    }
+
+    // ── Mega-chapter safety split ────────────────────────────────────
+
+    @Test
+    void splitsMegaChaptersIntoSafePageBuckets() {
+        // Simulate Murphy's "chapter 2 spans pp. 60-350" failure: one
+        // detected heading at the start of a very long span, no
+        // further sub-section detection. Safety net should chop the
+        // mega-chapter into bucket-sized sub-chapters so each LLM
+        // call sees focused content.
+        int total = CHAPTER_PAGE_SAFETY_FOR_TEST * 3 + 20;  // ~140 pages
+        List<String> pages = new java.util.ArrayList<>();
+        pages.add("Chapter 1: Intro\nIntro body\n");                 // page 1
+        for (int i = 1; i < total - 1; i++) {
+            pages.add("body of mega chapter, page " + (i + 1) +
+                ". ".repeat(80) + "\n");
+        }
+        pages.add("body of mega chapter, last page.\n");
+
+        // Add two more headings far enough apart to satisfy
+        // MIN_DETECTED_CHAPTERS=3, so the heading-detection path runs
+        // (not the page-bucket fallback) and the safety split has
+        // something to react to.
+        pages.set(0, "Chapter 1: Intro\nIntro body\n");
+        pages.set(total - 2, "Chapter 3: Outro start\nOutro content.\n");
+        pages.set(total - 1, "Chapter 4: After\nMore outro.\n");
+
+        Book book = svc.buildBookFromPages(pages, L, S, "Mega", null);
+
+        // After the safety split:
+        //   chapter 1 (1 page, untouched)
+        //   chapter 2 (~138 pages) → split into N safety sub-sections
+        //   chapter 3, 4 (1 page each, untouched)
+        // The mega chapter MUST be replaced — no surviving chapter
+        // should span more than CHAPTER_PAGE_SAFETY pages.
+        for (Chapter ch : book.chapters()) {
+            int span = ch.pageEnd - ch.pageStart + 1;
+            assertTrue(span <= CHAPTER_PAGE_SAFETY_FOR_TEST,
+                "after safety split, no chapter should span >" +
+                CHAPTER_PAGE_SAFETY_FOR_TEST + " pages; got '" +
+                ch.title + "' spanning " + span);
+        }
+        // Re-numbering: chapters must be contiguous 1..N.
+        for (int i = 0; i < book.chapters().size(); i++) {
+            assertEquals(i + 1, book.chapters().get(i).number,
+                "chapters must be re-numbered contiguously after safety split");
+        }
+        // The split sub-chapters should carry the "Section N" suffix
+        // so the learner sees what happened.
+        assertTrue(book.chapters().stream().anyMatch(c -> c.title.contains("Section ")),
+            "safety-split sub-chapters should be labelled '... Section N (pp. X–Y)'");
+    }
+
+    // Mirror of BookExtractionService.CHAPTER_PAGE_SAFETY — kept here
+    // as a constant so changing it in the service forces an explicit
+    // test update rather than silently shifting the test's expectations.
+    private static final int CHAPTER_PAGE_SAFETY_FOR_TEST =
+        io.tutoros.book.BookExtractionService.CHAPTER_PAGE_SAFETY;
+
     // ── Fallback — page-bucket split ─────────────────────────────────
 
     @Test
