@@ -267,8 +267,9 @@ public class BookController {
         String targetConcept = resolveConcept(ch, concept);
         if (targetConcept == null) targetConcept = ch.title;
 
+        String normalisedMode = BookCoachAgent.normalizeMode(mode);
         String prompt = coach.buildPrompt(
-            BookCoachAgent.normalizeMode(mode),
+            normalisedMode,
             b.title, ch.title, ch.body,
             targetConcept, level,
             ch.pageStart, ch.pageEnd);
@@ -277,34 +278,85 @@ public class BookController {
         // for why we bypass ctx.submitTo here.
         AgentWrapper wrapper = ctx.getRegistry().getByName("BookCoachAgent");
         if (wrapper == null) {
+            // Hard config bug, not a per-request issue — surface as 503
+            // so monitoring can distinguish "service degraded" from
+            // "this request failed."
             log.error("BookCoachAgent not registered with SquadOS — bean wiring missing");
-            return ResponseEntity.status(502).build();
+            return ResponseEntity.status(503).build();
         }
-        AgentResponse resp;
+
+        AgentResponse resp = null;
+        Throwable lastError = null;
+        long t0 = System.nanoTime();
         try {
             TaskContext taskCtx = new TaskContext(
                 prompt, UUID.randomUUID().toString(), ctx.getConfig().getProfile());
             resp = wrapper.execute(taskCtx);
         } catch (RuntimeException e) {
-            log.warn("BookCoach ask failed", e);
-            return ResponseEntity.status(502).build();
+            lastError = e;
+            // Structured log so the next failure leaves a useful breadcrumb.
+            // The full prompt is intentionally NOT logged — it can carry
+            // chapter content (potentially a copyrighted textbook) and
+            // would balloon log volume. Length is enough to diagnose
+            // size-related issues without leaking text.
+            log.warn(
+                "BookCoach ask failed: book={} chapter={} mode={} concept={} " +
+                "promptChars={} bodyChars={} elapsedMs={} cause={}",
+                bookId, n, normalisedMode, targetConcept,
+                prompt.length(),
+                ch.body != null ? ch.body.length() : 0,
+                (System.nanoTime() - t0) / 1_000_000L,
+                rootCauseSummary(e),
+                e);
         }
 
         LearningInsight insight = resp != null
             ? resp.structuredOutput(LearningInsight.class) : null;
+
         if (insight == null) {
-            // Fallback so the UI never deadlocks — at least the
-            // concept name + a "couldn't draft" note come back.
+            // Graceful UX: rather than a 502 with empty body (opaque to
+            // the learner, no actionable info), return 200 with a stub
+            // insight whose body explains what failed. The UI renders
+            // it like any other lens — markdown + retry button — so the
+            // learner can pick a different lens or retry.
             insight = new LearningInsight();
-            insight.mode    = BookCoachAgent.normalizeMode(mode);
+            insight.mode    = normalisedMode;
             insight.concept = targetConcept;
-            insight.body    = "(Could not generate insight — try again, or pick a different lens.)";
+            insight.body    = lastError != null
+                ? "_The tutor couldn't draft this insight right now._\n\n" +
+                  "**Error:** " + rootCauseSummary(lastError) + "\n\n" +
+                  "Try again, switch to a different lens, or check that the " +
+                  "LLM provider (Ollama / OpenAI) is reachable. " +
+                  "If the error persists, the chapter may be too long for the " +
+                  "model's context window — try a different chapter."
+                : "_The tutor's response didn't match the expected shape._\n\n" +
+                  "This can happen with weaker models on complex chapters. " +
+                  "Try a different lens (the **History** and **Future** views " +
+                  "are usually the most forgiving), or retry.";
         } else {
             // Defensive normalisation — LLM occasionally drops fields.
-            if (insight.mode    == null || insight.mode.isBlank())    insight.mode    = BookCoachAgent.normalizeMode(mode);
+            if (insight.mode    == null || insight.mode.isBlank())    insight.mode    = normalisedMode;
             if (insight.concept == null || insight.concept.isBlank()) insight.concept = targetConcept;
         }
         return ResponseEntity.ok(insight);
+    }
+
+    /**
+     * Walk an exception chain and produce a single short summary string
+     * for both logs and the user-visible error body. Stops at the first
+     * non-wrapper cause so the message is the ACTUAL failure (e.g.
+     * "Read timed out") rather than the outermost rethrow (e.g.
+     * "RuntimeException: Read timed out").
+     */
+    private static String rootCauseSummary(Throwable t) {
+        if (t == null) return "(no detail)";
+        Throwable cur = t;
+        for (int i = 0; i < 8 && cur.getCause() != null && cur.getCause() != cur; i++) {
+            cur = cur.getCause();
+        }
+        String name = cur.getClass().getSimpleName();
+        String msg  = cur.getMessage();
+        return msg != null && !msg.isBlank() ? name + ": " + msg : name;
     }
 
     // ── /answer — record mastery on a quiz-style lens (PR-2) ─────────
