@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, GraduationCap } from 'lucide-react';
+import { ArrowLeft, BookOpen, GraduationCap, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePipeline } from '@/store/pipeline';
 import { useSettings } from '@/store/settings';
@@ -9,6 +9,7 @@ import { ChatComposer } from './ChatComposer';
 import { AgentActivity } from '@/features/pipeline/AgentActivity';
 import { SyllabusSheet } from '@/features/syllabus/SyllabusSheet';
 import { useReviewQueue } from '@/features/review/useReviewQueue';
+import { readReturnTo, clearReturnTo, type ReturnToContext } from '@/lib/returnTo';
 
 /**
  * Tutor — the active chat canvas.
@@ -33,6 +34,13 @@ export function TutorPage() {
   const { count: reviewDue, refresh: refreshReview } = useReviewQueue();
   const navigate = useNavigate();
 
+  // "← Back to <chapter>" breadcrumb when the learner arrived here
+  // from a book chapter (or any other surface that stashes a
+  // return-to context). Read once on mount + on every route change
+  // back to /tutor; persists across reload via sessionStorage.
+  const [returnTo, setReturnTo] = useState<ReturnToContext | null>(null);
+  useEffect(() => { setReturnTo(readReturnTo()); }, []);
+
   const subjectName = activeSubjectId ? getSubject(activeSubjectId)?.name : null;
 
   // Pin scroll to bottom on new messages.
@@ -51,6 +59,35 @@ export function TutorPage() {
 
   return (
     <div className="chat">
+      {/* Return-to breadcrumb — only renders when the learner came from
+          another surface (today: a book chapter). One-click back to
+          where they were, plus an explicit dismiss so the breadcrumb
+          doesn't follow them around once they've moved on to a new
+          topic. */}
+      {returnTo && (
+        <div className="returnto" role="status" aria-label="Where you came from">
+          <button
+            type="button"
+            className="returnto__back"
+            onClick={() => {
+              clearReturnTo();
+              navigate(returnTo.url);
+            }}
+          >
+            <ArrowLeft size={13} />
+            <span>Back to <strong>{returnTo.label}</strong></span>
+          </button>
+          <button
+            type="button"
+            className="returnto__close"
+            aria-label="Dismiss"
+            onClick={() => { clearReturnTo(); setReturnTo(null); }}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
       {/* Header strip — shows the active subject + topic for this session
           and exposes the SyllabusSheet so the learner can shape the
           curriculum at any moment. Lives INSIDE TutorPage (not Topbar)

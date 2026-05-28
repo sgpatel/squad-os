@@ -290,12 +290,59 @@ html { font-size: calc(var(--text-base) * var(--font-scale, 1)); }
 
 /* ── Chat (Tutor page) ────────────────────────────────────────────── */
 .chat {
-  display: grid;
-  /* PR-C added a slim header strip above the thread; thread + composer
-     still fill the rest. */
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
+  /* Optional return-to breadcrumb + header strip + thread (flex:1) +
+     composer. Flex column instead of explicit grid rows so adding
+     more contextual strips (breadcrumb, banners) at the top doesn't
+     require re-tuning the row template. */
   height: calc(100vh - var(--topbar-height));
 }
+.chat__thread { flex: 1 1 auto; }
+
+/* "Back to <surface>" breadcrumb — rendered above the tutor-header
+   when the learner arrived from a book chapter (or any other surface
+   that stashes a return-to context via lib/returnTo). */
+.returnto {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-bg));
+  font-size: 12px;
+  color: var(--color-text);
+}
+.returnto__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+.returnto__back:hover { text-decoration: underline; }
+.returnto__back strong {
+  color: var(--color-text);
+  font-weight: 600;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.returnto__close {
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: 4px;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+}
+.returnto__close:hover { background: var(--color-bg-subtle); color: var(--color-text); }
 
 /* Tutor header — subject/topic indicator + "Syllabus" button. */
 .tutor-header {

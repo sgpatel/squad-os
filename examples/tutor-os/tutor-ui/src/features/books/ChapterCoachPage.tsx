@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useNotes } from '@/store/notes';
 import { usePipeline } from '@/store/pipeline';
+import { stashReturnTo } from '@/lib/returnTo';
 import type { LucideIcon } from 'lucide-react';
 import { api, DEMO_LEARNER_ID } from '@/lib/api';
 import { useAuth } from '@/store/auth';
@@ -344,6 +345,8 @@ export function ChapterCoachPage() {
             <RecommendedActions
               mode={mode}
               concept={insight.concept}
+              bookId={book.id}
+              chapterNumber={chapter.number}
               bookTitle={book.title}
               chapterTitle={chapter.title}
               sourceExcerpt={insight.sourceExcerpt}
@@ -453,6 +456,8 @@ function CoachSourcePanel(props: {
 function RecommendedActions(props: {
   mode:         BookCoachMode;
   concept:      string;
+  bookId:       string;
+  chapterNumber: number;
   bookTitle:    string;
   chapterTitle: string;
   sourceExcerpt?: string;
@@ -460,7 +465,8 @@ function RecommendedActions(props: {
   pdfUrl?:      string;
   onSwitchMode: (next: BookCoachMode) => void;
 }) {
-  const { mode, concept, bookTitle, chapterTitle, sourceExcerpt, pdfUrl, onSwitchMode } = props;
+  const { mode, concept, bookId, chapterNumber, bookTitle, chapterTitle,
+          sourceExcerpt, pdfUrl, onSwitchMode } = props;
   const navigate     = useNavigate();
   const createNote   = useNotes(s => s.create);
   const startTutor   = usePipeline(s => s.start);
@@ -477,6 +483,16 @@ function RecommendedActions(props: {
       `Here is the relevant passage I'm reading:\n\n` +
       (sourceExcerpt ? '> ' + sourceExcerpt.split('\n').join('\n> ') : '(no excerpt)') +
       `\n\nWhat are the most important things to take away?`;
+    // Remember where we came from so the tutor page can render a
+    // "← Back to <chapter>" breadcrumb. Without this the learner
+    // would have to manually navigate back to /books → book → chapter
+    // → lens after every cross-context jump. Survives page reload
+    // via sessionStorage; expires after 30 min.
+    stashReturnTo({
+      url:    `/books/${bookId}/chapter/${chapterNumber}`,
+      label:  `${chapterTitle} · ${bookTitle}`,
+      source: 'book',
+    });
     void startTutor(prompt);
     navigate('/tutor');
   };
