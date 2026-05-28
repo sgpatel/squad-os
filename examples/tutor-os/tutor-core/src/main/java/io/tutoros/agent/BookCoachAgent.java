@@ -289,19 +289,38 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
+            CRITICAL FORMATTING: the body field is a markdown string.
+            Each "###" heading MUST start on its own line. Inside the
+            JSON string, that means using the literal characters
+            backslash-n-backslash-n (\\n\\n) between sections. Do NOT
+            run headings inline with the previous paragraph's text.
+
+            Use this exact body structure (replace the <…> placeholders
+            with real content; keep the \\n\\n separators verbatim):
+
+              ### Today\\n\\n
+              <2 paragraphs naming specific industries / products /
+              scenarios that use %s today. Be concrete — name companies,
+              tools, or use-cases.>\\n\\n
+              ### Adjacent fields\\n\\n
+              <1 paragraph on disciplines that depend on %s.>\\n\\n
+              ### Why it matters\\n\\n
+              <1 paragraph stating the stakes — what changes if no-one
+              understands this concept.>
+
             {
               "mode":        "usage",
               "concept":     "%s",
-              "body":        "<3 short markdown sections under ### headings:  ### Today  (2 paragraphs naming specific industries/products/scenarios that use %s today)  ### Adjacent fields  (1 paragraph on disciplines depending on it)  ### Why it matters  (1 paragraph stating the stakes)>",
+              "body":        "### Today\\n\\n<paragraphs>\\n\\n### Adjacent fields\\n\\n<paragraph>\\n\\n### Why it matters\\n\\n<paragraph>",
               "question":    "",
               "modelAnswer": "",
               "difficulty":  "",
-              "followUps":   "<1–2 questions the learner could research to go deeper, newline-separated>",
+              "followUps":   "<1–2 research questions, separated by \\n>",
               "sourcePages": "%s"
             }
             """.formatted(
                 learnerLevel, concept, bookTitle, chapterTitle,
-                chapterBody, concept, concept, pages);
+                chapterBody, concept, concept, concept, pages);
     }
 
     /**
@@ -331,14 +350,31 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
+            CRITICAL FORMATTING: the body field is a markdown string.
+            Each "###" heading MUST start on its own line. Inside the
+            JSON string, that means using the literal characters
+            backslash-n-backslash-n (\\n\\n) between sections. Do NOT
+            run headings inline with the previous paragraph's text.
+
+            Use this exact body structure (replace the <…> placeholders
+            with real content; keep the \\n\\n separators verbatim):
+
+              ### Discovery\\n\\n
+              <who first proposed it, roughly when, and what problem
+              they were trying to solve.>\\n\\n
+              ### Evolution\\n\\n
+              <2–3 key milestones that refined or generalised the idea.>\\n\\n
+              ### Today's understanding\\n\\n
+              <one sentence connecting back to the chapter's framing.>
+
             {
               "mode":        "history",
               "concept":     "%s",
-              "body":        "<3 short markdown sections under ### headings:  ### Discovery  (who first proposed it, roughly when, what problem they were solving)  ### Evolution  (2–3 key milestones that refined or generalised the idea)  ### Today's understanding  (one sentence connecting back to the chapter's framing)>",
+              "body":        "### Discovery\\n\\n<paragraph>\\n\\n### Evolution\\n\\n<paragraph>\\n\\n### Today's understanding\\n\\n<one sentence>",
               "question":    "",
               "modelAnswer": "",
               "difficulty":  "",
-              "followUps":   "<1–2 historical figures the learner could read more about, newline-separated>",
+              "followUps":   "<1–2 historical figures, separated by \\n>",
               "sourcePages": ""
             }
             """.formatted(
@@ -373,14 +409,31 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
+            CRITICAL FORMATTING: the body field is a markdown string.
+            Each "###" heading MUST start on its own line. Inside the
+            JSON string, that means using the literal characters
+            backslash-n-backslash-n (\\n\\n) between sections. Do NOT
+            run headings inline with the previous paragraph's text.
+
+            Use this exact body structure (replace the <…> placeholders
+            with real content; keep the \\n\\n separators verbatim):
+
+              ### Open problems\\n\\n
+              <2 specific questions researchers are still working on.>\\n\\n
+              ### Where it's heading\\n\\n
+              <1 paragraph on trends shaping the next decade.>\\n\\n
+              ### Careers\\n\\n
+              <1 paragraph naming 2–3 specific jobs / fields that need
+              strong understanding of %s.>
+
             {
               "mode":        "future",
               "concept":     "%s",
-              "body":        "<3 short markdown sections under ### headings:  ### Open problems  (2 specific questions researchers are still working on)  ### Where it's heading  (1 paragraph on trends shaping the next decade)  ### Careers  (1 paragraph naming 2–3 specific jobs/fields needing strong understanding of %s)>",
+              "body":        "### Open problems\\n\\n<paragraph>\\n\\n### Where it's heading\\n\\n<paragraph>\\n\\n### Careers\\n\\n<paragraph>",
               "question":    "",
               "modelAnswer": "",
               "difficulty":  "",
-              "followUps":   "<1–2 areas the learner could dive into, newline-separated>",
+              "followUps":   "<1–2 areas to dive into, separated by \\n>",
               "sourcePages": ""
             }
             """.formatted(

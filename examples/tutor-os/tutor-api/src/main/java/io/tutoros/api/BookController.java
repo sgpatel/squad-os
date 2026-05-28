@@ -385,8 +385,52 @@ public class BookController {
             // Defensive normalisation — LLM occasionally drops fields.
             if (insight.mode    == null || insight.mode.isBlank())    insight.mode    = normalisedMode;
             if (insight.concept == null || insight.concept.isBlank()) insight.concept = targetConcept;
+            // Defensive markdown formatting — when the LLM runs "### Heading"
+            // inline with the prior paragraph (despite the prompt's explicit
+            // \n\n instruction), the markdown renderer would otherwise see
+            // one giant paragraph. Insert paragraph breaks before any inline
+            // h2/h3 heading so the UI looks right regardless.
+            insight.body        = ensureHeadingBreaks(insight.body);
+            insight.modelAnswer = ensureHeadingBreaks(insight.modelAnswer);
         }
         return ResponseEntity.ok(insight);
+    }
+
+    /**
+     * Insert paragraph breaks before any "## " or "### " that the LLM
+     * emitted inline with the previous paragraph. Runs the simplest
+     * transformation that works:
+     *
+     *   - if a "###" / "##" token is at the start of the string → leave it
+     *   - if it's preceded by whitespace including a newline → leave it
+     *   - else → insert "\n\n" right before it
+     *
+     * Idempotent (running twice yields the same result) and safe on
+     * already-correct markdown.
+     */
+    static String ensureHeadingBreaks(String md) {
+        if (md == null || md.isBlank()) return md;
+        // Two passes — one for ### then one for ## — order matters so
+        // we don't double-insert when "##" is a prefix of "###".
+        String out = breakBefore(md,  "### ");
+        out        = breakBefore(out, "## ");
+        return out;
+    }
+
+    private static String breakBefore(String md, String marker) {
+        StringBuilder sb = new StringBuilder(md.length() + 16);
+        int i = 0;
+        while (i < md.length()) {
+            int hit = md.indexOf(marker, i);
+            if (hit < 0) { sb.append(md, i, md.length()); break; }
+            sb.append(md, i, hit);
+            // Already at line start (top of body or preceded by \n)?
+            boolean atLineStart = hit == 0 || md.charAt(hit - 1) == '\n';
+            if (!atLineStart) sb.append("\n\n");
+            sb.append(marker);
+            i = hit + marker.length();
+        }
+        return sb.toString();
     }
 
     /**
