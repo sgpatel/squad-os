@@ -37,3 +37,14 @@ squad:
      # exceeds 3k tokens. 4k gives healthy headroom for 5–10 questions.
     - class: "io.tutoros.agent.QuizAgent"
       max-tokens: 4000
+    # SyllabusSuggesterAgent (PR-B) — short, structured output.
+    # Without this entry the syllabus /suggest endpoint silently 503s
+    # because AgentScanner only registers classes listed here.
+    - class: "io.tutoros.agent.SyllabusSuggesterAgent"
+      max-tokens: 2000
+    # BookCoachAgent (PR-2) — six learning lenses across an uploaded
+    # chapter. Output is small-to-medium per lens but synthesis +
+    # advanced modes can emit a few hundred tokens of worked solution.
+    # 2500 leaves headroom for the longest plausible insight.
+    - class: "io.tutoros.agent.BookCoachAgent"
+      max-tokens: 2500
