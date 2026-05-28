@@ -56,8 +56,19 @@ import java.util.regex.Pattern;
  */
 public class BookExtractionService {
 
-    /** 32 MiB — books are bigger than syllabi (PR-D was 8 MiB). */
-    public static final long MAX_BYTES = 32L * 1024 * 1024;
+    /**
+     * 128 MiB — sized for college-level textbooks (Kevin P. Murphy's
+     * "Probabilistic Machine Learning" is ~98 MB; physics/chemistry
+     * reference works land in the same range). The compose nginx
+     * (client_max_body_size) and Spring multipart caps in
+     * application.properties match this number — they all have to
+     * line up or the upload fails at the smallest cap.
+     *
+     * Books larger than this should be chunked or compressed first;
+     * extraction time + PDFBox heap usage grow roughly linearly with
+     * file size, so an unbounded cap would be a DoS surface.
+     */
+    public static final long MAX_BYTES = 128L * 1024 * 1024;
 
     /**
      * If the layered detector produces fewer chapters than this, we

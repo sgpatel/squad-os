@@ -212,7 +212,7 @@ export function BookUploadModal({
                     ? 'Extracting chapters and concepts — may take a minute on large books'
                     : file
                       ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
-                      : 'PDF up to 32 MB'}
+                      : 'PDF up to 128 MB'}
                 </span>
               </div>
             </label>
