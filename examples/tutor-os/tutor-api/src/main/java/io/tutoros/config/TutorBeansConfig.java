@@ -113,6 +113,22 @@ public class TutorBeansConfig {
         return new QuizAgent();
     }
 
+    /**
+     * BookCoachAgent — PR-2 textbook learning loop.
+     *
+     * DECLARED BEFORE {@code syllabusSuggesterAgent} on purpose: both
+     * agents claim {@code AgentRole.WILDCARD}, and the SquadOS registry's
+     * byRole map is last-writer-wins. Registering BookCoach first means
+     * the SyllabusSuggester overwrites it for {@code submitTo(WILDCARD)}
+     * (preserving the existing syllabus controller flow), while BookCoach
+     * is still reachable by name via {@code getRegistry().getByName(...)}
+     * — see {@code BookController.ask} for the dispatch.
+     */
+    @Bean
+    public BookCoachAgent bookCoachAgent() {
+        return new BookCoachAgent();
+    }
+
     @Bean
     public SyllabusSuggesterAgent syllabusSuggesterAgent() {
         return new SyllabusSuggesterAgent();

@@ -1,9 +1,17 @@
 package io.tutoros.api;
 
+import io.squados.agent.AgentResponse;
+import io.squados.agent.TaskContext;
+import io.squados.context.AgentWrapper;
+import io.squados.context.SquadContext;
+import io.tutoros.agent.BookCoachAgent;
 import io.tutoros.book.Book;
 import io.tutoros.book.BookExtractionService;
 import io.tutoros.book.BookRepository;
 import io.tutoros.book.Chapter;
+import io.tutoros.mastery.MasteryGrade;
+import io.tutoros.mastery.MasteryService;
+import io.tutoros.model.LearningInsight;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -41,10 +50,20 @@ public class BookController {
 
     private final BookExtractionService extractor;
     private final BookRepository        repo;
+    private final SquadContext          ctx;
+    private final BookCoachAgent        coach;
+    private final MasteryService        mastery;
 
-    public BookController(BookExtractionService extractor, BookRepository repo) {
+    public BookController(BookExtractionService extractor,
+                          BookRepository repo,
+                          SquadContext ctx,
+                          BookCoachAgent coach,
+                          MasteryService mastery) {
         this.extractor = extractor;
         this.repo      = repo;
+        this.ctx       = ctx;
+        this.coach     = coach;
+        this.mastery   = mastery;
     }
 
     // ── DTOs ─────────────────────────────────────────────────────────
@@ -198,6 +217,166 @@ public class BookController {
         if (b == null) return ResponseEntity.notFound().build();
         Chapter c = b.chapter(n);
         return c != null ? ResponseEntity.ok(c) : ResponseEntity.notFound().build();
+    }
+
+    // ── /ask — BookCoach learning loop (PR-2) ────────────────────────
+
+    /**
+     * POST /api/books/{learnerId}/{bookId}/chapter/{n}/ask?mode=basic
+     *
+     * Materialises a {@link LearningInsight} for the given chapter
+     * through one of {@link BookCoachAgent}'s six lenses
+     * (basic / intermediate / advanced / usage / history / future).
+     *
+     * <h2>Agent dispatch</h2>
+     * BookCoachAgent shares the WILDCARD role with SyllabusSuggesterAgent;
+     * the SquadOS registry's byRole map is last-writer-wins, so the
+     * suggester owns {@code submitTo(WILDCARD)}. We reach BookCoach
+     * by name via {@code getRegistry().getByName(...)} so the @StructuredOutput
+     * + @Retry + @Traced wrappers still kick in — only the dispatch
+     * lookup differs from the standard {@code ctx.submitTo} path.
+     *
+     * <h2>Response codes</h2>
+     * <ul>
+     *   <li>200 — LearningInsight body</li>
+     *   <li>400 — empty/unknown mode or missing chapter</li>
+     *   <li>404 — book/chapter not found, or ownership mismatch</li>
+     *   <li>502 — agent call failed (LLM provider down)</li>
+     * </ul>
+     */
+    @PostMapping("/{learnerId}/{bookId}/chapter/{n}/ask")
+    public ResponseEntity<LearningInsight> ask(
+            @PathVariable String learnerId,
+            @PathVariable String bookId,
+            @PathVariable int    n,
+            @RequestParam(value = "mode",    defaultValue = "basic")            String mode,
+            @RequestParam(value = "concept", required    = false)               String concept,
+            @RequestParam(value = "level",   defaultValue = "SENIOR_SCHOOL")    String level) {
+
+        Book b = repo.findById(bookId)
+            .filter(book -> learnerId.equals(book.learnerId))
+            .orElse(null);
+        if (b == null) return ResponseEntity.notFound().build();
+        Chapter ch = b.chapter(n);
+        if (ch == null) return ResponseEntity.notFound().build();
+
+        // Resolve the target concept: prefer the explicit one when
+        // it appears in the chapter's extracted list (so M3 mastery
+        // writes hit a real row), else fall back to the first concept
+        // the extractor found.
+        String targetConcept = resolveConcept(ch, concept);
+        if (targetConcept == null) targetConcept = ch.title;
+
+        String prompt = coach.buildPrompt(
+            BookCoachAgent.normalizeMode(mode),
+            b.title, ch.title, ch.body,
+            targetConcept, level,
+            ch.pageStart, ch.pageEnd);
+
+        // Dispatch by name — see class-level comment in BookCoachAgent
+        // for why we bypass ctx.submitTo here.
+        AgentWrapper wrapper = ctx.getRegistry().getByName("BookCoachAgent");
+        if (wrapper == null) {
+            log.error("BookCoachAgent not registered with SquadOS — bean wiring missing");
+            return ResponseEntity.status(502).build();
+        }
+        AgentResponse resp;
+        try {
+            TaskContext taskCtx = new TaskContext(
+                prompt, UUID.randomUUID().toString(), ctx.getConfig().getProfile());
+            resp = wrapper.execute(taskCtx);
+        } catch (RuntimeException e) {
+            log.warn("BookCoach ask failed", e);
+            return ResponseEntity.status(502).build();
+        }
+
+        LearningInsight insight = resp != null
+            ? resp.structuredOutput(LearningInsight.class) : null;
+        if (insight == null) {
+            // Fallback so the UI never deadlocks — at least the
+            // concept name + a "couldn't draft" note come back.
+            insight = new LearningInsight();
+            insight.mode    = BookCoachAgent.normalizeMode(mode);
+            insight.concept = targetConcept;
+            insight.body    = "(Could not generate insight — try again, or pick a different lens.)";
+        } else {
+            // Defensive normalisation — LLM occasionally drops fields.
+            if (insight.mode    == null || insight.mode.isBlank())    insight.mode    = BookCoachAgent.normalizeMode(mode);
+            if (insight.concept == null || insight.concept.isBlank()) insight.concept = targetConcept;
+        }
+        return ResponseEntity.ok(insight);
+    }
+
+    // ── /answer — record mastery on a quiz-style lens (PR-2) ─────────
+
+    /**
+     * POST /api/books/{learnerId}/{bookId}/chapter/{n}/answer
+     *
+     * The learner self-grades after answering one of the quiz-style
+     * lenses (basic / intermediate / advanced). We don't run the
+     * AssessmentAgent here — the LLM-graded path lives on
+     * {@code /session/answer} and pulls in a heavier prompt. For a
+     * fast self-grade loop, the learner picks an SM-2 grade
+     * (AGAIN / HARD / GOOD / EASY) and we hand it straight to
+     * {@link MasteryService#recordOutcome} with source="book". Same
+     * shape as {@code ReviewController.answer} so the M3-B "+12%"
+     * toast fires identically.
+     */
+    @PostMapping("/{learnerId}/{bookId}/chapter/{n}/answer")
+    public ResponseEntity<Void> recordAnswer(
+            @PathVariable String learnerId,
+            @PathVariable String bookId,
+            @PathVariable int    n,
+            @RequestBody  AnswerRequest body) {
+
+        if (body == null || body.concept == null || body.concept.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        Book b = repo.findById(bookId)
+            .filter(book -> learnerId.equals(book.learnerId))
+            .orElse(null);
+        if (b == null) return ResponseEntity.notFound().build();
+        Chapter ch = b.chapter(n);
+        if (ch == null) return ResponseEntity.notFound().build();
+
+        MasteryGrade grade;
+        try {
+            grade = MasteryGrade.valueOf(
+                (body.grade == null ? "GOOD" : body.grade).trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            grade = MasteryGrade.GOOD;
+        }
+
+        mastery.recordOutcome(learnerId, b.subject, body.concept, grade, "book");
+        log.debug("book answer learner={} subject={} concept={} grade={}",
+            learnerId, b.subject, body.concept, grade);
+        return ResponseEntity.noContent().build();
+    }
+
+    public record AnswerRequest(String concept, String grade) {}
+
+    /**
+     * Pick the concept to anchor a learning request to.
+     * <ol>
+     *   <li>If the caller passed an explicit concept that matches one
+     *       in the chapter's extracted list, use it (so mastery writes
+     *       land on a real concept tag).</li>
+     *   <li>Else if the chapter has any concepts, use the first.</li>
+     *   <li>Else null — the controller falls back to the chapter title.</li>
+     * </ol>
+     */
+    private static String resolveConcept(Chapter ch, String requested) {
+        if (requested != null && !requested.isBlank()) {
+            String key = requested.trim().toLowerCase();
+            for (String c : ch.concepts()) {
+                if (c.equalsIgnoreCase(key)) return c;
+            }
+            // Explicit but unknown — still use it so PR-3 UI doesn't
+            // get stuck when the learner clicks a concept tag we
+            // haven't extracted yet.
+            return requested.trim();
+        }
+        return ch.concepts().isEmpty() ? null : ch.concepts().get(0);
     }
 
     // ── DELETE ───────────────────────────────────────────────────────
