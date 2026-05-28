@@ -285,14 +285,20 @@ public class BookController {
             return ResponseEntity.status(503).build();
         }
 
-        AgentResponse resp = null;
+        LearningInsight insight = null;
         Throwable lastError = null;
         long t0 = System.nanoTime();
         try {
             TaskContext taskCtx = new TaskContext(
                 prompt, UUID.randomUUID().toString(), ctx.getConfig().getProfile());
-            resp = wrapper.execute(taskCtx);
-        } catch (RuntimeException e) {
+            AgentResponse resp = wrapper.execute(taskCtx);
+            // structuredOutput can throw on parse failure — keep it
+            // inside the try so the catch's stub fallback covers it.
+            if (resp != null) insight = resp.structuredOutput(LearningInsight.class);
+        } catch (Throwable e) {
+            // Catch Throwable (not just RuntimeException) so OOM,
+            // schema-parse Errors, or any wrapper rethrow can't leak
+            // past us as a raw 500/502 with no body.
             lastError = e;
             // Structured log so the next failure leaves a useful breadcrumb.
             // The full prompt is intentionally NOT logged — it can carry
@@ -309,9 +315,6 @@ public class BookController {
                 rootCauseSummary(e),
                 e);
         }
-
-        LearningInsight insight = resp != null
-            ? resp.structuredOutput(LearningInsight.class) : null;
 
         if (insight == null) {
             // Graceful UX: rather than a 502 with empty body (opaque to

@@ -126,6 +126,11 @@ public class TutorBeansConfig {
      */
     @Bean
     public BookCoachAgent bookCoachAgent() {
+        // Marker log so it's obvious in `mvn spring-boot:run` output
+        // whether the new BookCoach build is live. Look for this when
+        // diagnosing 502s on /ask — if the line is missing, you're
+        // running pre-fix code.
+        System.out.println("[TutorOS] BookCoachAgent registered — /ask returns 200 with stub on failure");
         return new BookCoachAgent();
     }
 
