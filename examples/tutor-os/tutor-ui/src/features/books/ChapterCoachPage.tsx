@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, AlertCircle, RefreshCw, Eye, X, ThumbsUp, Zap,
   BookOpen, Lightbulb, Hammer, Brain, Activity, Clock, Compass,
+  Quote, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api, DEMO_LEARNER_ID } from '@/lib/api';
@@ -249,8 +250,27 @@ export function ChapterCoachPage() {
               )}
             </div>
 
-            {/* Body */}
+            {/* STEP 1 — read the source.
+                Pedagogical anchor: the learner sees Murphy's actual
+                words first, BEFORE any generated summary. Closes the
+                gap where the previous flow jumped straight to a quiz
+                without ever surfacing the source material. */}
+            {insight.sourceExcerpt && insight.sourceExcerpt.trim() && (
+              <CoachSourcePanel
+                excerpt={insight.sourceExcerpt}
+                bookTitle={book.title}
+                chapterTitle={chapter.title}
+                sourcePages={insight.sourcePages || `pp. ${chapter.pageStart}–${chapter.pageEnd}`}
+              />
+            )}
+
+            {/* STEP 2 — tutor's take.
+                Now framed as a SUMMARY/take on the excerpt above, not
+                a standalone definition. */}
             <div className="lens-panel__body">
+              <div className="lens-panel__body-label">
+                {isQuizLens ? "Tutor's take" : 'Tutor view'}
+              </div>
               <Markdown>{insight.body}</Markdown>
             </div>
 
@@ -316,6 +336,63 @@ export function ChapterCoachPage() {
         ) : null}
       </main>
     </div>
+  );
+}
+
+// ── "From the book" source panel ──────────────────────────────────
+
+/**
+ * `<CoachSourcePanel />` — the "read the source first" anchor at the
+ * top of the lens panel.
+ *
+ * <p>Renders the focused excerpt the backend extracted around the
+ * active concept, framed as a quoted passage with book + chapter
+ * citation. Collapsible: short excerpts (≤600 chars) show in full;
+ * longer ones get a "Read more" toggle so the panel doesn't dominate
+ * the page.
+ *
+ * <p>Why this matters pedagogically: humans don't learn from
+ * generated summaries; they learn from primary text + reflection.
+ * This panel is the primary text. The generated body below is the
+ * reflection.
+ */
+function CoachSourcePanel(props: {
+  excerpt:      string;
+  bookTitle:    string;
+  chapterTitle: string;
+  sourcePages:  string;
+}) {
+  const { excerpt, bookTitle, chapterTitle, sourcePages } = props;
+  const SHORT_LIMIT = 600;
+  const [expanded, setExpanded] = useState(false);
+  const isLong  = excerpt.length > SHORT_LIMIT;
+  const visible = !isLong || expanded
+    ? excerpt
+    : excerpt.slice(0, SHORT_LIMIT).trim() + '…';
+
+  return (
+    <section className="coach-source" aria-label="Excerpt from the book">
+      <header className="coach-source__head">
+        <Quote size={14} aria-hidden />
+        <span className="coach-source__label">From the book</span>
+        <span className="coach-source__cite">
+          {bookTitle} · {chapterTitle} · {sourcePages}
+        </span>
+      </header>
+      <blockquote className="coach-source__body">
+        <Markdown>{visible}</Markdown>
+      </blockquote>
+      {isLong && (
+        <button
+          type="button"
+          className="coach-source__toggle"
+          onClick={() => setExpanded(v => !v)}
+        >
+          {expanded ? (<><ChevronUp size={12} /> Show less</>) :
+                      (<><ChevronDown size={12} /> Read more</>)}
+        </button>
+      )}
+    </section>
   );
 }
 

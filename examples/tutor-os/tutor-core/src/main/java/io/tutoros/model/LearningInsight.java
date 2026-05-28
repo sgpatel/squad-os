@@ -90,4 +90,23 @@ public class LearningInsight {
         example     = "pp. 42–47"
     )
     public String sourcePages;
+
+    /**
+     * Focused excerpt of the actual chapter body that grounds this
+     * insight. NOT produced by the LLM — populated server-side by
+     * {@code BookController.ask} using lexical RAG over the chapter
+     * body (find the concept tag in the text, take ±2000 chars).
+     *
+     * <p>The UI renders this BEFORE the generated body so the learner
+     * reads the actual source material first, then sees the
+     * tutor's take. Closes the pedagogical gap where a generated
+     * summary was being shown without ever surfacing the underlying
+     * text from the book.
+     *
+     * <p>Empty when the controller couldn't pin the concept to a
+     * specific passage (e.g. chapters with no concept tag overlap).
+     * Not an {@code @OutputField} — the LLM never sees this field
+     * in the schema and never tries to fill it.
+     */
+    public String sourceExcerpt;
 }

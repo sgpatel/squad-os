@@ -268,9 +268,17 @@ public class BookController {
         if (targetConcept == null) targetConcept = ch.title;
 
         String normalisedMode = BookCoachAgent.normalizeMode(mode);
+        // Lexical RAG: find a focused excerpt of the chapter body around
+        // the target concept. The agent receives this focused excerpt so
+        // its grounding is sharper; the same excerpt also gets attached
+        // to the response so the UI can show "From the book" before the
+        // generated body — the pedagogical loop is read → reflect →
+        // practice, not just practice.
+        String excerpt = findRelevantExcerpt(ch.body, targetConcept, 2000);
+
         String prompt = coach.buildPrompt(
             normalisedMode,
-            b.title, ch.title, ch.body,
+            b.title, ch.title, excerpt,
             targetConcept, level,
             ch.pageStart, ch.pageEnd);
 
@@ -399,8 +407,105 @@ public class BookController {
             // Both are idempotent and safe on already-correct markdown.
             insight.body        = ensureHeadingBreaks(unescapeLiteralEscapes(insight.body));
             insight.modelAnswer = ensureHeadingBreaks(unescapeLiteralEscapes(insight.modelAnswer));
+            // followUps is a newline-separated list of prompts. Same
+            // failure mode as body — some models emit literal "\n"
+            // between items, which then renders as one run-on line in
+            // the "Go deeper" panel. Unescape so the UI splits cleanly.
+            insight.followUps   = unescapeLiteralEscapes(insight.followUps);
+            // Source excerpt — NOT touched by the agent, populated
+            // here so the UI's "From the book" panel always has
+            // ground truth to render even when the LLM body is generic.
+            insight.sourceExcerpt = excerpt;
         }
         return ResponseEntity.ok(insight);
+    }
+
+    /**
+     * Lexical RAG — find a focused excerpt of the chapter body around
+     * the target concept. Used by the {@code /ask} flow so the LLM
+     * grounds on the part of the chapter actually relevant to the
+     * learner's question, AND so the UI can show the raw source
+     * excerpt before the generated take.
+     *
+     * <p>Strategy: case-insensitive substring search for the concept
+     * tag. If found, return ~{@code maxChars} of body centred on the
+     * first match (cut at sentence boundaries when possible). If not
+     * found, return the first {@code maxChars} of the chapter — better
+     * than nothing, and the chapter intro usually mentions the main
+     * concepts anyway.
+     *
+     * <p>Embedding-based RAG is the future (we already have the
+     * memory subsystem from M1) — lexical does the job for v1.
+     */
+    static String findRelevantExcerpt(String body, String concept, int maxChars) {
+        if (body == null || body.isBlank()) return "";
+        if (concept == null || concept.isBlank() || maxChars <= 0) {
+            return safeSlice(body, 0, Math.min(maxChars, body.length()));
+        }
+        // Hit on the concept tag — try a few normalisation forms so
+        // multi-word concepts find their first occurrence even if the
+        // chapter uses slightly different spacing or capitalisation.
+        int hit = indexOfCi(body, concept);
+        if (hit < 0) hit = indexOfCi(body, concept.replace('-', ' '));
+        if (hit < 0) {
+            // No match — return the chapter intro as a fallback. The
+            // first few hundred chars usually frame what's coming.
+            return trimToSentenceBoundary(safeSlice(body, 0, Math.min(maxChars, body.length())));
+        }
+        // Centre the window on the hit, biased so a third of the window
+        // is BEFORE the hit (context) and two thirds AFTER (the actual
+        // discussion that follows the concept naming).
+        int before = maxChars / 3;
+        int after  = maxChars - before;
+        int from = Math.max(0, hit - before);
+        int to   = Math.min(body.length(), hit + after);
+        return trimToSentenceBoundary(safeSlice(body, from, to));
+    }
+
+    private static int indexOfCi(String haystack, String needle) {
+        if (needle == null || needle.isEmpty()) return -1;
+        return haystack.toLowerCase().indexOf(needle.toLowerCase());
+    }
+
+    /** Defensive substring — never throws on out-of-range indices. */
+    private static String safeSlice(String s, int from, int to) {
+        if (s == null) return "";
+        int a = Math.max(0, Math.min(from, s.length()));
+        int b = Math.max(a, Math.min(to,   s.length()));
+        return s.substring(a, b);
+    }
+
+    /**
+     * Trim a substring to nearest sentence boundary at both ends so
+     * the excerpt doesn't start mid-word or end mid-sentence. Falls
+     * back to the original if no good boundary is found in a sensible
+     * window.
+     */
+    private static String trimToSentenceBoundary(String s) {
+        if (s == null || s.length() < 50) return s;
+        // Trim leading partial sentence — find first ". " in the
+        // first ~200 chars and start AFTER it.
+        int lead = -1;
+        for (int i = 0; i < Math.min(200, s.length() - 1); i++) {
+            if (s.charAt(i) == '.' && Character.isWhitespace(s.charAt(i + 1))) {
+                lead = i + 1;
+                break;
+            }
+        }
+        // Trim trailing partial — find last ". " in the last ~200 chars.
+        int tail = s.length();
+        for (int i = s.length() - 1; i > Math.max(0, s.length() - 200); i--) {
+            if (i + 1 < s.length() && s.charAt(i) == '.'
+                && Character.isWhitespace(s.charAt(i + 1))) {
+                tail = i + 1;
+                break;
+            }
+        }
+        // Only apply if both trims are sane.
+        int from = (lead > 0 && lead < s.length() / 4) ? lead + 1 : 0;
+        int to   = (tail < s.length() && tail > 3 * s.length() / 4) ? tail : s.length();
+        if (to <= from) return s.trim();
+        return s.substring(from, to).trim();
     }
 
     /**

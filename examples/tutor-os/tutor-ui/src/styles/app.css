@@ -952,6 +952,79 @@ button.concept-chip { font: inherit; }
 .lens-panel__diff--hard   { background: color-mix(in oklab, var(--color-danger,  #dc2626) 14%, transparent); color: var(--color-danger,  #b91c1c); }
 
 .lens-panel__body { font-size: 14px; line-height: 1.55; }
+.lens-panel__body-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-subtle);
+  margin-bottom: 6px;
+}
+
+/* "From the book" source panel — the read-first anchor.
+   Visual hierarchy: a quoted passage with book-style typography
+   that reads as primary material, not interface chrome. The left
+   border + cream background separate it visually from the generated
+   tutor content below. */
+.coach-source {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, #f7f1e3 60%, var(--color-bg));
+  border: 1px solid color-mix(in oklab, #d4c5a3 40%, var(--color-border));
+  border-left: 3px solid color-mix(in oklab, #b89b57 70%, var(--color-border));
+}
+@media (prefers-color-scheme: dark) {
+  .coach-source {
+    background: color-mix(in oklab, var(--color-accent) 6%, var(--color-bg-subtle));
+    border-color: color-mix(in oklab, var(--color-accent) 25%, var(--color-border));
+    border-left-color: var(--color-accent);
+  }
+}
+.coach-source__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--color-text-subtle);
+}
+.coach-source__label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+.coach-source__cite {
+  font-style: italic;
+  margin-left: auto;
+  max-width: 60%;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.coach-source__body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-serif, 'Georgia', 'Cambria', serif);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-text);
+}
+.coach-source__body p { margin: 0 0 0.6em; }
+.coach-source__body p:last-child { margin-bottom: 0; }
+.coach-source__toggle {
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+.coach-source__toggle:hover { text-decoration: underline; }
 .lens-panel__quiz {
   display: grid;
   gap: var(--space-3);

@@ -354,6 +354,13 @@ export interface LearningInsight {
   followUps?: string;
   /** "pp. 42–47" or empty for history/future. */
   sourcePages?: string;
+  /**
+   * Lexical-RAG excerpt of the actual chapter body around the
+   * concept. Populated server-side (NOT by the LLM) so the UI can
+   * render "From the book" before the generated summary — the
+   * learner reads the source first, then the tutor's take.
+   */
+  sourceExcerpt?: string;
 }
 
 // ── Practice / review card question (mirrors backend PracticeQuestion) ─
