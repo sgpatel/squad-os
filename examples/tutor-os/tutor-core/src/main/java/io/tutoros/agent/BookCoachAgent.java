@@ -289,33 +289,35 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
-            CRITICAL FORMATTING: the body field is a markdown string.
-            Each "###" heading MUST start on its own line. Inside the
-            JSON string, that means using the literal characters
-            backslash-n-backslash-n (\\n\\n) between sections. Do NOT
-            run headings inline with the previous paragraph's text.
+            CRITICAL FORMATTING: the body is a markdown string with
+            three "###" subheadings. Use REAL line breaks between
+            sections (press Enter; let your JSON encoder handle the
+            escaping). Do NOT type the characters backslash-n
+            yourself — that ends up as visible text "\\n\\n" in the
+            output instead of an actual newline.
 
-            Use this exact body structure (replace the <…> placeholders
-            with real content; keep the \\n\\n separators verbatim):
+            The body must follow this structure exactly:
 
-              ### Today\\n\\n
+              ### Today
               <2 paragraphs naming specific industries / products /
               scenarios that use %s today. Be concrete — name companies,
-              tools, or use-cases.>\\n\\n
-              ### Adjacent fields\\n\\n
-              <1 paragraph on disciplines that depend on %s.>\\n\\n
-              ### Why it matters\\n\\n
+              tools, or use-cases.>
+
+              ### Adjacent fields
+              <1 paragraph on disciplines that depend on %s.>
+
+              ### Why it matters
               <1 paragraph stating the stakes — what changes if no-one
               understands this concept.>
 
             {
               "mode":        "usage",
               "concept":     "%s",
-              "body":        "### Today\\n\\n<paragraphs>\\n\\n### Adjacent fields\\n\\n<paragraph>\\n\\n### Why it matters\\n\\n<paragraph>",
+              "body":        "<markdown body following the structure above, with real newlines between sections>",
               "question":    "",
               "modelAnswer": "",
               "difficulty":  "",
-              "followUps":   "<1–2 research questions, separated by \\n>",
+              "followUps":   "<1–2 research questions, one per line>",
               "sourcePages": "%s"
             }
             """.formatted(
@@ -350,31 +352,33 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
-            CRITICAL FORMATTING: the body field is a markdown string.
-            Each "###" heading MUST start on its own line. Inside the
-            JSON string, that means using the literal characters
-            backslash-n-backslash-n (\\n\\n) between sections. Do NOT
-            run headings inline with the previous paragraph's text.
+            CRITICAL FORMATTING: the body is a markdown string with
+            three "###" subheadings. Use REAL line breaks between
+            sections (press Enter; let your JSON encoder handle the
+            escaping). Do NOT type the characters backslash-n
+            yourself — that ends up as visible text "\\n\\n" in the
+            output instead of an actual newline.
 
-            Use this exact body structure (replace the <…> placeholders
-            with real content; keep the \\n\\n separators verbatim):
+            The body must follow this structure exactly:
 
-              ### Discovery\\n\\n
+              ### Discovery
               <who first proposed it, roughly when, and what problem
-              they were trying to solve.>\\n\\n
-              ### Evolution\\n\\n
-              <2–3 key milestones that refined or generalised the idea.>\\n\\n
-              ### Today's understanding\\n\\n
+              they were trying to solve.>
+
+              ### Evolution
+              <2–3 key milestones that refined or generalised the idea.>
+
+              ### Today's understanding
               <one sentence connecting back to the chapter's framing.>
 
             {
               "mode":        "history",
               "concept":     "%s",
-              "body":        "### Discovery\\n\\n<paragraph>\\n\\n### Evolution\\n\\n<paragraph>\\n\\n### Today's understanding\\n\\n<one sentence>",
+              "body":        "<markdown body following the structure above, with real newlines between sections>",
               "question":    "",
               "modelAnswer": "",
               "difficulty":  "",
-              "followUps":   "<1–2 historical figures, separated by \\n>",
+              "followUps":   "<1–2 historical figures, one per line>",
               "sourcePages": ""
             }
             """.formatted(
@@ -409,31 +413,33 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
-            CRITICAL FORMATTING: the body field is a markdown string.
-            Each "###" heading MUST start on its own line. Inside the
-            JSON string, that means using the literal characters
-            backslash-n-backslash-n (\\n\\n) between sections. Do NOT
-            run headings inline with the previous paragraph's text.
+            CRITICAL FORMATTING: the body is a markdown string with
+            three "###" subheadings. Use REAL line breaks between
+            sections (press Enter; let your JSON encoder handle the
+            escaping). Do NOT type the characters backslash-n
+            yourself — that ends up as visible text "\\n\\n" in the
+            output instead of an actual newline.
 
-            Use this exact body structure (replace the <…> placeholders
-            with real content; keep the \\n\\n separators verbatim):
+            The body must follow this structure exactly:
 
-              ### Open problems\\n\\n
-              <2 specific questions researchers are still working on.>\\n\\n
-              ### Where it's heading\\n\\n
-              <1 paragraph on trends shaping the next decade.>\\n\\n
-              ### Careers\\n\\n
+              ### Open problems
+              <2 specific questions researchers are still working on.>
+
+              ### Where it's heading
+              <1 paragraph on trends shaping the next decade.>
+
+              ### Careers
               <1 paragraph naming 2–3 specific jobs / fields that need
               strong understanding of %s.>
 
             {
               "mode":        "future",
               "concept":     "%s",
-              "body":        "### Open problems\\n\\n<paragraph>\\n\\n### Where it's heading\\n\\n<paragraph>\\n\\n### Careers\\n\\n<paragraph>",
+              "body":        "<markdown body following the structure above, with real newlines between sections>",
               "question":    "",
               "modelAnswer": "",
               "difficulty":  "",
-              "followUps":   "<1–2 areas to dive into, separated by \\n>",
+              "followUps":   "<1–2 areas to dive into, one per line>",
               "sourcePages": ""
             }
             """.formatted(

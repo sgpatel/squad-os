@@ -385,15 +385,46 @@ public class BookController {
             // Defensive normalisation — LLM occasionally drops fields.
             if (insight.mode    == null || insight.mode.isBlank())    insight.mode    = normalisedMode;
             if (insight.concept == null || insight.concept.isBlank()) insight.concept = targetConcept;
-            // Defensive markdown formatting — when the LLM runs "### Heading"
-            // inline with the prior paragraph (despite the prompt's explicit
-            // \n\n instruction), the markdown renderer would otherwise see
-            // one giant paragraph. Insert paragraph breaks before any inline
-            // h2/h3 heading so the UI looks right regardless.
-            insight.body        = ensureHeadingBreaks(insight.body);
-            insight.modelAnswer = ensureHeadingBreaks(insight.modelAnswer);
+            // Defensive markdown normalisation. Two passes in order:
+            //   1. unescapeLiteralEscapes — when the LLM types "\n"
+            //      literally inside the JSON string instead of using
+            //      a real newline (a recurring failure mode of older
+            //      / smaller models), the JSON decoder produces the
+            //      4-char sequence backslash-n in the body. The UI
+            //      renders that as visible text. Replace any surviving
+            //      literal "\n" / "\t" with real chars.
+            //   2. ensureHeadingBreaks — guarantees "## " / "### "
+            //      headings start on their own line even if the LLM
+            //      ran them inline with the prior paragraph.
+            // Both are idempotent and safe on already-correct markdown.
+            insight.body        = ensureHeadingBreaks(unescapeLiteralEscapes(insight.body));
+            insight.modelAnswer = ensureHeadingBreaks(unescapeLiteralEscapes(insight.modelAnswer));
         }
         return ResponseEntity.ok(insight);
+    }
+
+    /**
+     * Replace any literal backslash-n / backslash-t that the LLM typed
+     * inside its JSON string with the real characters. This is the
+     * mirror of what {@code JSON.parse} would have done if the LLM had
+     * emitted the JSON-escape sequence properly — but some models type
+     * the 4 ASCII characters \n verbatim ("Today\\n\\n…") and the
+     * decoder leaves them alone, so the UI ends up rendering visible
+     * text "\n\n" instead of an actual paragraph break.
+     *
+     * <p>Idempotent: an already-decoded string contains zero literal
+     * backslash-n sequences, so a second pass is a no-op.
+     */
+    static String unescapeLiteralEscapes(String md) {
+        if (md == null || md.isEmpty()) return md;
+        // Check before allocating — most well-behaved responses are
+        // already correct and we don't want to thrash the heap on the
+        // happy path.
+        if (md.indexOf('\\') < 0) return md;
+        return md
+            .replace("\\n", "\n")
+            .replace("\\t", "\t")
+            .replace("\\r", "\r");
     }
 
     /**
