@@ -6,6 +6,7 @@ import io.squados.context.AgentWrapper;
 import io.squados.context.SquadContext;
 import io.tutoros.agent.BookCoachAgent;
 import io.tutoros.book.Book;
+import io.tutoros.book.BookChunkIndexer;
 import io.tutoros.book.BookExtractionService;
 import io.tutoros.book.BookRepository;
 import io.tutoros.book.Chapter;
@@ -53,17 +54,20 @@ public class BookController {
     private final SquadContext          ctx;
     private final BookCoachAgent        coach;
     private final MasteryService        mastery;
+    private final BookChunkIndexer      indexer;
 
     public BookController(BookExtractionService extractor,
                           BookRepository repo,
                           SquadContext ctx,
                           BookCoachAgent coach,
-                          MasteryService mastery) {
+                          MasteryService mastery,
+                          BookChunkIndexer indexer) {
         this.extractor = extractor;
         this.repo      = repo;
         this.ctx       = ctx;
         this.coach     = coach;
         this.mastery   = mastery;
+        this.indexer   = indexer;
     }
 
     // ── DTOs ─────────────────────────────────────────────────────────
@@ -161,6 +165,23 @@ public class BookController {
         } catch (RuntimeException persistErr) {
             log.warn("book persist failed", persistErr);
             return ResponseEntity.status(502).build();
+        }
+
+        // Semantic indexing — embed each chapter's chunks into the M1
+        // memory store so /ask retrieval matches concepts by meaning,
+        // not just substring. Best-effort: indexer is a no-op when
+        // M1 is disabled or the embedder fails; lexical retrieval is
+        // the fallback either way. Synchronous on purpose — Murphy-
+        // sized books finish in ~10 s and we want the first /ask to
+        // see indexed chunks; async would race the controller.
+        try {
+            indexer.indexBook(book);
+            if (indexer.isEnabled()) {
+                log.info("indexed book id={} for semantic retrieval " +
+                    "({} chapters)", book.id, book.chapters().size());
+            }
+        } catch (RuntimeException indexErr) {
+            log.warn("book index failed (continuing with lexical fallback)", indexErr);
         }
 
         log.info("ingested book id={} learner={} subject={} title=\"{}\" chapters={}",
@@ -268,13 +289,21 @@ public class BookController {
         if (targetConcept == null) targetConcept = ch.title;
 
         String normalisedMode = BookCoachAgent.normalizeMode(mode);
-        // Lexical RAG: find a focused excerpt of the chapter body around
-        // the target concept. The agent receives this focused excerpt so
-        // its grounding is sharper; the same excerpt also gets attached
-        // to the response so the UI can show "From the book" before the
-        // generated body — the pedagogical loop is read → reflect →
-        // practice, not just practice.
-        String excerpt = findRelevantExcerpt(ch.body, targetConcept, 2000);
+        // Excerpt selection — semantic first (embedding-based RAG via the
+        // M1 memory subsystem), falling back to lexical substring match.
+        // Semantic catches the synonym cases lexical misses ("univariate
+        // gaussian" ↔ "normal distribution", etc.); lexical handles the
+        // path where M1 is disabled or no chunks were indexed yet
+        // (e.g. books uploaded before this commit shipped).
+        String excerpt = indexer.findRelevantExcerptSemantic(
+            bookId, n, targetConcept, BookChunkIndexer.EXCERPT_MAX_CHARS);
+        String excerptSource = excerpt.isBlank() ? "lexical" : "semantic";
+        if (excerpt.isBlank()) {
+            excerpt = findRelevantExcerpt(ch.body, targetConcept, 2000);
+        }
+        log.debug("book /ask excerpt selection: book={} chapter={} mode={} " +
+            "concept={} source={} excerptChars={}",
+            bookId, n, normalisedMode, targetConcept, excerptSource, excerpt.length());
 
         String prompt = coach.buildPrompt(
             normalisedMode,
@@ -752,6 +781,11 @@ public class BookController {
         if (b == null) return ResponseEntity.notFound().build();
         if (!learnerId.equals(b.learnerId)) return ResponseEntity.status(403).build();
         repo.deleteById(bookId);
+        // Drop the embedded chunks too — stale vectors in the memory
+        // store would leak into another book's retrievals if a future
+        // learner reuses the same bookId by accident.
+        try { indexer.deindexBook(bookId); }
+        catch (RuntimeException ignored) { /* best-effort cleanup */ }
         return ResponseEntity.noContent().build();
     }
 }

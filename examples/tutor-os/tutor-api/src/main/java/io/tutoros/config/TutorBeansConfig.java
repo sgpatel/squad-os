@@ -4,6 +4,7 @@ import io.squados.context.SquadContext;
 import io.squados.debate.DebateEngine;
 import io.squados.memory.MemoryManager;
 import io.tutoros.agent.*;
+import io.tutoros.book.BookChunkIndexer;
 import io.tutoros.book.BookExtractionService;
 import io.tutoros.book.BookRepository;
 import io.tutoros.book.InProcessBookStore;
@@ -229,6 +230,41 @@ public class TutorBeansConfig {
     @Bean
     public BookExtractionService bookExtractionService() {
         return new BookExtractionService();
+    }
+
+    /**
+     * BookChunkIndexer — embedding-based RAG for textbook chapters.
+     *
+     * <p>{@code MemoryManager} is pulled via {@link ObjectProvider} so
+     * the indexer boots cleanly when M1 is turned off
+     * ({@code squad.memory.enabled=false} or no embedder configured).
+     * When the manager is null the indexer becomes a no-op and the
+     * BookController falls back to the lexical excerpt path — no
+     * behavioural change vs. the pre-RAG state.
+     *
+     * <p>The squad name comes from {@link SquadContext#getConfig}
+     * (defaults to "tutor-os") so writes are namespaced consistently
+     * with M1's existing memory tags.
+     */
+    @Bean
+    public BookChunkIndexer bookChunkIndexer(
+            SquadContext ctx,
+            ObjectProvider<MemoryManager> memoryManagerProvider) {
+        MemoryManager mm = memoryManagerProvider.getIfAvailable();
+        String squad = (ctx != null && ctx.getConfig() != null
+                        && ctx.getConfig().getName() != null)
+            ? ctx.getConfig().getName() : "tutor-os";
+        if (mm != null) {
+            System.out.println(
+                "[TutorOS] BookChunkIndexer wired — semantic RAG active " +
+                "(book chapters get embedded on upload, /ask uses cosine " +
+                "retrieval; falls back to lexical when the embedder is mocked)");
+        } else {
+            System.out.println(
+                "[TutorOS] BookChunkIndexer: M1 memory manager not present — " +
+                "semantic RAG disabled, BookController falls back to lexical excerpt");
+        }
+        return new BookChunkIndexer(mm, squad);
     }
 
     // ── Pipeline ──────────────────────────────────────────────────────────────
