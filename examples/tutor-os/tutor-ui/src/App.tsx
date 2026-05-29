@@ -27,6 +27,7 @@ const ReviewPage    = lazy(() => import('@/features/review/ReviewPage').then(m =
 const BooksListPage = lazy(() => import('@/features/books/BooksListPage').then(m => ({ default: m.BooksListPage })));
 const BookDetailPage  = lazy(() => import('@/features/books/BookDetailPage').then(m => ({ default: m.BookDetailPage })));
 const ChapterCoachPage = lazy(() => import('@/features/books/ChapterCoachPage').then(m => ({ default: m.ChapterCoachPage })));
+const BookReaderPage   = lazy(() => import('@/features/books/BookReaderPage').then(m => ({ default: m.BookReaderPage })));
 const ProgressPage  = lazy(() => import('@/features/progress/ProgressPage').then(m => ({ default: m.ProgressPage })));
 const PlanPage      = lazy(() => import('@/features/plan/PlanPage').then(m => ({ default: m.PlanPage })));
 const LibraryPage   = lazy(() => import('@/features/library/LibraryPage').then(m => ({ default: m.LibraryPage })));
@@ -98,6 +99,7 @@ export function App() {
         <Route path="books"                                element={<Lazy><BooksListPage /></Lazy>} />
         <Route path="books/:bookId"                        element={<Lazy><BookDetailPage /></Lazy>} />
         <Route path="books/:bookId/chapter/:n"             element={<Lazy><ChapterCoachPage /></Lazy>} />
+        <Route path="books/:bookId/read"                   element={<Lazy><BookReaderPage /></Lazy>} />
         <Route path="quiz/:quizId"        element={<Lazy><QuizPage /></Lazy>} />
 
         <Route path="progress"            element={<Lazy><ProgressPage /></Lazy>} />

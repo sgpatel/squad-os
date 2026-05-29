@@ -1095,6 +1095,97 @@ button.concept-chip { font: inherit; }
   text-decoration: none;
 }
 
+/* ── In-app PDF reader (BookReaderPage) ─────────────────────────── */
+.reader {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-height));
+  background: var(--color-bg-subtle);
+}
+.reader__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  flex-wrap: wrap;
+}
+.reader__title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reader__highlight-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-warning, #d97706) 18%, var(--color-bg));
+  color: var(--color-warning, #b45309);
+  font-size: 11px;
+  font-weight: 600;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reader__pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.reader__page-indicator {
+  font-size: 12px;
+  color: var(--color-text-subtle);
+  min-width: 7ch;
+  text-align: center;
+}
+.reader__stage {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: var(--space-4);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.reader__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-7);
+  color: var(--color-text-subtle);
+  text-align: center;
+}
+.reader__page {
+  position: relative;
+  background: white;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-sm, 4px);
+  overflow: hidden;
+}
+.reader__canvas { display: block; }
+.reader__highlights {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* Yellow-marker highlight overlay — mimics a physical highlighter
+   pen on a printed page so the affordance reads immediately. */
+.reader__hl {
+  position: absolute;
+  background: color-mix(in oklab, #fff176 78%, transparent);
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+}
+
 /* "What to do next" strip — closes the learning loop. */
 .recommended {
   display: grid;

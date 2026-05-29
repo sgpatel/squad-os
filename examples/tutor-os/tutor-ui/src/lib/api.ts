@@ -371,12 +371,42 @@ export const api = {
     },
 
     /**
-     * Absolute URL to the PDF stream, with a {@code #page=N} fragment
-     * the browser's built-in PDF viewer reads to jump to the right
-     * page. NOT an apiFetch — the UI passes this string to
-     * {@code window.open(...)} so the browser navigates directly.
+     * Raw {@code /api/books/.../pdf} URL — what pdfjs-dist actually
+     * fetches inside the embedded reader. Same-origin-friendly when
+     * HTTP_BASE is empty (dev with Vite proxy, prod via nginx).
      */
-    pdfUrl(learnerId: string, bookId: string, page?: number): string {
+    pdfRawUrl(learnerId: string, bookId: string): string {
+      return `${HTTP_BASE}/api/books/${encodeURIComponent(learnerId)}/${encodeURIComponent(bookId)}/pdf`;
+    },
+
+    /**
+     * Best PDF URL for the current intent.
+     *
+     *   - With {@code highlight} supplied → in-app PDF.js reader route
+     *     {@code /books/:id/read?page=N&highlight=concept}. The reader
+     *     overlays highlight boxes on text matching the concept.
+     *   - Without a concept → bare {@code /api/.../pdf#page=N} so the
+     *     browser's built-in viewer opens (one click less navigation
+     *     when no highlight is needed).
+     *
+     * Callers that always want the in-app reader can pass any
+     * non-empty {@code highlight} (e.g. the concept tag) — the
+     * existing CoachSourcePanel and RecommendedActions do this.
+     */
+    pdfUrl(
+      learnerId: string,
+      bookId: string,
+      opts?: { page?: number; highlight?: string }
+    ): string {
+      const page      = opts?.page;
+      const highlight = opts?.highlight?.trim();
+      if (highlight) {
+        const qs = new URLSearchParams();
+        if (page && page > 0) qs.set('page', String(page));
+        qs.set('highlight', highlight);
+        return `/books/${encodeURIComponent(bookId)}/read?${qs.toString()}`;
+      }
+      // No highlight requested → browser viewer with deep-link.
       const base = `${HTTP_BASE}/api/books/${encodeURIComponent(learnerId)}/${encodeURIComponent(bookId)}/pdf`;
       return page && page > 0 ? `${base}#page=${page}` : base;
     },

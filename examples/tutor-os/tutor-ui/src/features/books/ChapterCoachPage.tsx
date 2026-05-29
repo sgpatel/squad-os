@@ -265,7 +265,10 @@ export function ChapterCoachPage() {
                 bookTitle={book.title}
                 chapterTitle={chapter.title}
                 sourcePages={insight.sourcePages || `pp. ${chapter.pageStart}–${chapter.pageEnd}`}
-                pdfUrl={api.books.pdfUrl(learnerId, book.id, chapter.pageStart)}
+                pdfUrl={api.books.pdfUrl(learnerId, book.id, {
+                  page:      chapter.pageStart,
+                  highlight: insight.concept,
+                })}
               />
             )}
 
@@ -351,7 +354,10 @@ export function ChapterCoachPage() {
               chapterTitle={chapter.title}
               sourceExcerpt={insight.sourceExcerpt}
               sourcePages={insight.sourcePages}
-              pdfUrl={api.books.pdfUrl(learnerId, book.id, chapter.pageStart)}
+              pdfUrl={api.books.pdfUrl(learnerId, book.id, {
+                page:      chapter.pageStart,
+                highlight: insight.concept,
+              })}
               onSwitchMode={setMode}
             />
           </>
