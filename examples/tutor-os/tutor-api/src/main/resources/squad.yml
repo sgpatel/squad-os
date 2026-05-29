@@ -1,0 +1,50 @@
+squad:
+  name: "tutor-os"
+  profile: "default"
+  llm:
+    provider: "openai"
+    model: "gpt-4o-mini"
+  agents:
+    - class: "io.tutoros.agent.GuardianAgent"
+    - class: "io.tutoros.agent.DiagnosticAgent"
+    # Strategist + planner produce multi-chapter plans — the role default
+    # of 512 tokens truncates the JSON mid-array and the structured-output
+    # parser then fails. Bump generously; cost is negligible at gpt-4o-mini.
+    - class: "io.tutoros.agent.CurriculumPlannerAgent"
+      max-tokens: 3000
+    - class: "io.tutoros.agent.ContentAgent"
+      max-tokens: 2000
+    - class: "io.tutoros.agent.IntentAnalyzerAgent"
+    - class: "io.tutoros.agent.SocraticTutorAgent"
+      max-tokens: 1200
+    - class: "io.tutoros.agent.DirectTutorAgent"
+      max-tokens: 1200
+    # Practice + Quiz emit a JSON array of questions w/ options &
+    # explanations — easily 1.5–2k tokens for 5 questions, more for 10.
+    - class: "io.tutoros.agent.PracticeAgent"
+      max-tokens: 3000
+    - class: "io.tutoros.agent.AssessmentAgent"
+      max-tokens: 1500
+    - class: "io.tutoros.agent.ProgressAgent"
+      max-tokens: 1500
+    - class: "io.tutoros.agent.EscalationAgent"
+    - class: "io.tutoros.agent.VisualisationAgent"
+      max-tokens: 2000
+    - class: "io.tutoros.agent.TodoAgent"
+      max-tokens: 1500
+    # Quiz output is the heaviest in the system: 5 questions × (4 options
+     # + correct answer + 3 hints + worked solution + Bloom tag) easily
+     # exceeds 3k tokens. 4k gives healthy headroom for 5–10 questions.
+    - class: "io.tutoros.agent.QuizAgent"
+      max-tokens: 4000
+    # SyllabusSuggesterAgent (PR-B) — short, structured output.
+    # Without this entry the syllabus /suggest endpoint silently 503s
+    # because AgentScanner only registers classes listed here.
+    - class: "io.tutoros.agent.SyllabusSuggesterAgent"
+      max-tokens: 2000
+    # BookCoachAgent (PR-2) — six learning lenses across an uploaded
+    # chapter. Output is small-to-medium per lens but synthesis +
+    # advanced modes can emit a few hundred tokens of worked solution.
+    # 2500 leaves headroom for the longest plausible insight.
+    - class: "io.tutoros.agent.BookCoachAgent"
+      max-tokens: 2500

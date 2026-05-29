@@ -1,0 +1,81 @@
+/* ─────────────────────────────────────────────────────────────────
+ * Crayon — Primary (5–10) theme
+ *
+ * Vibe : playful, mascot-led, voice-first, hand-drawn ornament.
+ * Refs : Khan Academy Kids, Duolingo, Pok Pok Playroom
+ *
+ * Distinguishing moves
+ *   • Mascot ON (Lumi) — the avatar reacts to pipeline events
+ *   • Quicksand display font, larger body size for early readers
+ *   • Generous radii (everything ≥ 20px), warm pastel surfaces
+ *   • Higher celebration_level (subtle confetti on correct answers)
+ * ───────────────────────────────────────────────────────────────── */
+
+:root[data-theme="crayon"] {
+  /* ── Surfaces — warm pastel palette ──────────────────────────── */
+  --color-bg:           #fff8f0;       /* butter cream */
+  --color-surface:      #ffffff;
+  --color-surface-2:    #ffeed6;       /* peach tint */
+  --color-surface-3:    #ffe0bd;
+  --color-border:       #f4d6b3;
+  --color-border-strong:#e8b88a;
+
+  /* ── Text — softer black, never pure ─────────────────────────── */
+  --color-text:         #3a2a1a;
+  --color-text-muted:   #7a5a3a;
+  --color-text-subtle:  #b08a5a;
+
+  /* ── Accent — playful magenta with peach support ─────────────── */
+  --color-accent:       #e8478b;       /* bubblegum pink */
+  --color-accent-hover: #c8326f;
+  --color-accent-soft:  #ffe0ee;
+  --color-accent-fg:    #ffffff;
+
+  /* ── Typography — bigger, friendlier ─────────────────────────── */
+  --font-display: 'Quicksand', 'Inter', system-ui, sans-serif;
+  --font-body:    'Quicksand', 'Inter', system-ui, sans-serif;
+
+  --text-xs:    13px;
+  --text-sm:    14px;
+  --text-base:  17px;        /* +2 over Lumen */
+  --text-md:    18px;
+  --text-lg:    21px;
+  --text-xl:    26px;
+  --text-2xl:   32px;
+  --text-3xl:   42px;
+  --text-4xl:   56px;
+  --text-5xl:   72px;
+
+  --leading-normal:  1.65;   /* more air between lines */
+  --weight-medium:   500;
+  --weight-semibold: 700;    /* bolder semibold so headings pop */
+
+  /* ── Radii — everything rounded ──────────────────────────────── */
+  --radius-xs:   8px;
+  --radius-sm:   12px;
+  --radius-md:   18px;
+  --radius-lg:   24px;
+  --radius-xl:   32px;
+  --radius-2xl:  40px;
+
+  /* ── Shadows — soft and pillowy ──────────────────────────────── */
+  --shadow-sm: 0 2px 8px rgba(232,71,139,.10);
+  --shadow-md: 0 8px 24px rgba(232,71,139,.14), 0 2px 6px rgba(0,0,0,.04);
+  --shadow-lg: 0 20px 48px rgba(232,71,139,.18), 0 4px 12px rgba(0,0,0,.06);
+
+  /* ── Motion — bouncier ───────────────────────────────────────── */
+  --ease-out:    cubic-bezier(.34,1.56,.64,1);   /* spring overshoot */
+  --dur-fast:    220ms;
+  --dur-normal:  320ms;
+
+  /* ── Feature flags ───────────────────────────────────────────── */
+  --has-mascot:        1;
+  --has-streak:        1;
+  --has-xp-bar:        0;
+  --has-map-path:      0;
+  --density:           loose;
+  --ornament-level:    2;
+  --celebration-level: 2;
+
+  --max-content: 680px;     /* slightly tighter for younger readers */
+}

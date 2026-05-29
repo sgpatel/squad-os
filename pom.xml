@@ -7,21 +7,17 @@
 
   <groupId>io.github.sgpatel</groupId>
   <artifactId>squad-os</artifactId>
-  <version>3.4.0</version>
+  <version>3.9.0</version>
   <packaging>pom</packaging>
   <name>SquadOS</name>
   <description>SquadOS — Multi-Agent AI Framework for Java. Role-typed agents, parallel execution, and persistent memory. Spring Boot style.</description>
 
   <modules>
     <module>squad-core</module>
-    <module>squad-starter</module>
     <module>squad-spring-boot-starter</module>
-    <module>squad-dashboard</module>
-    <module>squad-examples/daily-planner</module>
-    <module>squad-examples/code-review</module>
-    <module>squad-examples/embedding-demo</module>
-    <module>squad-examples/snack-thief</module>
-    <module>squad-examples/fraud-detection</module>
+    <module>squad-test</module>
+    <module>squad-dashboard-api</module>
+    <module>squad-mcp-server</module>
   </modules>
 
   <properties>

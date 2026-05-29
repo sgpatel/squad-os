@@ -1,0 +1,79 @@
+/* ─────────────────────────────────────────────────────────────────
+ * Studio — College (18–22) theme
+ *
+ * Vibe : productivity dashboard, multi-pane, command-palette-first.
+ * Refs : Linear, Notion, Cursor, Vercel
+ *
+ * Distinguishing moves
+ *   • Dark by default (graphite + electric indigo)
+ *   • Tighter density, mono-stamped timestamps
+ *   • ⌘K command palette is the primary navigation
+ *   • LaTeX, code blocks, citations rendered first-class
+ * ───────────────────────────────────────────────────────────────── */
+
+:root[data-theme="studio"] {
+  /* Studio is dark-first — these light values are the "light override" */
+  --color-bg:           #fbfbfd;
+  --color-surface:      #ffffff;
+  --color-surface-2:    #f1f1f5;
+  --color-surface-3:    #e5e6ec;
+  --color-border:       #d8dae0;
+  --color-border-strong:#b8bbc4;
+  --color-text:         #0d0d12;
+  --color-text-muted:   #5e6068;
+  --color-text-subtle:  #8a8d97;
+
+  --color-accent:       #6366f1;        /* indigo */
+  --color-accent-hover: #4f46e5;
+  --color-accent-soft:  #e0e7ff;
+  --color-accent-fg:    #ffffff;
+
+  --font-display: 'Geist', 'Inter', system-ui, sans-serif;
+  --font-body:    'Geist', 'Inter', system-ui, sans-serif;
+  --font-mono:    'Geist Mono', 'JetBrains Mono', 'SF Mono', monospace;
+
+  --text-base:  14px;
+  --text-md:    15px;
+  --text-lg:    17px;
+
+  --leading-normal:  1.45;
+
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   10px;
+  --radius-xl:   14px;
+
+  --shadow-md: 0 4px 16px rgba(13,13,18,.08), 0 1px 3px rgba(13,13,18,.04);
+  --shadow-lg: 0 12px 36px rgba(13,13,18,.12), 0 2px 6px rgba(13,13,18,.06);
+
+  --dur-fast:    120ms;
+  --dur-normal:  180ms;
+
+  --has-mascot:        0;
+  --has-streak:        0;
+  --has-xp-bar:        0;
+  --has-map-path:      0;
+  --density:           compact;
+  --ornament-level:    0;
+  --celebration-level: 1;
+
+  --max-content: 880px;        /* room for code blocks */
+}
+
+/* Studio is dark by default unless data-mode="light" is set */
+:root[data-theme="studio"]:not([data-mode="light"]) {
+  --color-bg:           #0a0a0c;
+  --color-surface:      #131318;
+  --color-surface-2:    #1c1c22;
+  --color-surface-3:    #25252d;
+  --color-border:       #2c2c34;
+  --color-border-strong:#414149;
+  --color-text:         #f4f4f6;
+  --color-text-muted:   #a1a1aa;
+  --color-text-subtle:  #6e6e76;
+  --color-accent:       #818cf8;
+  --color-accent-hover: #a5b4fc;
+  --color-accent-soft:  #312e81;
+  --shadow-md: 0 4px 16px rgba(0,0,0,.50), 0 1px 3px rgba(0,0,0,.30);
+  --shadow-lg: 0 12px 36px rgba(0,0,0,.65), 0 2px 6px rgba(0,0,0,.40);
+}

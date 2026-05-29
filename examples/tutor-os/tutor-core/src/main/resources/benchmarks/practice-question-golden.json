@@ -1,0 +1,148 @@
+{
+  "name": "practice-question-golden",
+  "description": "Golden dataset for PracticeAgent question generation quality. Validates ZPD calibration (Bloom's level targeting), question type appropriateness, and hint quality. minScore 0.78.",
+  "version": "1.0.0",
+  "minScore": 0.78,
+  "scoringDimensions": [
+    "zpd_calibration",
+    "question_clarity",
+    "answer_correctness",
+    "hint_quality",
+    "worked_solution_completeness"
+  ],
+  "examples": [
+    {
+      "id": "pq-001",
+      "description": "APPLY-level multiple-choice question on quadratic equations for SENIOR_SCHOOL",
+      "input": {
+        "level": "SENIOR_SCHOOL",
+        "currentBloom": "UNDERSTAND",
+        "targetBloom": "APPLY",
+        "concept": "quadratic equations",
+        "learningStyle": "ANALYTICAL",
+        "attemptNumber": 1
+      },
+      "expectedOutput": {
+        "bloomsLevel": "APPLY",
+        "type": "MULTIPLE_CHOICE",
+        "optionCount": 4,
+        "hasHint": true,
+        "hasWorkedSolution": true,
+        "answerIsOneOfOptions": true,
+        "difficulty": "MEDIUM",
+        "marks": 1
+      },
+      "goldStandardQuestion": "Solve for x: 2x² - 5x - 3 = 0",
+      "goldStandardAnswer": "x = 3 or x = -0.5",
+      "minScore": 0.80
+    },
+    {
+      "id": "pq-002",
+      "description": "UNDERSTAND-level short-answer question on photosynthesis for PRIMARY",
+      "input": {
+        "level": "PRIMARY",
+        "currentBloom": "REMEMBER",
+        "targetBloom": "UNDERSTAND",
+        "concept": "photosynthesis",
+        "learningStyle": "VISUAL",
+        "attemptNumber": 1
+      },
+      "expectedOutput": {
+        "bloomsLevel": "UNDERSTAND",
+        "type": "SHORT_ANSWER",
+        "hasHint": true,
+        "hasWorkedSolution": true,
+        "difficulty": "EASY",
+        "languageLevel": "PRIMARY",
+        "marks": 1
+      },
+      "prohibitedJargon": ["photophosphorylation", "stroma", "thylakoid membrane"],
+      "requiredConcepts": ["sunlight", "water", "carbon dioxide", "food"],
+      "minScore": 0.78
+    },
+    {
+      "id": "pq-003",
+      "description": "ANALYSE-level calculation on Newton's second law for UNIVERSITY",
+      "input": {
+        "level": "UNIVERSITY",
+        "currentBloom": "APPLY",
+        "targetBloom": "ANALYSE",
+        "concept": "Newton's second law",
+        "learningStyle": "ANALYTICAL",
+        "attemptNumber": 1
+      },
+      "expectedOutput": {
+        "bloomsLevel": "ANALYSE",
+        "type": "CALCULATION",
+        "hasWorkedSolution": true,
+        "workedSolutionContainsUnits": true,
+        "difficulty": "HARD",
+        "marks": 1
+      },
+      "minScore": 0.78
+    },
+    {
+      "id": "pq-004",
+      "description": "Hint depth increases with attempt number",
+      "input": {
+        "level": "MIDDLE_SCHOOL",
+        "currentBloom": "UNDERSTAND",
+        "targetBloom": "APPLY",
+        "concept": "fractions",
+        "attemptNumber": 3
+      },
+      "expectedOutput": {
+        "hintDepth": "DETAILED",
+        "hintContainsFormula": true,
+        "hintContainsFirstStep": true
+      },
+      "hintQualityRules": {
+        "attempt1": "directional only",
+        "attempt2": "procedural",
+        "attempt3": "near-full answer with formula"
+      },
+      "minScore": 0.78
+    },
+    {
+      "id": "pq-005",
+      "description": "DIAGRAM_LABEL question for VISUAL learning style",
+      "input": {
+        "level": "MIDDLE_SCHOOL",
+        "currentBloom": "REMEMBER",
+        "targetBloom": "UNDERSTAND",
+        "concept": "plant cell structure",
+        "learningStyle": "VISUAL",
+        "attemptNumber": 1
+      },
+      "expectedOutput": {
+        "type": "DIAGRAM_LABEL",
+        "hasDiagramDescription": true,
+        "diagramDescriptionLength": "non-empty",
+        "bloomsLevel": "UNDERSTAND",
+        "difficulty": "EASY"
+      },
+      "minScore": 0.78
+    },
+    {
+      "id": "pq-006",
+      "description": "ESSAY question for EDUCATOR goal TEACH_OTHERS",
+      "input": {
+        "level": "EDUCATOR",
+        "currentBloom": "EVALUATE",
+        "targetBloom": "CREATE",
+        "concept": "differentiated instruction",
+        "goal": "TEACH_OTHERS",
+        "attemptNumber": 1
+      },
+      "expectedOutput": {
+        "type": "ESSAY",
+        "bloomsLevel": "CREATE",
+        "difficulty": "HARD",
+        "marksMin": 5,
+        "hasWorkedSolution": true,
+        "workedSolutionIsStructured": true
+      },
+      "minScore": 0.78
+    }
+  ]
+}

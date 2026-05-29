@@ -1,0 +1,151 @@
+# docker-compose.yml — TutorOS self-hosted stack.
+#
+# Brings up everything OpenClaude-for-learners needs in one command:
+#
+#   postgres        — Postgres 16 + pgvector, persistent volume
+#   ollama          — local LLM + embedder server
+#   ollama-init     — one-shot, pulls chat + embed models
+#   tutor-api       — Spring Boot backend, selfhost profile
+#   tutor-ui        — React build served by nginx, proxies to api
+#
+# Health-checked dependencies make startup deterministic:
+#   tutor-api waits for postgres healthy + ollama-init exit 0
+#   tutor-ui  waits for tutor-api healthy
+#
+# Volumes:
+#   postgres-data   — DB files (pgvector tables, mastery graph)
+#   ollama-models   — pulled models (~5 GB after the default two)
+#
+# Override anything via the .env file in this directory (see .env.example).
+
+name: tutoros
+
+services:
+
+  # ── Postgres + pgvector ───────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: tutoros-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-tutoros}
+      POSTGRES_USER:     ${POSTGRES_USER:-tutoros}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tutoros}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # init-db.sql is auto-run by the official postgres entrypoint
+      # the FIRST time the data volume is empty (subsequent boots
+      # skip it, which is what we want — idempotent re-up).
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tutoros} -d ${POSTGRES_DB:-tutoros}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  # ── Ollama (local LLM + embedder) ─────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: tutoros-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    # GPU access is opt-in. To enable an NVIDIA GPU on the host:
+    #   1. uncomment the deploy block below
+    #   2. install nvidia-container-toolkit on the host
+    # Without the deploy block ollama runs CPU-only, which is fine for
+    # the default llama3.2:3b (~2 GB RAM, slow but workable).
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  # ── Ollama bootstrap (one-shot model pull) ────────────────────────
+  ollama-init:
+    image: alpine:3.20
+    container_name: tutoros-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST:        http://ollama:11434
+      OLLAMA_CHAT_MODEL:  ${OLLAMA_CHAT_MODEL:-llama3.2:3b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+    volumes:
+      - ./docker/ollama-init.sh:/init.sh:ro
+    # Fresh image, only wget needed (busybox already has it).
+    command: ["sh", "/init.sh"]
+    restart: "no"
+
+  # ── tutor-api (Spring Boot) ───────────────────────────────────────
+  tutor-api:
+    build:
+      context: .
+      dockerfile: tutor-api/Dockerfile
+    container_name: tutoros-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    environment:
+      SPRING_PROFILES_ACTIVE: selfhost
+      # Compose service-name URLs; selfhost profile reads these.
+      OLLAMA_BASE_URL:    http://ollama:11434
+      OLLAMA_CHAT_MODEL:  ${OLLAMA_CHAT_MODEL:-llama3.2:3b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
+      EMBED_DIMS:         ${EMBED_DIMS:-768}
+      POSTGRES_URL:       jdbc:postgresql://postgres:5432/${POSTGRES_DB:-tutoros}
+      POSTGRES_USER:      ${POSTGRES_USER:-tutoros}
+      POSTGRES_PASSWORD:  ${POSTGRES_PASSWORD:-tutoros}
+      # Empty key disables the OpenAI auto-config in selfhost mode.
+      # Set it to bring OpenAI back online (and switch the SquadOS
+      # provider to openai via SQUAD_LLM_PROVIDER=openai).
+      OPENAI_API_KEY:     ${OPENAI_API_KEY:-}
+    ports:
+      - "${TUTOR_API_PORT:-8080}:8080"
+    healthcheck:
+      # /actuator/health is real readiness — exposed by spring-boot-
+      # starter-actuator (added to tutor-api pom). Returns {"status":"UP"}
+      # only after every Spring bean has finished init, including the
+      # MasteryService + MemoryManager + (in selfhost mode) the JDBC
+      # DataSource pool warm-up. tutor-ui's depends_on uses this gate.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q 'UP' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # ── tutor-ui (React + nginx) ──────────────────────────────────────
+  tutor-ui:
+    build:
+      context: ./tutor-ui
+      dockerfile: Dockerfile
+    container_name: tutoros-ui
+    restart: unless-stopped
+    depends_on:
+      tutor-api:
+        condition: service_healthy
+    ports:
+      - "${TUTOR_UI_PORT:-5173}:80"
+
+volumes:
+  postgres-data:
+  ollama-models:

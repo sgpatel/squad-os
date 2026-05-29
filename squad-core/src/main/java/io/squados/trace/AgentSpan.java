@@ -95,7 +95,10 @@ public class AgentSpan {
         Map<String,String> attributes = new LinkedHashMap<>();
 
         private Builder(String spanName) { this.spanName = spanName; }
+        public Builder() {}
 
+        public Builder spanName(String v)         { spanName = v; return this; }
+        public Builder spanId(String v)           { spanId = v; return this; }
         public Builder traceId(String v)          { traceId = v; return this; }
         public Builder agentRole(AgentRole v)     { agentRole = v; return this; }
         public Builder agentName(String v)        { agentName = v; return this; }

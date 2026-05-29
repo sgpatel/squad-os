@@ -1,8 +1,0 @@
-squad:
-  name: "my-first-squad"
-  profile: gaming
-  llm:
-    provider: ollama
-    model: llama3.2
-  agents:
-    - class: com.example.OracleAgent

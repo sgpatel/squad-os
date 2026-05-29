@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en" data-theme="lumen">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TutorOS — Learn anything, with proof.</title>
+  <meta name="description" content="An open agent pipeline that teaches you, debates the answer, and shows its work." />
+
+  <!-- Fonts: a small set, all themes rely on these + system fallbacks -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;700;800&family=Quicksand:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+
+  <!-- Token system: load tokens FIRST, then every theme override, then base -->
+  <link rel="stylesheet" href="./styles/tokens.css" />
+  <link rel="stylesheet" href="./styles/themes/lumen.css" />
+  <link rel="stylesheet" href="./styles/themes/crayon.css" />
+  <link rel="stylesheet" href="./styles/themes/atlas.css" />
+  <link rel="stylesheet" href="./styles/themes/studio.css" />
+  <link rel="stylesheet" href="./styles/themes/graphite.css" />
+  <link rel="stylesheet" href="./styles/base.css" />
+</head>
+<body>
+
+  <div class="app">
+
+    <!-- ─────────────────────────────────────────────────────────────
+         Topbar — minimal, like Google's: brand on the left, status
+         in the middle (the pipeline strip lives here once a run starts),
+         theme switcher + avatar on the right.
+         ─────────────────────────────────────────────────────────── -->
+    <header class="topbar" role="banner">
+      <a href="#" class="topbar__brand" aria-label="TutorOS home">
+        <span class="topbar__brand-mark" aria-hidden="true">T</span>
+        <span>TutorOS</span>
+      </a>
+
+      <button class="topbar__pill" id="workspaceSwitcher" aria-haspopup="listbox">
+        <span id="workspaceLabel">Personal</span>
+        <span aria-hidden="true">▾</span>
+      </button>
+
+      <!-- Pipeline strip slides in here when a run is active.
+           In Lumen the strip is restrained; Crayon shows the mascot instead. -->
+      <div id="pipelineStripMount" class="flex-1 flex items-center" style="justify-content:center;"></div>
+
+      <span class="streak" title="3-day streak">🔥 <span id="streakCount">3</span></span>
+      <span class="xp" title="Today's XP"><span class="xp__bar"><span class="xp__fill" style="--xp:62%"></span></span><span>620 / 1k</span></span>
+
+      <!-- Theme + mode controls. Real apps would tuck these in a settings sheet;
+           here they're visible so you can experience the swap on every page. -->
+      <label class="sr-only" for="themeSelect">Theme</label>
+      <select id="themeSelect" class="topbar__pill" aria-label="Theme">
+        <option value="lumen">Lumen — Higher Sec.</option>
+        <option value="crayon">Crayon — Primary</option>
+        <option value="atlas">Atlas — Middle</option>
+        <option value="studio">Studio — College</option>
+        <option value="graphite">Graphite — Pro</option>
+      </select>
+
+      <button class="btn btn--icon btn--ghost" id="modeToggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+        <span id="modeIcon">◐</span>
+      </button>
+
+      <button class="topbar__avatar" id="avatar" aria-label="Account">P</button>
+    </header>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         Page body — Google cut.
+         Above the fold: greeting + one input + 3 chips. Nothing else.
+         Below the fold: today's plan, recent sessions, progress.
+         ─────────────────────────────────────────────────────────── -->
+    <main class="page" id="page">
+
+      <section class="hero" aria-labelledby="greeting">
+        <h1 class="hero__greeting" id="greeting">
+          What do you want to learn, <em>Priya</em>?
+        </h1>
+
+        <form class="hero__input" id="askForm" autocomplete="off" role="search">
+          <input
+            id="askInput"
+            type="text"
+            placeholder="Ask anything · paste a topic, syllabus, or PDF link"
+            aria-label="What do you want to learn?"
+          />
+          <button type="button" class="btn btn--icon btn--ghost" aria-label="Voice input" title="Voice">🎙</button>
+          <button type="submit" class="btn btn--primary btn--sm" aria-label="Start tutor">
+            Start
+            <span class="kbd" aria-hidden="true">↩</span>
+          </button>
+        </form>
+
+        <div class="hero__chips" role="list" aria-label="Quick actions">
+          <button class="chip" data-prompt="Continue: Photosynthesis — Light reactions"><span class="chip__icon">↻</span>Continue session</button>
+          <button class="chip" data-prompt="Quiz me on yesterday's chapter"><span class="chip__icon">✦</span>Quiz me</button>
+          <button class="chip" data-prompt="Plan a week of revision for finals"><span class="chip__icon">📅</span>Plan revision</button>
+        </div>
+
+        <!-- Mascot only renders for Crayon (gated in CSS). -->
+        <div class="mascot mt-7" aria-hidden="true">
+          <div class="mascot__face">◕‿◕</div>
+          <div class="mascot__bubble">Hi! I'm Lumi. Ready to learn something cool today?</div>
+        </div>
+      </section>
+
+      <!-- Pipeline reveal panel (Layer B). Hidden until the user expands the strip. -->
+      <section class="column">
+        <div class="reveal" id="pipelineReveal" aria-live="polite">
+          <div class="reveal__head">
+            <div>
+              <h4>Pipeline run</h4>
+              <p class="small muted" id="pipelineSummary">Idle — start a session above.</p>
+            </div>
+            <div class="small"><span id="pipelineElapsed">0.0s</span></div>
+          </div>
+          <ol class="timeline" id="timeline" role="list">
+            <!-- rows injected by app.js -->
+          </ol>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────────────────
+           Below the fold — three calm cards. The Debate Round
+           promotes itself into view once the pipeline reaches it.
+           ─────────────────────────────────────────────────────── -->
+      <section class="column mt-9 stack-lg">
+
+        <!-- Debate Round — the signature moment. Hidden until populated. -->
+        <div id="debateMount" class="hidden">
+          <p class="section-label">Signature view</p>
+          <div class="debate" role="region" aria-label="Debate round">
+            <div class="debate__head">
+              <div>
+                <p class="debate__title" id="debateTopic">Is the mitochondrion the powerhouse of the cell?</p>
+                <p class="small muted" id="debateSubtle">Two agents argue. The judge picks the supported claim.</p>
+              </div>
+              <span class="debate__round">Round <span id="debateRoundNum">2</span> of 3</span>
+            </div>
+
+            <div class="debate__cards">
+              <article class="debate__card" data-side="for">
+                <p class="debate__side">For — Advocate</p>
+                <p class="debate__claim" id="debateForClaim">Yes — mitochondria produce ATP via oxidative phosphorylation, which powers nearly every active cellular process.</p>
+                <p class="debate__support" id="debateForSupport">Citation: Alberts et al., <em>Molecular Biology of the Cell</em>, ch. 14 — ETC + ATP synthase.</p>
+              </article>
+              <article class="debate__card" data-side="against">
+                <p class="debate__side">Against — Skeptic</p>
+                <p class="debate__claim" id="debateAgainstClaim">Partially — glycolysis (cytosolic) and chloroplasts (in plants) also generate usable energy; "the" powerhouse oversimplifies.</p>
+                <p class="debate__support" id="debateAgainstSupport">Citation: Lehninger, <em>Principles of Biochemistry</em> — anaerobic glycolysis still nets ATP without mitochondria.</p>
+              </article>
+            </div>
+
+            <div class="debate__verdict">
+              <strong>Judge:</strong> <span id="debateVerdict">Both partially correct. Refined claim — “Mitochondria are <em>the dominant ATP producer in aerobic eukaryotes</em>, not the only source.” Confidence 0.86.</span>
+            </div>
+
+            <div class="debate__rounds" aria-label="Debate progress">
+              <span class="pip" data-active="true"></span>
+              <span class="pip" data-active="true"></span>
+              <span class="pip" data-active="false"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Today's plan + recent + progress -->
+        <div>
+          <p class="section-label">Today</p>
+          <div class="grid-3">
+            <article class="card">
+              <p class="card__meta">Plan</p>
+              <h3 class="card__title">Photosynthesis · 25 min</h3>
+              <p class="muted small">Resume "Light reactions". 1 quiz, 1 debate round queued.</p>
+              <div class="row mt-3">
+                <button class="btn btn--primary btn--sm">Resume</button>
+                <button class="btn btn--ghost btn--sm">Skip</button>
+              </div>
+            </article>
+
+            <article class="card">
+              <p class="card__meta">Recent</p>
+              <h3 class="card__title">Mole concept</h3>
+              <p class="muted small">Mastery 0.78 · last seen yesterday</p>
+              <div class="row mt-3">
+                <button class="btn btn--sm">Open</button>
+                <span class="small subtle">12 cards</span>
+              </div>
+            </article>
+
+            <article class="card">
+              <p class="card__meta">Progress</p>
+              <h3 class="card__title">Class XI · Biology</h3>
+              <p class="muted small">7 of 18 chapters · streak 3 days</p>
+              <div class="row mt-3">
+                <button class="btn btn--sm">View</button>
+                <span class="small subtle">Next: Respiration</span>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <footer class="column mt-9 text-center">
+        <p class="small subtle">
+          Open pipeline · every answer carries citations + confidence.
+          Press <span class="kbd">⌘</span><span class="kbd">K</span> to ask anything.
+        </p>
+      </footer>
+    </main>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

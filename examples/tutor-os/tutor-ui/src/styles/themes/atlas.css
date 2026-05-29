@@ -1,0 +1,95 @@
+/* ─────────────────────────────────────────────────────────────────
+ * Atlas — Middle School (11–13) theme
+ *
+ * Vibe : adventurous, gamified, "level up", journey/path metaphor.
+ * Refs : Duolingo, Prodigy, Brilliant intro courses, Quizlet
+ *
+ * Distinguishing moves
+ *   • Vivid blue + magenta accent pairing
+ *   • Streak flame + XP bar persistent in topbar
+ *   • Chapter list renders as a JOURNEY MAP (has-map-path: 1)
+ *   • Plus Jakarta Sans display, friendly but not childish
+ * ───────────────────────────────────────────────────────────────── */
+
+:root[data-theme="atlas"] {
+  /* ── Surfaces — cool, optimistic ─────────────────────────────── */
+  --color-bg:           #f3f6fc;       /* sky tint */
+  --color-surface:      #ffffff;
+  --color-surface-2:    #e7eef9;
+  --color-surface-3:    #d6e2f4;
+  --color-border:       #c8d4ea;
+  --color-border-strong:#a5b8d8;
+
+  --color-text:         #0f172a;
+  --color-text-muted:   #475569;
+  --color-text-subtle:  #94a3b8;
+
+  /* ── Accent — vivid blue, magenta as "celebration" support ───── */
+  --color-accent:       #2563eb;        /* royal blue */
+  --color-accent-hover: #1d4ed8;
+  --color-accent-soft:  #dbeafe;
+  --color-accent-fg:    #ffffff;
+
+  /* Used for XP bar + streak flame highlight */
+  --color-celebration:  #d946ef;        /* fuchsia */
+
+  /* ── Typography ──────────────────────────────────────────────── */
+  --font-display: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  --font-body:    'Inter', system-ui, sans-serif;
+
+  --text-base:  16px;
+  --text-md:    17px;
+
+  --weight-bold:  700;
+  --weight-black: 800;
+
+  /* ── Radii — friendly, not pillowy ───────────────────────────── */
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
+
+  /* ── Shadows — cool blue cast ────────────────────────────────── */
+  --shadow-md: 0 8px 24px rgba(37,99,235,.10), 0 2px 6px rgba(15,23,42,.06);
+  --shadow-lg: 0 20px 48px rgba(37,99,235,.14), 0 4px 12px rgba(15,23,42,.08);
+
+  /* ── Motion — energetic ──────────────────────────────────────── */
+  --ease-out:    cubic-bezier(.22,1,.36,1);
+  --dur-normal:  220ms;
+
+  /* ── Feature flags ───────────────────────────────────────────── */
+  --has-mascot:        0;     /* avatar in topbar instead */
+  --has-streak:        1;
+  --has-xp-bar:        1;
+  --has-map-path:      1;     /* chapters render as journey */
+  --density:           comfortable;
+  --ornament-level:    1;
+  --celebration-level: 2;
+}
+
+/* Atlas dark — deeper blue rather than warm graphite */
+:root[data-theme="atlas"][data-mode="dark"] {
+  --color-bg:           #0b1220;
+  --color-surface:      #131c33;
+  --color-surface-2:    #1a2542;
+  --color-surface-3:    #233057;
+  --color-border:       #2c3a66;
+  --color-border-strong:#445586;
+  --color-text:         #eef2ff;
+  --color-text-muted:   #a3b1d4;
+  --color-text-subtle:  #6b78a3;
+  --color-accent-soft:  #1e3a8a;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="atlas"]:not([data-mode="light"]) {
+    --color-bg:           #0b1220;
+    --color-surface:      #131c33;
+    --color-surface-2:    #1a2542;
+    --color-surface-3:    #233057;
+    --color-border:       #2c3a66;
+    --color-border-strong:#445586;
+    --color-text:         #eef2ff;
+    --color-text-muted:   #a3b1d4;
+    --color-text-subtle:  #6b78a3;
+    --color-accent-soft:  #1e3a8a;
+  }
+}

@@ -1,0 +1,207 @@
+/* ─────────────────────────────────────────────────────────────────
+ * tokens.css — the design-system contract.
+ *
+ * Defines every CSS custom property the components consume.
+ * Every theme file (themes/*.css) overrides a subset of these tokens
+ * to produce its visual register without changing any component CSS.
+ *
+ * Token categories
+ *   1. Surfaces & borders
+ *   2. Text colors
+ *   3. Accent (one accent per theme, never two)
+ *   4. Semantic (success / warning / danger / info)
+ *   5. Typography (font families, scale, weights, line-heights)
+ *   6. Spacing scale (4px base)
+ *   7. Radii
+ *   8. Shadows
+ *   9. Motion (durations + easings)
+ *  10. Theme feature flags (mascot presence, density, ornament level)
+ *
+ * The defaults below = the Lumen theme (Higher Secondary), our north star.
+ * Other themes override on top of this baseline.
+ * ───────────────────────────────────────────────────────────────── */
+
+:root {
+
+  /* ── 1. Surfaces ───────────────────────────────────────────────── */
+  --color-bg:           #fafaf7;       /* page background */
+  --color-surface:      #ffffff;       /* card */
+  --color-surface-2:    #f4f3ee;       /* sunken card / input */
+  --color-surface-3:    #eceae3;       /* divider blocks */
+  --color-border:       #e3e1d9;       /* hairline borders */
+  --color-border-strong:#cdcabf;       /* hover / focus borders */
+  --color-overlay:      rgba(20,18,12,.45);
+
+  /* ── 2. Text ───────────────────────────────────────────────────── */
+  --color-text:         #1a1a1a;
+  --color-text-muted:   #5a5a55;
+  --color-text-subtle:  #8a8a82;
+  --color-text-inverse: #ffffff;
+
+  /* ── 3. Accent (single accent — change per theme) ──────────────── */
+  --color-accent:       #d97706;       /* warm orange — Lumen default */
+  --color-accent-hover: #b45309;
+  --color-accent-soft:  #fef3c7;       /* tinted background */
+  --color-accent-fg:    #ffffff;       /* text on accent */
+  --color-focus-ring:   color-mix(in oklab, var(--color-accent) 50%, transparent);
+
+  /* ── 4. Semantic ───────────────────────────────────────────────── */
+  --color-success:      #16a34a;
+  --color-success-soft: #dcfce7;
+  --color-warning:      #ca8a04;
+  --color-warning-soft: #fef9c3;
+  --color-danger:       #dc2626;
+  --color-danger-soft:  #fee2e2;
+  --color-info:         #2563eb;
+  --color-info-soft:    #dbeafe;
+
+  /* Pipeline-stage palette — one hue per agent role */
+  --color-stage-guardian:    #6b7280;  /* neutral grey */
+  --color-stage-diagnostic:  #8b5cf6;  /* violet */
+  --color-stage-planner:     #0ea5e9;  /* sky */
+  --color-stage-content:     #14b8a6;  /* teal */
+  --color-stage-debate:      #f59e0b;  /* amber */
+  --color-stage-tutor:       var(--color-accent);
+  --color-stage-practice:    #10b981;  /* emerald */
+  --color-stage-assessment:  #ef4444;  /* red */
+  --color-stage-progress:    #6366f1;  /* indigo */
+
+  /* ── 5. Typography ─────────────────────────────────────────────── */
+  --font-display: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-body:    'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --font-feature: "ss01", "cv11";       /* tabular numerals + stylistic alts */
+
+  --text-xs:    12px;
+  --text-sm:    13px;
+  --text-base:  15px;
+  --text-md:    16px;
+  --text-lg:    18px;
+  --text-xl:    22px;
+  --text-2xl:   28px;
+  --text-3xl:   36px;
+  --text-4xl:   48px;
+  --text-5xl:   64px;
+
+  --leading-tight:   1.15;
+  --leading-snug:    1.30;
+  --leading-normal:  1.50;
+  --leading-relaxed: 1.70;
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+  --weight-black:    800;
+
+  --tracking-tight:  -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.04em;
+  --tracking-caps:   0.08em;
+
+  /* ── 6. Spacing (4px scale) ─────────────────────────────────────── */
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-7:  32px;
+  --space-8:  40px;
+  --space-9:  48px;
+  --space-10: 64px;
+  --space-11: 80px;
+  --space-12: 96px;
+  --space-13: 128px;
+
+  /* ── 7. Radii ──────────────────────────────────────────────────── */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-2xl:  28px;
+  --radius-pill: 999px;
+
+  /* ── 8. Shadows (Lumen — soft, low-contrast) ───────────────────── */
+  --shadow-xs: 0 1px 2px rgba(20,18,12,.04);
+  --shadow-sm: 0 2px 6px rgba(20,18,12,.06);
+  --shadow-md: 0 6px 20px rgba(20,18,12,.08), 0 2px 4px rgba(20,18,12,.04);
+  --shadow-lg: 0 16px 40px rgba(20,18,12,.10), 0 4px 8px rgba(20,18,12,.06);
+  --shadow-focus: 0 0 0 3px var(--color-focus-ring);
+
+  /* ── 9. Motion ─────────────────────────────────────────────────── */
+  --dur-instant: 80ms;
+  --dur-fast:    160ms;
+  --dur-normal:  240ms;
+  --dur-slow:    400ms;
+  --dur-deliberate: 600ms;
+
+  --ease-out:    cubic-bezier(.16,1,.3,1);            /* expo-out — Lumen default */
+  --ease-in-out: cubic-bezier(.65,0,.35,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);        /* gentle overshoot */
+
+  /* ── 10. Theme feature flags (read by JS + CSS) ────────────────── */
+  --has-mascot:       0;     /* 1 = render Lumi mascot */
+  --has-streak:       1;     /* 1 = show streak flame */
+  --has-xp-bar:       0;     /* 1 = show XP bar (Atlas) */
+  --has-map-path:     0;     /* 1 = chapter list as a journey map (Atlas) */
+  --density:          comfortable; /* compact | comfortable | loose */
+  --ornament-level:   0;     /* 0 = clean, 1 = subtle, 2 = decorated */
+  --celebration-level:1;     /* 0 = none, 1 = subtle, 2 = confetti */
+
+  /* Layout maxima */
+  --max-content:     760px;       /* hero column width */
+  --max-page:        1240px;      /* outer page max */
+  --topbar-height:   60px;
+}
+
+/* ── Dark mode (system or explicit data-mode="dark") ──────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode="light"]) {
+    --color-bg:           #14130f;
+    --color-surface:      #1c1b16;
+    --color-surface-2:    #24221c;
+    --color-surface-3:    #2d2a22;
+    --color-border:       #36332a;
+    --color-border-strong:#4a463b;
+
+    --color-text:         #f5f3ed;
+    --color-text-muted:   #b3aea0;
+    --color-text-subtle:  #807a6c;
+
+    --color-accent-soft:  #422006;
+    --shadow-xs: 0 1px 2px rgba(0,0,0,.40);
+    --shadow-sm: 0 2px 6px rgba(0,0,0,.45);
+    --shadow-md: 0 6px 20px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.35);
+    --shadow-lg: 0 16px 40px rgba(0,0,0,.65), 0 4px 8px rgba(0,0,0,.45);
+  }
+}
+:root[data-mode="dark"] {
+  --color-bg:           #14130f;
+  --color-surface:      #1c1b16;
+  --color-surface-2:    #24221c;
+  --color-surface-3:    #2d2a22;
+  --color-border:       #36332a;
+  --color-border-strong:#4a463b;
+  --color-text:         #f5f3ed;
+  --color-text-muted:   #b3aea0;
+  --color-text-subtle:  #807a6c;
+  --color-accent-soft:  #422006;
+  --shadow-xs: 0 1px 2px rgba(0,0,0,.40);
+  --shadow-sm: 0 2px 6px rgba(0,0,0,.45);
+  --shadow-md: 0 6px 20px rgba(0,0,0,.55), 0 2px 4px rgba(0,0,0,.35);
+  --shadow-lg: 0 16px 40px rgba(0,0,0,.65), 0 4px 8px rgba(0,0,0,.45);
+}
+
+/* ── Reduced motion — honor the OS preference ─────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms;
+    --dur-fast:    0ms;
+    --dur-normal:  0ms;
+    --dur-slow:    0ms;
+    --dur-deliberate: 0ms;
+  }
+}

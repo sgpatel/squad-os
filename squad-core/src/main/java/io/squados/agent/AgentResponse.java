@@ -2,6 +2,7 @@ package io.squados.agent;
 
 import io.squados.annotation.AgentRole;
 import io.squados.llm.LlmResponse;
+import io.squados.structured.StructuredOutputResult;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -21,7 +22,9 @@ public class AgentResponse {
     private final int       completionTokens;
     private final Duration  latency;
     private final boolean   success;
+    private final boolean   skipped;
     private final String    errorMessage;
+    private StructuredOutputResult<?> structuredOutput; // set post-construction by AgentWrapper
 
     // ── Constructors ──────────────────────────────────────────────────
 
@@ -35,6 +38,7 @@ public class AgentResponse {
         this.completionTokens = completionTokens;
         this.latency          = latency;
         this.success          = true;
+        this.skipped          = false;
         this.errorMessage     = null;
     }
 
@@ -48,7 +52,21 @@ public class AgentResponse {
         this.completionTokens = 0;
         this.latency          = latency;
         this.success          = false;
+        this.skipped          = false;
         this.errorMessage     = errorMessage;
+    }
+
+    /** Skipped response — @Condition or @Step condition evaluated to false */
+    private AgentResponse(AgentRole role, String agentName, boolean skipped) {
+        this.content          = null;
+        this.role             = role;
+        this.agentName        = agentName;
+        this.promptTokens     = 0;
+        this.completionTokens = 0;
+        this.latency          = Duration.ZERO;
+        this.success          = false;
+        this.skipped          = true;
+        this.errorMessage     = null;
     }
 
     // ── Factory methods ───────────────────────────────────────────────
@@ -73,6 +91,16 @@ public class AgentResponse {
         );
     }
 
+    /** Pre-computed success — used by DurableEngine returning cached results. */
+    public static AgentResponse success(AgentRole role, String agentName, String content) {
+        return new AgentResponse(content, role, agentName, 0, 0, Duration.ZERO);
+    }
+
+    /** Skipped — @Condition evaluated to false; no LLM call was made. */
+    public static AgentResponse skipped(AgentRole role, String agentName) {
+        return new AgentResponse(role, agentName, true);
+    }
+
     // ── Getters ───────────────────────────────────────────────────────
 
     public String    content()          { return content; }
@@ -83,10 +111,31 @@ public class AgentResponse {
     public int       totalTokens()      { return promptTokens + completionTokens; }
     public Duration  latency()          { return latency; }
     public boolean   isSuccess()        { return success; }
+    public boolean   isSkipped()        { return skipped; }
     public String    errorMessage()     { return errorMessage; }
 
     public boolean hasContent() {
         return content != null && !content.isBlank();
+    }
+
+    /**
+     * Returns the parsed structured output cast to {@code type}, or null if
+     * {@code @StructuredOutput} was not active for this agent.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T structuredOutput(Class<T> type) {
+        if (structuredOutput == null) return null;
+        Object val = structuredOutput.value();
+        return type.isInstance(val) ? (T) val : null;
+    }
+
+    /** Returns the raw StructuredOutputResult for inspection (attempts, raw response). */
+    public StructuredOutputResult<?> structuredOutputResult() { return structuredOutput; }
+
+    /** Called by AgentWrapper after parsing. */
+    public AgentResponse withStructuredOutput(StructuredOutputResult<?> result) {
+        this.structuredOutput = result;
+        return this;
     }
 
     @Override

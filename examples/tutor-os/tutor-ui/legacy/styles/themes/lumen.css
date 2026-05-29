@@ -1,0 +1,14 @@
+/* ─────────────────────────────────────────────────────────────────
+ * Lumen — Higher Secondary (14–17) theme
+ *
+ * Vibe : focused, exam-aware, near-monochrome with a single warm accent.
+ * Refs : Apple Books, Notion Calendar, Notability, Geist site
+ *
+ * Lumen IS the default expressed in tokens.css — this file is mostly
+ * empty so theme swap-out is symmetric across the five themes.
+ * Anything Lumen-specific that overrides tokens.css goes here.
+ * ───────────────────────────────────────────────────────────────── */
+
+:root[data-theme="lumen"] {
+  /* Lumen uses tokens.css defaults verbatim — nothing to override. */
+}

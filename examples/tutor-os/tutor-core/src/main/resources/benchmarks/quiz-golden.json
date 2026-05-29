@@ -1,0 +1,173 @@
+{
+  "name": "quiz-golden",
+  "description": "Golden dataset for QuizAgent quiz generation quality. Validates gap/recent/mastered distribution (60/30/10), Bloom's level mix, difficulty calibration per goal, and time limit appropriateness. minScore 0.80.",
+  "version": "1.0.0",
+  "minScore": 0.80,
+  "scoringDimensions": [
+    "gap_concept_coverage",
+    "blooms_level_distribution",
+    "difficulty_calibration",
+    "question_variety",
+    "time_limit_appropriateness"
+  ],
+  "examples": [
+    {
+      "id": "qz-001",
+      "description": "EXAM_PREP quiz for SENIOR_SCHOOL — harder distribution expected",
+      "input": {
+        "level": "SENIOR_SCHOOL",
+        "goal": "EXAM_PREP",
+        "difficulty": "MEDIUM",
+        "questionCount": 10,
+        "gaps": "quadratic formula, completing the square, discriminant",
+        "recentConcepts": "linear equations, simultaneous equations",
+        "masteredConcepts": "basic algebra, BODMAS"
+      },
+      "expectedOutput": {
+        "questionCount": 10,
+        "totalMarks": 10,
+        "difficultyDistribution": {
+          "EASY_max": 0.25,
+          "MEDIUM_min": 0.45,
+          "HARD_min": 0.25
+        },
+        "bloomsDistribution": {
+          "UNDERSTAND_min": 0.20,
+          "APPLY_min": 0.35,
+          "ANALYSE_min": 0.15
+        },
+        "gapConceptCoverage_min": 0.55,
+        "questionTypesMin": 2,
+        "timeLimitMin": 15,
+        "timeLimitMax": 25
+      },
+      "minScore": 0.82
+    },
+    {
+      "id": "qz-002",
+      "description": "UNDERSTAND_BASICS quiz for PRIMARY — confidence-building distribution",
+      "input": {
+        "level": "PRIMARY",
+        "goal": "UNDERSTAND_BASICS",
+        "difficulty": "EASY",
+        "questionCount": 5,
+        "gaps": "multiplication tables, place value",
+        "recentConcepts": "addition, subtraction",
+        "masteredConcepts": "counting to 100"
+      },
+      "expectedOutput": {
+        "questionCount": 5,
+        "difficultyDistribution": {
+          "EASY_min": 0.65,
+          "HARD_max": 0.10
+        },
+        "bloomsDistribution": {
+          "REMEMBER_min": 0.30,
+          "UNDERSTAND_min": 0.30
+        },
+        "languageLevel": "PRIMARY",
+        "noJargon": true,
+        "timeLimitMin": 8,
+        "timeLimitMax": 15
+      },
+      "minScore": 0.80
+    },
+    {
+      "id": "qz-003",
+      "description": "DEEP_MASTERY quiz for UNIVERSITY — stretch distribution",
+      "input": {
+        "level": "UNIVERSITY",
+        "goal": "DEEP_MASTERY",
+        "difficulty": "HARD",
+        "questionCount": 8,
+        "gaps": "gradient descent convergence, regularisation",
+        "recentConcepts": "backpropagation, loss functions",
+        "masteredConcepts": "linear algebra, calculus"
+      },
+      "expectedOutput": {
+        "questionCount": 8,
+        "difficultyDistribution": {
+          "EASY_max": 0.15,
+          "MEDIUM_min": 0.35,
+          "HARD_min": 0.45
+        },
+        "bloomsDistribution": {
+          "APPLY_min": 0.25,
+          "ANALYSE_min": 0.25,
+          "EVALUATE_min": 0.15
+        },
+        "technicalTermsPresent": true,
+        "timeLimitMin": 20,
+        "timeLimitMax": 45
+      },
+      "minScore": 0.80
+    },
+    {
+      "id": "qz-004",
+      "description": "No duplicate concepts across questions",
+      "input": {
+        "level": "MIDDLE_SCHOOL",
+        "goal": "EXAM_PREP",
+        "difficulty": "MEDIUM",
+        "questionCount": 6,
+        "gaps": "forces, gravity, friction",
+        "recentConcepts": "speed, velocity, acceleration",
+        "masteredConcepts": "distance, time"
+      },
+      "expectedOutput": {
+        "noDuplicateConceptTags": true,
+        "allQuestionsHaveHints": true,
+        "allQuestionsHaveWorkedSolutions": true
+      },
+      "minScore": 0.80
+    },
+    {
+      "id": "qz-005",
+      "description": "Question type variety — at least 3 types in a 10-question quiz",
+      "input": {
+        "level": "SENIOR_SCHOOL",
+        "goal": "EXAM_PREP",
+        "difficulty": "MEDIUM",
+        "questionCount": 10,
+        "gaps": "cell division, DNA replication, protein synthesis",
+        "recentConcepts": "genetics, evolution",
+        "masteredConcepts": "cell structure"
+      },
+      "expectedOutput": {
+        "uniqueQuestionTypesMin": 3,
+        "mustIncludeShortAnswer": true,
+        "mustIncludeMultipleChoice": true,
+        "noRepeatConceptTags": true
+      },
+      "minScore": 0.80
+    },
+    {
+      "id": "qz-006",
+      "description": "PROFESSIONAL quiz — applied, dense, with TL;DR model answers",
+      "input": {
+        "level": "PROFESSIONAL",
+        "goal": "PROFESSIONAL_USE",
+        "difficulty": "HARD",
+        "questionCount": 5,
+        "gaps": "microservices design patterns, event-driven architecture",
+        "recentConcepts": "REST API best practices",
+        "masteredConcepts": "HTTP, JSON"
+      },
+      "expectedOutput": {
+        "difficultyDistribution": {
+          "EASY_max": 0.10,
+          "HARD_min": 0.45
+        },
+        "bloomsDistribution": {
+          "APPLY_min": 0.40,
+          "EVALUATE_min": 0.20
+        },
+        "workedSolutionsAreDense": true,
+        "industryTermsPresent": true,
+        "timeLimitMin": 15,
+        "timeLimitMax": 30
+      },
+      "minScore": 0.80
+    }
+  ]
+}

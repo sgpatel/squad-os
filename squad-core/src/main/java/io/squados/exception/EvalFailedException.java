@@ -18,6 +18,15 @@ public class EvalFailedException extends RuntimeException {
         this.attempts  = maxRetries + 1;
     }
 
+    /** Used by AgentTestRunner — no EvalScore, just a pass-rate report. */
+    public EvalFailedException(String agentName, float actualPassRate, float minPassRate) {
+        super(String.format("@AgentTest failed for '%s': pass rate %.0f%% < required %.0f%%",
+            agentName, actualPassRate * 100, minPassRate * 100));
+        this.bestScore = null;
+        this.minScore  = minPassRate;
+        this.attempts  = 0;
+    }
+
     public EvalScore getBestScore() { return bestScore; }
     public float     getMinScore()  { return minScore; }
     public int       getAttempts()  { return attempts; }
