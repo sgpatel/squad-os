@@ -53,7 +53,9 @@ public class VisualisationAgent {
         // can be tabulated; chem only accepts molecules).
         String t = (requiredType == null) ? "plot" : requiredType.trim().toLowerCase();
         if (!"chem".equals(t) && !"plot".equals(t)
-            && !"geometry".equals(t) && !"freebody".equals(t)) {
+            && !"geometry".equals(t) && !"freebody".equals(t)
+            && !"surface3d".equals(t) && !"function2d".equals(t)
+            && !"flow".equals(t) && !"circuit".equals(t)) {
             t = "plot";
         }
 
@@ -123,6 +125,94 @@ public class VisualisationAgent {
                 - color is a CSS hex; pick distinct colors for distinct forces.
                 - Labels are short (≤ 4 chars): W, N, T, F, fk, fs, etc.
                 - Always include weight (W) when there's gravity.
+              """;
+            case "function2d" -> """
+              You MUST set type = "function2d".
+              specJson plots one or more mathematical functions from FORMULA
+              STRINGS — the renderer samples them, so DO NOT emit data points.
+
+              Cartesian (y = f(x)):
+                {"kind":"cartesian",
+                 "curves":[{"expr":"sin(x)/x","label":"sinc","color":"#6366f1"}],
+                 "xRange":[-10,10], "xLabel":"x", "yLabel":"f(x)"}
+              Parametric ((x(t), y(t))):
+                {"kind":"parametric","xExpr":"cos(3*t)","yExpr":"sin(2*t)",
+                 "tRange":[0,6.2832]}
+              Polar (r(theta)):
+                {"kind":"polar","rExpr":"1+cos(theta)","thetaRange":[0,6.2832]}
+
+              Rules:
+                - Grammar: + - * / ^ %, parentheses, and functions sin cos tan
+                  asin acos atan sinh cosh tanh exp ln log log10 sqrt cbrt abs
+                  sign floor ceil round min max pow atan2 mod. Constants: pi, e,
+                  tau. Variable is x (cartesian), t (parametric), theta (polar).
+                - Prefer this over "plot" for PURE functions; use "plot" for
+                  data/bar/scatter comparisons.
+                - Give each curve a short label; add a 2nd curve only if it aids
+                  the concept.
+              """;
+            case "surface3d" -> """
+              You MUST set type = "surface3d".
+              specJson drives an interactive Three.js scene from FORMULA STRINGS.
+              Same math grammar as function2d. Pick ONE kind:
+
+              Surface (z = f(x,y)):
+                {"kind":"surface","expr":"sin(x)*cos(y)",
+                 "xRange":[-3,3], "yRange":[-3,3], "segments":48}
+              3D curve ((x(t), y(t), z(t))):
+                {"kind":"curve","xExpr":"cos(t)","yExpr":"sin(t)","zExpr":"t/6",
+                 "tRange":[0,18.8]}
+              Vector field (F = (fx,fy,fz) of x,y,z):
+                {"kind":"vectorfield","fx":"-y","fy":"x","fz":"0",
+                 "range":[-2,2], "density":5}
+
+              Rules:
+                - Use surface3d ONLY when the concept genuinely needs a third
+                  dimension (multivariable z=f(x,y), saddle points, helices,
+                  E/B fields, gradient/curl). Otherwise prefer function2d/plot.
+                - Keep segments ≤ 80 and density ≤ 6 (performance).
+                - Variables are x,y (surface), t (curve), x,y,z (field).
+              """;
+            case "flow" -> """
+              You MUST set type = "flow".
+              specJson = {"mermaid":"<valid Mermaid source>"} rendered by
+              Mermaid.js. Use the diagram type that fits the concept:
+                - graph TD / flowchart LR  → processes, algorithms, pathways
+                - sequenceDiagram          → message/protocol exchanges
+                - stateDiagram-v2          → state machines, phase transitions
+                - classDiagram / erDiagram → schemas, taxonomies
+                - mindmap                  → concept breakdowns
+
+              Example:
+                {"mermaid":"flowchart TD\\n  A[Start] --> B{Condition?}\\n  B -->|yes| C[Do X]\\n  B -->|no| D[Do Y]"}
+
+              Rules:
+                - Emit ONLY Mermaid DSL — no click handlers, no inline HTML/JS
+                  (the renderer runs in strict mode and will reject them).
+                - Keep node labels short; 4–12 nodes is the sweet spot.
+                - Escape newlines as \\n inside the JSON string.
+              """;
+            case "circuit" -> """
+              You MUST set type = "circuit".
+              specJson lists components IN SERIES ORDER around ONE loop; the
+              renderer walks a rectangular loop placing each symbol on the wire.
+
+              Shape:
+                {"elements":[
+                   {"type":"battery","label":"9V"},
+                   {"type":"resistor","label":"R1=100Ω"},
+                   {"type":"lamp","label":"L"},
+                   {"type":"switch","label":"S"}
+                ]}
+
+              Rules:
+                - type ∈ battery | cell | resistor | capacitor | inductor |
+                  lamp | switch | source | ac | voltmeter | ammeter | ground |
+                  wire. Unknown types render as plain wire.
+                - List them in the order current flows around the loop.
+                - 2–8 elements. Labels are short (R1=100Ω, 9V, C, L).
+                - This is a SINGLE series loop — for complex topologies with
+                  parallel branches, fall back to type "flow" instead.
               """;
             default -> """
               You MUST set type = "plot".
@@ -217,6 +307,53 @@ public class VisualisationAgent {
             c.contains("chord ") || c.contains("radius ") ||
             c.contains("euclidean") || c.contains("geometric proof")) {
             return "geometry";
+        }
+
+        // Circuit — series-loop electrical schematics. Strong, distinct cues
+        // so generic "current"/"energy" prose doesn't hijack a plot.
+        if (c.contains("circuit") || c.contains("ohm's law") || c.contains("ohms law") ||
+            c.contains("series resistor") || c.contains("resistors in series") ||
+            c.contains("voltage divider") || c.contains("kirchhoff") ||
+            c.contains("rc circuit") || c.contains("lc circuit") || c.contains("rl circuit") ||
+            c.contains("battery and") || c.contains("emf") || c.contains("schematic")) {
+            return "circuit";
+        }
+
+        // Flow — node/edge process diagrams: algorithms, state machines,
+        // protocols, biological pathways, life cycles, taxonomies.
+        if (c.contains("flowchart") || c.contains("flow chart") ||
+            c.contains("algorithm") || c.contains("pseudocode") ||
+            c.contains("state machine") || c.contains("state diagram") ||
+            c.contains("sequence diagram") || c.contains("decision tree") ||
+            c.contains("class diagram") || c.contains("er diagram") ||
+            c.contains("uml") || c.contains("mind map") || c.contains("mindmap") ||
+            c.contains("pathway") || c.contains("life cycle") || c.contains("lifecycle") ||
+            c.contains("krebs cycle") || c.contains("water cycle") ||
+            c.contains("steps to ") || c.contains("process of ") ||
+            c.contains("workflow") || c.contains("pipeline")) {
+            return "flow";
+        }
+
+        // Surface3D — concepts that genuinely need a third dimension.
+        if (c.contains("3d ") || c.contains("3-d ") || c.contains("surface plot") ||
+            c.contains("z = f") || c.contains("z=f") || c.contains("saddle") ||
+            c.contains("paraboloid") || c.contains("multivariable") ||
+            c.contains("two-variable") || c.contains("two variable") ||
+            c.contains("vector field") || c.contains("vector-field") ||
+            c.contains("gradient field") || c.contains("helix") ||
+            c.contains("parametric surface") || c.contains("3d curve")) {
+            return "surface3d";
+        }
+
+        // Function2D — a SINGLE closed-form curve (cartesian / parametric /
+        // polar). Routed here (not "plot") when the cue is unmistakably a
+        // formula curve; ambiguous "show me data" stays on Vega plot.
+        if (c.contains("parametric") || c.contains("polar curve") ||
+            c.contains("polar plot") || c.contains("graph of y") ||
+            c.contains("plot of y") || c.contains("graph the function") ||
+            c.contains("plot the function") || c.contains("y = f(x)") ||
+            c.contains("y=f(x)") || c.contains("lissajous")) {
+            return "function2d";
         }
 
         // Plot — function graphs, data plots, distributions, comparisons,

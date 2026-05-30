@@ -13,6 +13,7 @@
   "dependencies": {
     "katex": "^0.16.45",
     "lucide-react": "^0.460.0",
+    "mermaid": "^11.15.0",
     "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -22,6 +23,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "smiles-drawer": "^2.2.1",
+    "three": "^0.171.0",
     "vega": "^6.2.0",
     "vega-embed": "^7.1.0",
     "vega-lite": "^6.4.3",
@@ -31,6 +33,7 @@
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.171.0",
     "@vitejs/plugin-react": "^4.3.3",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"

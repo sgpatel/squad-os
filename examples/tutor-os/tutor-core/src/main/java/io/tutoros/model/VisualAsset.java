@@ -14,16 +14,15 @@ import io.squados.annotation.OutputField;
  *      Mafs, etc.). This produces publication-quality output without
  *      asking the LLM to do any positioning or layout.
  *
- * Supported types (v1 vertical slice):
- *   "chem"      — `specJson` is a single SMILES string in JSON, e.g.
- *                 {"smiles":"c1ccccc1"}        → renders benzene
- *   "plot"      — `specJson` is a Vega-Lite v5 spec
- *
- * Reserved for follow-ups:
- *   "geometry"  — points/segments/circles → Mafs / JSXGraph
- *   "freebody"  — surfaces/masses/forces[] → custom SVG renderer
- *   "flow"      — Mermaid source → mermaid.js
- *   "circuit"   — netlist → schemdraw-class renderer
+ * Supported types (all render end-to-end):
+ *   "chem"       — SMILES string → SmilesDrawer, e.g. {"smiles":"c1ccccc1"}
+ *   "plot"       — Vega-Lite v5 spec → vega-embed (data/bar/scatter)
+ *   "geometry"   — points/segments/circles → custom SVG renderer
+ *   "freebody"   — surfaces/masses/forces[] → custom SVG renderer
+ *   "function2d" — formula curve (y=f(x) / parametric / polar) → SVG
+ *   "surface3d"  — z=f(x,y) / 3D curve / vector field → Three.js (WebGL)
+ *   "flow"       — Mermaid source → mermaid.js (flow/state/sequence/…)
+ *   "circuit"    — series-loop component list → SVG schematic renderer
  *
  * The structured-output parser in squad-core stores nested JSON as a raw
  * string, so `specJson` is intentionally typed as String — the FE parses
@@ -32,8 +31,9 @@ import io.squados.annotation.OutputField;
 public class VisualAsset {
 
     @OutputField(
-        description = "Diagram domain. One of: chem | plot | geometry | freebody | flow | circuit. " +
-                      "v1 only renders chem and plot — emit one of these unless the concept truly needs another.",
+        description = "Diagram domain. One of: chem | plot | function2d | surface3d | " +
+                      "geometry | freebody | flow | circuit. Pick the domain that fits " +
+                      "the concept; the pipeline pins the type in the prompt.",
         example     = "chem"
     )
     public String type;
@@ -58,8 +58,11 @@ public class VisualAsset {
 
     @OutputField(
         description = "JSON spec for the chosen renderer. " +
-                      "For type='chem': {\"smiles\":\"<SMILES>\"}. " +
-                      "For type='plot': a complete Vega-Lite v5 spec. " +
+                      "chem: {\"smiles\":\"<SMILES>\"}. plot: a Vega-Lite v5 spec. " +
+                      "function2d: {\"kind\":\"cartesian\",\"curves\":[{\"expr\":\"sin(x)\"}],\"xRange\":[-6,6]}. " +
+                      "surface3d: {\"kind\":\"surface\",\"expr\":\"sin(x)*cos(y)\",\"xRange\":[-3,3],\"yRange\":[-3,3]}. " +
+                      "flow: {\"mermaid\":\"flowchart TD\\n A-->B\"}. " +
+                      "circuit: {\"elements\":[{\"type\":\"battery\",\"label\":\"9V\"},{\"type\":\"resistor\",\"label\":\"R\"}]}. " +
                       "Always a JSON object; escape inner quotes — never a markdown fence.",
         example     = "{\"smiles\":\"c1ccccc1\"}"
     )
