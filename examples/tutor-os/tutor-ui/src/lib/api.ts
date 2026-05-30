@@ -487,6 +487,26 @@ export const api = {
         `/api/books/${encodeURIComponent(learnerId)}/${encodeURIComponent(bookId)}/chapter/${n}/answer`,
         { method: 'POST', body: JSON.stringify(body) });
     },
+
+    /**
+     * POST /api/books/.../chapter/{n}/explain — selection-context AI
+     * for the in-app reader. Returns a markdown response the
+     * SelectionPopover renders inline. Three modes:
+     *
+     *   - explain  → 2–3 paragraph unpacking
+     *   - simplify → ELI5 rewrite with an everyday analogy
+     *   - define   → 2–3 sentence definition + concrete example
+     */
+    explain(
+      learnerId: string,
+      bookId: string,
+      n: number,
+      body: { selection: string; mode: 'explain' | 'simplify' | 'define'; level?: string }
+    ): Promise<{ mode: string; markdown: string }> {
+      return apiFetch<{ mode: string; markdown: string }>(
+        `/api/books/${encodeURIComponent(learnerId)}/${encodeURIComponent(bookId)}/chapter/${n}/explain`,
+        { method: 'POST', body: JSON.stringify(body) });
+    },
   },
 };
 

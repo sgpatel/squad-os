@@ -5,7 +5,14 @@ squad:
     provider: "openai"
     model: "gpt-4o-mini"
   agents:
+    # GuardianAgent (SUPPORT role) now handles three workloads:
+    #   1. Safety check       — short verdict (SAFE/DISTRESS/etc), <50 tokens
+    #   2. Subject match (PR-A) — single-word classifier, <50 tokens
+    #   3. Selection explain    — 80–180 word markdown response (~250 tokens)
+    # The default SUPPORT role budget is 512; bumping to 1500 gives the
+    # explain path headroom without affecting cost on the short calls.
     - class: "io.tutoros.agent.GuardianAgent"
+      max-tokens: 1500
     - class: "io.tutoros.agent.DiagnosticAgent"
     # Strategist + planner produce multi-chapter plans — the role default
     # of 512 tokens truncates the JSON mid-array and the structured-output

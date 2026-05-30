@@ -1186,6 +1186,187 @@ button.concept-chip { font: inherit; }
   border-radius: 2px;
 }
 
+/* ── Selectable text layer ───────────────────────────────────────
+   pdfjs spans are positioned absolutely to overlay the canvas
+   glyphs pixel-accurately. We render text transparent and let the
+   browser's native selection highlight do the work — same trick
+   the official pdfjs viewer uses. */
+.reader__text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 1;
+  line-height: 1;
+  user-select: text;
+  cursor: text;
+}
+.reader__text-layer > span,
+.reader__text-layer > br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.reader__text-layer ::selection {
+  background: color-mix(in oklab, var(--color-accent, #6366f1) 35%, transparent);
+}
+
+/* ── Highlight palette in header ─────────────────────────────── */
+.reader__palette {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+}
+.reader__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklab, #000 12%, transparent);
+  cursor: pointer;
+  padding: 0;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.reader__swatch:hover { transform: scale(1.12); }
+.reader__swatch.is-active {
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent, #6366f1);
+}
+.reader__swatch--yellow { background: #fff176; }
+.reader__swatch--green  { background: #a5d6a7; }
+.reader__swatch--blue   { background: #90caf9; }
+.reader__swatch--pink   { background: #f48fb1; }
+
+/* ── Manual (persisted) highlight layer ──────────────────────── */
+.reader__manual-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.reader__manual-hl {
+  position: absolute;
+  border: 0;
+  padding: 0;
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: filter .12s ease;
+}
+.reader__manual-hl:hover { filter: brightness(0.92); }
+.reader__manual-hl--yellow { background: color-mix(in oklab, #fff176 78%, transparent); }
+.reader__manual-hl--green  { background: color-mix(in oklab, #a5d6a7 78%, transparent); }
+.reader__manual-hl--blue   { background: color-mix(in oklab, #90caf9 78%, transparent); }
+.reader__manual-hl--pink   { background: color-mix(in oklab, #f48fb1 78%, transparent); }
+
+/* ── Floating selection toolbar ──────────────────────────────── */
+.reader__selection-toolbar {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  z-index: 20;
+  white-space: nowrap;
+  animation: reader-toolbar-in .12s ease-out;
+}
+@keyframes reader-toolbar-in {
+  from { opacity: 0; transform: translate(-50%, calc(-100% + 4px)); }
+  to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+.reader__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.reader__tool:hover { background: var(--color-bg-subtle); }
+.reader__tool--icon { padding: 5px 6px; }
+.reader__tool-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--color-border);
+  margin: 0 2px;
+}
+
+/* ── Inline AI explanation popover ───────────────────────────── */
+.reader__ai-panel {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  width: min(420px, calc(100vw - var(--space-6)));
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+  z-index: 30;
+  animation: reader-toolbar-in .14s ease-out;
+}
+.reader__ai-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+.reader__ai-head > span { flex: 1 1 auto; }
+.reader__ai-close {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  color: var(--color-text-subtle);
+}
+.reader__ai-close:hover { background: var(--color-bg-subtle); }
+.reader__ai-selection {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--color-text-subtle);
+  background: var(--color-bg-subtle);
+  border-bottom: 1px solid var(--color-border);
+  max-height: 5.5em;
+  overflow: auto;
+  border-left: 3px solid var(--color-accent, #6366f1);
+}
+.reader__ai-body {
+  padding: 12px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.reader__ai-loading,
+.reader__ai-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+}
+.reader__ai-error { color: var(--color-danger, #b91c1c); flex-wrap: wrap; }
+
 /* "What to do next" strip — closes the learning loop. */
 .recommended {
   display: grid;

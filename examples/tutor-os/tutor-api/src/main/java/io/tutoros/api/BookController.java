@@ -2,6 +2,7 @@ package io.tutoros.api;
 
 import io.squados.agent.AgentResponse;
 import io.squados.agent.TaskContext;
+import io.squados.annotation.AgentRole;
 import io.squados.context.AgentWrapper;
 import io.squados.context.SquadContext;
 import io.tutoros.agent.BookCoachAgent;
@@ -712,6 +713,83 @@ public class BookController {
         }
         return ch.concepts().isEmpty() ? null : ch.concepts().get(0);
     }
+
+    // ── /explain — selection-context AI for the reader ───────────────
+
+    /**
+     * POST /api/books/{learnerId}/{bookId}/chapter/{n}/explain
+     *
+     * Body:  {@code { selection, mode, level? }}
+     * Modes: {@code explain | simplify | define}
+     *
+     * Returns pure markdown for the in-reader selection popover. The
+     * BookReaderPage shows this in a slide-out side panel without
+     * leaving the reader — maintaining reading flow while still giving
+     * the learner one-click access to AI explanation.
+     *
+     * <h2>Dispatch trick</h2>
+     * The prompt method lives on {@code BookCoachAgent} (where it
+     * semantically belongs) but the agent has
+     * {@code @StructuredOutput(LearningInsight.class)} that would
+     * coerce JSON onto the response. We dispatch through
+     * {@code AgentRole.SUPPORT} (GuardianAgent — no @StructuredOutput)
+     * so the LLM only sees our markdown-only instruction.
+     * Same pattern as the PR-A subject-match classifier.
+     */
+    @PostMapping("/{learnerId}/{bookId}/chapter/{n}/explain")
+    public ResponseEntity<ExplainResponse> explain(
+            @PathVariable String learnerId,
+            @PathVariable String bookId,
+            @PathVariable int    n,
+            @RequestBody  ExplainRequest body) {
+
+        if (body == null || body.selection == null || body.selection.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        Book b = repo.findById(bookId)
+            .filter(book -> learnerId.equals(book.learnerId))
+            .orElse(null);
+        if (b == null) return ResponseEntity.notFound().build();
+        Chapter ch = b.chapter(n);
+        if (ch == null) return ResponseEntity.notFound().build();
+
+        String mode  = BookCoachAgent.normalizeExplainMode(body.mode);
+        String level = (body.level == null || body.level.isBlank())
+            ? "SENIOR_SCHOOL" : body.level.trim();
+
+        String prompt = coach.selectionExplainPrompt(
+            ch.title, ch.body, body.selection, mode, level);
+
+        long t0 = System.nanoTime();
+        try {
+            AgentResponse resp = ctx.submitTo(AgentRole.SUPPORT, prompt);
+            String markdown = resp != null ? resp.content() : null;
+            if (markdown == null || markdown.isBlank()) {
+                log.warn("explain returned empty: book={} chapter={} mode={} " +
+                    "selectionChars={} elapsedMs={}",
+                    bookId, n, mode,
+                    body.selection.length(),
+                    (System.nanoTime() - t0) / 1_000_000L);
+                return ResponseEntity.ok(new ExplainResponse(mode,
+                    "_The tutor returned nothing — likely an upstream " +
+                    "auth or quota issue. Try again, or verify your " +
+                    "LLM provider is reachable._"));
+            }
+            // Same defensive markdown pass as /ask — handles literal "\n"
+            // emissions and inline ### headings.
+            String cleaned = ensureHeadingBreaks(unescapeLiteralEscapes(markdown.trim()));
+            return ResponseEntity.ok(new ExplainResponse(mode, cleaned));
+        } catch (Throwable e) {
+            log.warn("explain failed: book={} chapter={} mode={} cause={}",
+                bookId, n, mode, rootCauseSummary(e), e);
+            return ResponseEntity.ok(new ExplainResponse(mode,
+                "_The tutor couldn't draft this right now._\n\n" +
+                "**Error:** " + rootCauseSummary(e)));
+        }
+    }
+
+    public record ExplainRequest(String selection, String mode, String level) {}
+    public record ExplainResponse(String mode, String markdown) {}
 
     // ── /pdf — serve original bytes ─────────────────────────────────
 
