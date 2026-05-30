@@ -285,7 +285,7 @@ export function NoteEditor() {
     {
       icon: <ImageIcon size={13} />, label: 'Visualize',
       hint:  'Diagram the key concept',
-      run:   () => triggerAi(`Produce a clear labelled SVG diagram that visualises the single most important concept in this note. Describe the diagram structure step-by-step so it can be rendered.\n\n---\n\n${noteContext()}`)
+      run:   () => triggerAi(`Visualize the single most important concept in the note below as a labelled diagram. Reply with only a one-sentence caption — the rendered diagram carries the explanation, so do NOT describe an SVG or list drawing steps.\n\n---\n\n${noteContext()}`)
     },
   ];
 
