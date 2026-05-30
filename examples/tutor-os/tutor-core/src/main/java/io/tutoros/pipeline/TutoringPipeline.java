@@ -414,10 +414,22 @@ public class TutoringPipeline {
             }
             events.stageDone(sid, "tutor", null);
 
-            events.message(sid, java.util.Map.of(
-                "body",          tutorResponse,
-                "teachingStyle", "DIRECT"
-            ));
+            // ── Step 4: Visualisation ────────────────────────────────────
+            // Direct mode skips content fetch, so Trigger A (the
+            // requestVisualisation tool sentinel) can never fire here — but
+            // Trigger B (the user/Visualize-button message looking like a
+            // visualise request) still must. Without this the "Visualize"
+            // action silently produces no diagram in direct mode. There's no
+            // grounded text, so pass "" — maybeRunVisualisation sniffs the
+            // concept straight from the message (the FE sends the material
+            // after a "---" fence).
+            VisualAsset asset = maybeRunVisualisation(sid, message, "", session);
+
+            java.util.Map<String, Object> messagePayload = new java.util.LinkedHashMap<>();
+            messagePayload.put("body",          tutorResponse);
+            messagePayload.put("teachingStyle", "DIRECT");
+            if (asset != null) messagePayload.put("visualAsset", asset);
+            events.message(sid, messagePayload);
             events.done(sid);
 
             return PipelineResult.tutor(tutorResponse, "DIRECT", "");
