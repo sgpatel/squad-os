@@ -180,6 +180,46 @@ html { font-size: calc(var(--text-base) * var(--font-scale, 1)); }
 .diagram__fallback-alt    { color: var(--color-text); margin: 0 0 var(--space-2); }
 .diagram__fallback-reason { font-size: 11px; margin: 0; }
 
+/* ── Surface3D (three.js) ──────────────────────────────────────────── */
+.diagram__three { position: relative; display: inline-flex; }
+.diagram__three-host {
+  width: 360px; height: 360px; max-width: 100%;
+  cursor: grab; border-radius: var(--radius-md);
+  touch-action: none; /* let OrbitControls own pointer gestures */
+}
+.diagram__three-host:active { cursor: grabbing; }
+.diagram__three-hint {
+  position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%);
+  font-size: 10px; letter-spacing: .02em; color: var(--color-text-muted);
+  background: var(--color-surface); padding: 1px 8px; border-radius: 999px;
+  opacity: .75; pointer-events: none;
+}
+
+/* ── Function2D (SVG plot) ─────────────────────────────────────────── */
+.diagram__svg--fn { width: 100%; }
+.diagram__fn-grid line     { stroke: var(--color-border); stroke-width: 1; opacity: .45; }
+.diagram__fn-axis line     { stroke: var(--color-text-muted); stroke-width: 1.25; }
+.diagram__fn-label text    { fill: var(--color-text-muted); font-size: 10px; }
+.diagram__fn-legend text   { fill: var(--color-text); font-size: 11px; }
+.diagram__fn-axistitle     { fill: var(--color-text-muted); font-size: 11px; font-style: italic; }
+
+/* ── Mermaid (flow / graph / sequence …) ───────────────────────────── */
+.diagram__mermaid { width: 100%; display: flex; justify-content: center; }
+.diagram__mermaid svg { max-width: 100%; height: auto; }
+
+/* ── Circuit schematic ─────────────────────────────────────────────── */
+.diagram__svg--circuit { width: 100%; }
+.diagram__circuit-wire,
+.diagram__circuit-sym line,
+.diagram__circuit-sym polyline,
+.diagram__circuit-sym path,
+.diagram__circuit-sym circle,
+.diagram__circuit-lead { stroke: var(--color-text); stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.diagram__circuit-mask { fill: var(--color-surface); stroke: none; }
+.diagram__circuit-dot  { fill: var(--color-text); stroke: none; }
+.diagram__circuit-label,
+.diagram__circuit-meter { fill: var(--color-text); font-size: 11px; }
+
 /* ── Sub-tabs (secondary nav inside a hub page) ────────────────────── */
 .subtabs {
   display: flex;
@@ -1150,11 +1190,116 @@ button.concept-chip { font: inherit; }
 .reader__stage {
   flex: 1 1 auto;
   overflow: auto;
-  padding: var(--space-4);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  padding: var(--space-4) 0;
+  /* Position context for the floating selection toolbar (which is a
+     child of the stage's scroll content and uses absolute coords in
+     the scrolled plane). */
+  position: relative;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
+/* The vertical stack of pages — the single scrollable column. */
+.reader__doc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-4);
+  /* Page-snap so PageDown / Space land at a clean page boundary
+     rather than mid-line — gentle (`proximity`) so plain wheel
+     scroll still feels free. */
+  scroll-snap-type: y proximity;
+}
+.reader__page { scroll-snap-align: start; scroll-margin-top: var(--space-3); }
+.reader__page.is-active {
+  /* Subtle ring around the page the active-from-scroll detector
+     picked. Just enough to confirm what the page indicator says
+     without distracting from the prose. */
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.12),
+    0 0 0 2px color-mix(in oklab, var(--color-accent, #6366f1) 35%, transparent);
+}
+/* The imperative render slot — sized to match the page wrapper.
+   Absolutely positioned so it sits on the same plane as manual
+   highlights without consuming a separate row. */
+.reader__page-render {
+  position: absolute;
+  inset: 0;
+}
+/* Page number badge — top-right of every page so a learner who's
+   scrolling fast can scan the running pagination without looking up
+   to the header. Subtle by default; the active page emphasises it. */
+.reader__page-label {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-subtle);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  opacity: 0.55;
+  transition: opacity .14s ease, color .14s ease;
+}
+.reader__page.is-active .reader__page-label {
+  opacity: 1;
+  color: var(--color-accent, #6366f1);
+}
+.reader__page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+.reader__page-input {
+  width: 4ch;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 4px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+.reader__page-input:focus {
+  outline: none;
+  border-color: var(--color-accent, #6366f1);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-accent, #6366f1) 25%, transparent);
+}
+.reader__page-of {
+  font-size: 11px;
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.reader__zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  border-radius: var(--radius-md, 8px);
+}
+.reader__zoom-level {
+  background: transparent;
+  border: 0;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  min-width: 5ch;
+}
+.reader__zoom-level:hover { background: var(--color-bg-subtle); }
 .reader__empty {
   display: flex;
   flex-direction: column;
@@ -1185,6 +1330,225 @@ button.concept-chip { font: inherit; }
   mix-blend-mode: multiply;
   border-radius: 2px;
 }
+
+/* ── Selectable text layer ───────────────────────────────────────
+   Mirrors the upstream pdfjs viewer CSS contract: spans are sized
+   relative to a `--scale-factor` custom property set by the renderer,
+   text colour is transparent so the canvas glyph shows through, and
+   the browser's native selection paints the highlight.
+
+   Why this exact shape:
+     • `font-size: calc(var(--total-scale-factor, 1) * 1px)` is what
+       pdfjs.TextLayer writes inline on each span. Without the var
+       defined, calc() returns 0 and selection collapses → "jittery".
+     • `transform-origin: 0% 0%` keeps the inline scale transforms
+       pinned to each span's top-left so rectangles line up.
+     • `.endOfContent` is a sentinel pdfjs injects to extend the
+       selectable area past the last glyph, so drag-selection past
+       the bottom line still highlights cleanly. */
+.reader__text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 1;
+  line-height: 1;
+  user-select: text;
+  cursor: text;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+  --scale-factor: 1;
+}
+.reader__text-layer span,
+.reader__text-layer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.reader__text-layer span.markedContent {
+  top: 0;
+  height: 0;
+}
+.reader__text-layer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0 0;
+  z-index: -1;
+  cursor: default;
+  user-select: none;
+}
+.reader__text-layer.selecting .endOfContent {
+  top: 0;
+}
+.reader__text-layer ::selection {
+  background: color-mix(in oklab, var(--color-accent, #6366f1) 35%, transparent);
+}
+
+/* ── Highlight palette in header ─────────────────────────────── */
+.reader__palette {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+}
+.reader__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklab, #000 12%, transparent);
+  cursor: pointer;
+  padding: 0;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.reader__swatch:hover { transform: scale(1.12); }
+.reader__swatch.is-active {
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent, #6366f1);
+}
+.reader__swatch--yellow { background: #fff176; }
+.reader__swatch--green  { background: #a5d6a7; }
+.reader__swatch--blue   { background: #90caf9; }
+.reader__swatch--pink   { background: #f48fb1; }
+
+/* ── Manual (persisted) highlight layer ──────────────────────── */
+.reader__manual-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.reader__manual-hl {
+  position: absolute;
+  border: 0;
+  padding: 0;
+  mix-blend-mode: multiply;
+  border-radius: 2px;
+  /* Highlights are decorative — never intercept clicks, otherwise
+     they'd eat text-selection drags that cross over them. */
+  pointer-events: none;
+}
+.reader__manual-hl--yellow { background: color-mix(in oklab, #fff176 78%, transparent); }
+.reader__manual-hl--green  { background: color-mix(in oklab, #a5d6a7 78%, transparent); }
+.reader__manual-hl--blue   { background: color-mix(in oklab, #90caf9 78%, transparent); }
+.reader__manual-hl--pink   { background: color-mix(in oklab, #f48fb1 78%, transparent); }
+
+/* ── Floating selection toolbar ──────────────────────────────── */
+.reader__selection-toolbar {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  z-index: 20;
+  white-space: nowrap;
+  animation: reader-toolbar-in .12s ease-out;
+}
+@keyframes reader-toolbar-in {
+  from { opacity: 0; transform: translate(-50%, calc(-100% + 4px)); }
+  to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+.reader__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.reader__tool:hover { background: var(--color-bg-subtle); }
+.reader__tool--icon { padding: 5px 6px; }
+.reader__tool-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--color-border);
+  margin: 0 2px;
+}
+.reader__tool-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-accent, #6366f1) 14%, var(--color-bg));
+  color: var(--color-accent, #6366f1);
+}
+
+/* ── Inline AI explanation popover ───────────────────────────── */
+.reader__ai-panel {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  width: min(420px, calc(100vw - var(--space-6)));
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+  z-index: 30;
+  animation: reader-toolbar-in .14s ease-out;
+}
+.reader__ai-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+.reader__ai-head > span { flex: 1 1 auto; }
+.reader__ai-close {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  color: var(--color-text-subtle);
+}
+.reader__ai-close:hover { background: var(--color-bg-subtle); }
+.reader__ai-selection {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--color-text-subtle);
+  background: var(--color-bg-subtle);
+  border-bottom: 1px solid var(--color-border);
+  max-height: 5.5em;
+  overflow: auto;
+  border-left: 3px solid var(--color-accent, #6366f1);
+}
+.reader__ai-body {
+  padding: 12px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.reader__ai-loading,
+.reader__ai-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-subtle);
+  font-size: 12px;
+}
+.reader__ai-error { color: var(--color-danger, #b91c1c); flex-wrap: wrap; }
 
 /* "What to do next" strip — closes the learning loop. */
 .recommended {
@@ -2034,8 +2398,20 @@ button.concept-chip { font: inherit; }
 
 /* ── Markdown renderer (.md) ──────────────────────────────────────── */
 .md { color: var(--color-text); line-height: var(--leading-relaxed); }
-.md > * + * { margin-top: var(--space-3); }
+/* Generous default gap between adjacent block children — paragraphs,
+   headings, lists, blockquotes. 12px is too tight once the prose runs
+   beyond a couple of sentences; 16px is the long-form reading sweet
+   spot used by Medium/Substack/etc. */
+.md > * + * { margin-top: var(--space-4); }
+/* Two paragraphs in a row get a slightly larger gap so a chain of
+   short paragraphs doesn't visually run together. */
+.md p + p { margin-top: var(--space-4); }
 .md p { margin: 0; }
+/* Headings get extra breathing room above so a new section is
+   immediately scannable, and a tiny gap below so the following body
+   feels attached to it, not floating. */
+.md > h1 + *, .md > h2 + *, .md > h3 + *, .md > h4 + * { margin-top: var(--space-2); }
+.md > * + h1, .md > * + h2, .md > * + h3, .md > * + h4 { margin-top: var(--space-5); }
 .md strong { font-weight: 600; color: var(--color-text); }
 .md em { font-style: italic; }
 .md a {
@@ -2148,13 +2524,24 @@ button.concept-chip { font: inherit; }
 
 /* KaTeX adjustments — keep math inline-baseline aligned with prose. */
 .md .katex { font-size: 1.05em; }
+/* Block math gets a card-like treatment so a derivation visually
+   detaches from the surrounding prose — the same rhythm a textbook
+   gets from setting equations in a separate column. */
 .md .katex-display {
-  margin: var(--space-4) 0;
-  padding: var(--space-3);
+  margin: var(--space-5) 0;
+  padding: var(--space-4) var(--space-3);
   overflow-x: auto;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  text-align: center;
+}
+/* Inline math gets a tiny tinted halo so it doesn't melt into the
+   prose around it — same affordance code spans get. */
+.md .katex:not(.katex-display .katex) {
+  padding: 0 0.15em;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--color-accent, #6366f1) 6%, transparent);
 }
 
 /* ── A11y utilities ───────────────────────────────────────────────── */

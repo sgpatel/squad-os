@@ -1,3 +1,8 @@
+## v3.10.0 (in development)
+
+Next development cycle. Version bumped from 3.9.0 across all modules; no
+functional changes yet.
+
 ## v3.9.0 (2026-04-14) — Tier 1/2/3 Feature Complete + TutorOS Reference App
 
 ### TutorOS — Personalised AI Tutoring System (`examples/tutor-os`)

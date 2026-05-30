@@ -475,7 +475,12 @@ export interface Syllabus {
  * `<Diagram />` component routes by `type` and parses `specJson` once.
  */
 export interface VisualAsset {
-  type: 'chem' | 'plot' | 'geometry' | 'freebody' | 'flow' | 'circuit';
+  type:
+    | 'chem' | 'plot' | 'geometry' | 'freebody'
+    | 'surface3d'   // three.js — z=f(x,y), 3D curves, vector fields
+    | 'function2d'  // SVG — y=f(x) / parametric / polar from a formula
+    | 'flow'        // Mermaid — flowcharts, state, sequence, trees
+    | 'circuit';    // SVG schematic — series-loop netlist
   concept: string;
   title: string;
   caption?: string;

@@ -250,7 +250,7 @@ export function ChatMessage({ msg, onOpenSyllabus, onQuickReply }: Props) {
             </button>
             <button
               type="button" className="msg__followup" disabled={isRunning}
-              onClick={() => followUp(`Produce a clear labelled SVG diagram that visualises the single most important concept in the material below. Describe the diagram structure step-by-step.\n\n---\n\n${excerpt()}`)}
+              onClick={() => followUp(`Visualize the single most important concept in the material below as a labelled diagram. Reply with only a one-sentence caption — the rendered diagram carries the explanation, so do NOT describe an SVG or list drawing steps.\n\n---\n\n${excerpt()}`)}
               title="Visualize"
             >
               <Sparkles size={11} /> Visualize

@@ -17,10 +17,14 @@ import type { VisualAsset } from '@/lib/types';
 
 // Lazy renderers — keep the route chunk small for learners who never
 // trigger a visual. Each chunk is <60 KB gz on its own; loaded on demand.
-const ChemRenderer     = lazy(() => import('./renderers/Chem').then(m => ({ default: m.Chem })));
-const PlotRenderer     = lazy(() => import('./renderers/Plot').then(m => ({ default: m.Plot })));
-const GeometryRenderer = lazy(() => import('./renderers/Geometry').then(m => ({ default: m.Geometry })));
-const FreebodyRenderer = lazy(() => import('./renderers/Freebody').then(m => ({ default: m.Freebody })));
+const ChemRenderer      = lazy(() => import('./renderers/Chem').then(m => ({ default: m.Chem })));
+const PlotRenderer      = lazy(() => import('./renderers/Plot').then(m => ({ default: m.Plot })));
+const GeometryRenderer  = lazy(() => import('./renderers/Geometry').then(m => ({ default: m.Geometry })));
+const FreebodyRenderer  = lazy(() => import('./renderers/Freebody').then(m => ({ default: m.Freebody })));
+const Surface3DRenderer = lazy(() => import('./renderers/Surface3D').then(m => ({ default: m.Surface3D })));
+const Function2DRenderer = lazy(() => import('./renderers/Function2D').then(m => ({ default: m.Function2D })));
+const MermaidRenderer   = lazy(() => import('./renderers/Mermaid').then(m => ({ default: m.Mermaid })));
+const CircuitRenderer   = lazy(() => import('./renderers/Circuit').then(m => ({ default: m.Circuit })));
 
 export function Diagram({ asset }: { asset: VisualAsset }) {
   const { spec, parseError } = parseSpec(asset.specJson);
@@ -54,6 +58,26 @@ export function Diagram({ asset }: { asset: VisualAsset }) {
             ) : renderer === 'freebody' ? (
               <FreebodyRenderer
                 spec={spec as ComponentProps<typeof FreebodyRenderer>['spec']}
+                altText={asset.altText}
+              />
+            ) : renderer === 'surface3d' ? (
+              <Surface3DRenderer
+                spec={spec as ComponentProps<typeof Surface3DRenderer>['spec']}
+                altText={asset.altText}
+              />
+            ) : renderer === 'function2d' ? (
+              <Function2DRenderer
+                spec={spec as ComponentProps<typeof Function2DRenderer>['spec']}
+                altText={asset.altText}
+              />
+            ) : renderer === 'flow' ? (
+              <MermaidRenderer
+                spec={spec as ComponentProps<typeof MermaidRenderer>['spec']}
+                altText={asset.altText}
+              />
+            ) : renderer === 'circuit' ? (
+              <CircuitRenderer
+                spec={spec as ComponentProps<typeof CircuitRenderer>['spec']}
                 altText={asset.altText}
               />
             ) : (
@@ -116,12 +140,18 @@ function parseSpec(raw: string | undefined | null): { spec: unknown; parseError:
   }
 }
 
-function pickRenderer(type: VisualAsset['type']): 'chem' | 'plot' | 'geometry' | 'freebody' | null {
-  if (type === 'chem')     return 'chem';
-  if (type === 'plot')     return 'plot';
-  if (type === 'geometry') return 'geometry';
-  if (type === 'freebody') return 'freebody';
-  return null; // flow / circuit — future renderers
+function pickRenderer(
+  type: VisualAsset['type'],
+): 'chem' | 'plot' | 'geometry' | 'freebody' | 'surface3d' | 'function2d' | 'flow' | 'circuit' | null {
+  if (type === 'chem')       return 'chem';
+  if (type === 'plot')       return 'plot';
+  if (type === 'geometry')   return 'geometry';
+  if (type === 'freebody')   return 'freebody';
+  if (type === 'surface3d')  return 'surface3d';
+  if (type === 'function2d') return 'function2d';
+  if (type === 'flow')       return 'flow';     // Mermaid
+  if (type === 'circuit')    return 'circuit';
+  return null;
 }
 
 function DiagramSkeleton() {

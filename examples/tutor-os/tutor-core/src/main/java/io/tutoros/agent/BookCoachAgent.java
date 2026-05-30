@@ -96,6 +96,112 @@ public class BookCoachAgent {
         };
     }
 
+    // ── Selection-context AI (advanced reader) ──────────────────────
+
+    /** Modes the reader can request when the learner highlights text. */
+    public static final String EXPLAIN_MODE_EXPLAIN  = "explain";
+    public static final String EXPLAIN_MODE_SIMPLIFY = "simplify";
+    public static final String EXPLAIN_MODE_DEFINE   = "define";
+
+    /** Lenient normaliser for the explain mode param. */
+    public static String normalizeExplainMode(String raw) {
+        if (raw == null) return EXPLAIN_MODE_EXPLAIN;
+        String m = raw.trim().toLowerCase();
+        return switch (m) {
+            case EXPLAIN_MODE_EXPLAIN, EXPLAIN_MODE_SIMPLIFY, EXPLAIN_MODE_DEFINE -> m;
+            default -> EXPLAIN_MODE_EXPLAIN;
+        };
+    }
+
+    /**
+     * Tight, grounded response to "the learner highlighted this text
+     * inside the chapter — explain/simplify/define it." Returns
+     * PURE markdown (no JSON) so the reader can pipe it through
+     * &lt;Markdown&gt; without a parsing step.
+     *
+     * <p>Three modes target distinct reading-failure patterns:
+     * <ul>
+     *   <li><b>explain</b> — selection is a sentence the learner
+     *       doesn't follow. 2–3 paragraph unpacking grounded in
+     *       chapter context.</li>
+     *   <li><b>simplify</b> — selection is dense. Rewrite one Bloom
+     *       level lower with concrete examples and an analogy.</li>
+     *   <li><b>define</b> — selection is a single term. 2–3 sentence
+     *       definition + one concrete example.</li>
+     * </ul>
+     */
+    public String selectionExplainPrompt(String chapterTitle, String chapterBody,
+                                         String selection, String mode,
+                                         String learnerLevel) {
+        String m = normalizeExplainMode(mode);
+        String body = chapterBody == null ? "" : chapterBody;
+        if (body.length() > 4000) body = body.substring(0, 4000) + "\n…";
+
+        String instructions = switch (m) {
+            case EXPLAIN_MODE_DEFINE -> """
+                The selection is a TERM the learner wants defined.
+                Output:
+                  - First line: bold the term, then a 1-sentence definition.
+                  - Second paragraph: ONE concrete example showing the term in use.
+                  - 30–80 words total. No filler.
+                """;
+            case EXPLAIN_MODE_SIMPLIFY -> """
+                The selection is DENSE prose the learner couldn't parse.
+                Rewrite it at one Bloom level below the chapter's complexity:
+                  - Use concrete nouns and shorter sentences.
+                  - Replace jargon with the plainest equivalent that's still correct.
+                  - Add ONE everyday-life analogy (a 1-sentence comparison).
+                Keep total length to 60–120 words. Markdown OK.
+                """;
+            default -> """
+                The selection is a sentence/passage the learner doesn't follow.
+                Unpack it in 2–3 short paragraphs:
+                  - Paragraph 1: what the selection is SAYING (paraphrase).
+                  - Paragraph 2: why it MATTERS in the chapter's context.
+                  - Paragraph 3 (optional): a follow-up the learner can think about.
+                Stay anchored to the chapter — no outside facts.
+                Total length 80–180 words. Markdown OK.
+                """;
+        };
+
+        return """
+            You are a textbook tutor helping a learner read this chapter.
+            They highlighted a passage and asked you to %s it.
+
+            Chapter title: %s
+            Selected text:
+            ----
+            %s
+            ----
+
+            Chapter context (for grounding — DO NOT quote it back):
+            ----
+            %s
+            ----
+
+            Learner level: %s
+
+            %s
+
+            CRITICAL OUTPUT FORMAT:
+              - Respond with PURE MARKDOWN only — no JSON, no code fences
+                around the whole reply, no preamble like "Here is…".
+              - Start with the answer directly.
+              - If you quote the selection, use blockquote (> ...) sparingly.
+              - For MATH, use KaTeX dollar delimiters:
+                  • inline math:  $E[X]$
+                  • block math:   $$E[X] = \\int_{-\\infty}^{\\infty} x\\,p(x)\\,dx$$
+                Do NOT use \\( \\) or \\[ \\] — only $ … $ and $$ … $$.
+                Put block math on its own line with blank lines above and below.
+                Keep each expression whole inside ONE matched pair of $…$ —
+                the function name and its parentheses go INSIDE the dollars
+                ($P(x_i \\mid \\theta)$, never P$(x_i \\mid \\theta)$ nor a stray
+                unmatched $). Use \\mid for a conditional bar, not a bare "|",
+                and never mix unicode math glyphs (θ, ∑, ∣) with LaTeX macros.
+            """.formatted(
+                m, chapterTitle, selection, body, learnerLevel, instructions);
+    }
+
     /**
      * Single entry point — builds the prompt for the supplied mode.
      * Splits internally by mode rather than exposing six public
@@ -165,10 +271,41 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
+            CRITICAL FORMATTING for the body field — these rules are
+            the difference between a polished response and an unreadable
+            wall of text. Follow them exactly:
+
+              1. Structure the body with these THREE markdown headings,
+                 in order, each on its own line preceded by a blank line:
+                   ### Core Explanation
+                   ### Real-World Analogy
+                   ### Concrete Example
+                 Do NOT use inline labels like "Core Explanation:" — they
+                 render as one long paragraph. Use the ### heading form.
+
+              2. Put a BLANK LINE between every paragraph. Real newlines,
+                 not the characters backslash-n.
+
+              3. For math, use KaTeX dollar delimiters:
+                   • inline math:  $\\theta$ , $E[X]$
+                   • block  math:  $$\\arg\\max_\\theta\\,p(D \\mid \\theta)$$
+                 Block math goes on its OWN line with blank lines above
+                 and below. Never use \\( \\) or \\[ \\] — only $ and $$.
+                 Keep EACH expression whole inside ONE matched pair of
+                 $…$: every $ must be closed, and the function name AND
+                 its parentheses live INSIDE the dollars — write
+                 $P(x_i \\mid \\theta)$, never P$(x_i \\mid \\theta)$ nor a
+                 stray unmatched $. Use \\mid for a conditional bar, not a
+                 bare "|". NEVER mix unicode math glyphs (θ, ∑, ∣, ≤, ×)
+                 with LaTeX — always the macro form (\\theta, \\sum, \\mid).
+
+              4. Bold key terms with **double asterisks** the first time
+                 they appear so the eye lands on them.
+
             {
               "mode":        "basic",
               "concept":     "%s",
-              "body":        "<2–3 short paragraphs in markdown. Define the concept, name its parts, and pin down ONE concrete example FROM THE CHAPTER.>",
+              "body":        "<markdown body following the structure above>",
               "question":    "<one-sentence recall question asking the learner to restate the core idea in their own words>",
               "modelAnswer": "<the ideal short-answer response, 2–3 sentences. Used by the grader.>",
               "difficulty":  "EASY",
@@ -204,10 +341,37 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
+            CRITICAL FORMATTING for the body field:
+
+              1. Structure with these markdown headings, in order, each
+                 preceded by a blank line:
+                   ### Setup
+                   ### Worked Solution
+                   ### Why this works
+                 Use the ### heading form, not inline "Setup:" labels.
+
+              2. Put a BLANK LINE between every paragraph and between
+                 each numbered step. Real newlines, not backslash-n.
+
+              3. For math, use KaTeX dollar delimiters:
+                   • inline math:  $\\theta$ , $E[X]$
+                   • block  math:  $$L(\\theta) = \\sum_i \\log p(x_i \\mid \\theta)$$
+                 Block math goes on its OWN line with blank lines above
+                 and below. Never use \\( \\) or \\[ \\] — only $ and $$.
+                 Keep EACH expression whole inside ONE matched pair of
+                 $…$: every $ must be closed, and the function name AND
+                 its parentheses live INSIDE the dollars — write
+                 $P(x_i \\mid \\theta)$, never P$(x_i \\mid \\theta)$ nor a
+                 stray unmatched $. Use \\mid for a conditional bar, not a
+                 bare "|". NEVER mix unicode math glyphs (θ, ∑, ∣, ≤, ×)
+                 with LaTeX — always the macro form (\\theta, \\sum, \\mid).
+
+              4. Number the steps with "1.", "2.", "3." on separate lines.
+
             {
               "mode":        "intermediate",
               "concept":     "%s",
-              "body":        "<ONE worked example in markdown that applies %s to a problem. Show the steps. Use the chapter's notation.>",
+              "body":        "<markdown body following the structure above, applying %s to a worked problem with the chapter's notation>",
               "question":    "<a fresh problem solved with the same method (NOT identical to the worked example). Specific, not vague.>",
               "modelAnswer": "<the worked solution to the question, 4–6 lines, step-by-step>",
               "difficulty":  "MEDIUM",
@@ -245,10 +409,37 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
+            CRITICAL FORMATTING for the body field:
+
+              1. Structure with these markdown headings, in order, each
+                 preceded by a blank line:
+                   ### The non-obvious bit
+                   ### Connection to other concepts
+                   ### When this breaks
+                 Use the ### heading form, not inline labels.
+
+              2. Put a BLANK LINE between every paragraph. Real newlines,
+                 not backslash-n.
+
+              3. For math, use KaTeX dollar delimiters:
+                   • inline math:  $\\theta$
+                   • block  math:  $$\\mathrm{KL}(p \\| q) = \\int p\\log\\frac{p}{q}\\,dx$$
+                 Block math goes on its OWN line with blank lines above
+                 and below. Never use \\( \\) or \\[ \\] — only $ and $$.
+                 Keep EACH expression whole inside ONE matched pair of
+                 $…$: every $ must be closed, and the function name AND
+                 its parentheses live INSIDE the dollars — write
+                 $P(x_i \\mid \\theta)$, never P$(x_i \\mid \\theta)$ nor a
+                 stray unmatched $. Use \\mid for a conditional bar, not a
+                 bare "|". NEVER mix unicode math glyphs (θ, ∑, ∣, ≤, ×)
+                 with LaTeX — always the macro form (\\theta, \\sum, \\mid).
+
+              4. Bold technical terms on first use.
+
             {
               "mode":        "advanced",
               "concept":     "%s",
-              "body":        "<2 paragraphs surfacing a non-obvious aspect of %s — a limitation, an edge case, or a connection to another concept the learner has likely seen.>",
+              "body":        "<markdown body following the structure above, surfacing non-obvious aspects of %s>",
               "question":    "<an open-ended question asking the learner to either compare %s to a related concept (when does each apply?) or evaluate a non-trivial claim about it>",
               "modelAnswer": "<a 4–6 sentence model answer showing the reasoning a strong learner would produce>",
               "difficulty":  "HARD",

@@ -8,7 +8,7 @@
   <parent>
     <groupId>io.github.sgpatel</groupId>
     <artifactId>squad-os</artifactId>
-    <version>3.9.0</version>
+    <version>3.10.0</version>
   </parent>
 
   <artifactId>squad-dashboard-api</artifactId>

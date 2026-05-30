@@ -27,6 +27,92 @@ class BookExtractionServiceTest {
 
     private final BookExtractionService svc = new BookExtractionService();
 
+    // ── Layer 0 — Table of Contents (authoritative) ──────────────────
+
+    @Test
+    void detectsRealChaptersFromTableOfContents() {
+        // A "Contents" block lists the real chapters; the body carries
+        // running headers ("Chapter N. Title") the locator anchors on.
+        List<String> pages = List.of(
+            "Contents\n1 Introduction 1\n2 Probability 3\n" +
+                "3 Statistics 5\n4 Optimization 7\n",                          // p1: TOC
+            "Chapter 1. Introduction\nWhat machine learning is about.\n",      // p2
+            "10 Chapter 1. Introduction\nMore intro narrative here.\n",        // p3
+            "Chapter 2. Probability\nRandom variables and Bayes rule.\n",      // p4
+            "30 Chapter 2. Probability\nDistributions discussed at length.\n", // p5
+            "Chapter 3. Statistics\nMaximum likelihood estimation.\n",         // p6
+            "Chapter 4. Optimization\nGradient descent and convexity.\n"       // p7
+        );
+        Book book = svc.buildBookFromPages(pages, L, S, "ML Book", "Murphy");
+
+        assertEquals(4, book.chapters().size(),
+            "TOC layer must produce exactly the four listed chapters");
+        assertEquals("Chapter 1: Introduction", book.chapters().get(0).title);
+        assertEquals("Chapter 2: Probability",  book.chapters().get(1).title);
+        assertEquals("Chapter 3: Statistics",   book.chapters().get(2).title);
+        assertEquals("Chapter 4: Optimization", book.chapters().get(3).title);
+
+        // Page ranges come from where the running header is found in the body.
+        assertEquals(2, book.chapters().get(0).pageStart);
+        assertEquals(4, book.chapters().get(1).pageStart);
+        assertEquals(6, book.chapters().get(2).pageStart);
+        assertEquals(7, book.chapters().get(3).pageStart);
+
+        // No page-window shredding and no heading line bleeding into the body.
+        for (Chapter c : book.chapters()) {
+            assertFalse(c.title.contains("Section "), "TOC chapters must not be page-sliced");
+            assertFalse(c.title.startsWith("Pages "),  "TOC must beat the bucket fallback");
+        }
+        assertTrue(book.chapters().get(1).body.contains("Random variables"));
+    }
+
+    @Test
+    void tocPrefersChaptersOverPartDividers() {
+        // Reproduces the Murphy failure: Part dividers ("I Foundations")
+        // and a prose mention of a Part must NOT become chapters. Only the
+        // numbered chapter lines do.
+        List<String> pages = List.of(
+            "Brief Contents\n1 Introduction 1\nI Foundations 3\n" +
+                "2 Probability 3\n3 Statistics 5\nII Linear Models 7\n" +
+                "4 Regression 7\nA Notation 9\n",                              // p1: TOC w/ parts
+            "Chapter 1. Introduction\nSupervised learning is covered in Part II.\n",
+            "Chapter 2. Probability\nRandom variables and distributions.\n",
+            "Chapter 3. Statistics\nEstimation theory and inference.\n",
+            "Chapter 4. Regression\nLeast squares and ridge regression.\n",
+            "Appendix A. Notation\nSymbols used throughout the book.\n"
+        );
+        Book book = svc.buildBookFromPages(pages, L, S, "PML", "Murphy");
+
+        // 4 numbered chapters + 1 appendix; Parts I/II are skipped.
+        assertEquals(5, book.chapters().size());
+        for (Chapter c : book.chapters()) {
+            assertFalse(c.title.contains("Foundations"),
+                "Part dividers must not be promoted to chapters: " + c.title);
+            assertFalse(c.title.contains("Linear Models"), c.title);
+            assertFalse(c.title.contains("Section "), "no page-window shredding");
+        }
+        assertEquals("Chapter 1: Introduction", book.chapters().get(0).title);
+        assertEquals("Appendix A: Notation",    book.chapters().get(4).title);
+    }
+
+    @Test
+    void tocDeduplicatesBriefAndDetailedContents() {
+        // A book with BOTH a brief and a detailed TOC. We must capture the
+        // first complete run and stop when the chapter numbering restarts,
+        // not double every chapter.
+        List<String> pages = List.of(
+            "Brief Contents\n1 Intro 1\n2 Probability 3\n3 Statistics 5\n" +
+                "Contents\n1 Intro 1\n1.1 What is ML 1\n1.2 Data 2\n" +
+                "2 Probability 3\n2.1 Random variables 3\n3 Statistics 5\n",
+            "Chapter 1. Intro\nbody one\n",
+            "Chapter 2. Probability\nbody two\n",
+            "Chapter 3. Statistics\nbody three\n"
+        );
+        Book book = svc.buildBookFromPages(pages, L, S, "Dup", null);
+        assertEquals(3, book.chapters().size(),
+            "brief+detailed TOC must not double the chapter list");
+    }
+
     // ── Layer 1 — "Chapter N" headings ───────────────────────────────
 
     @Test
@@ -248,6 +334,36 @@ class BookExtractionServiceTest {
             assertFalse(c.startsWith("the "),
                 "stop-prefix 'the ' must be filtered: " + c);
         }
+    }
+
+    @Test
+    void rejectsReferenceCreditAndTitleNoiseFromConcepts() {
+        // Mirrors the real "Anchored on" junk: figure references, table
+        // labels, figure-credit author names, and the book's own title
+        // (which repeats in the running footer) must all be filtered.
+        String body = """
+            From Figure 2.3 we see the Gaussian Distribution. The Virginica
+            Table lists Setosa Versicolor samples. Used with kind permission
+            of Andrej Karpathy. Probabilistic Machine Learning footer repeats.
+            The Central Limit Theorem and Maximum Likelihood are key here.
+            Central Limit Theorem appears again for emphasis.
+            """;
+        List<String> concepts = BookExtractionService.extractConcepts(
+            body, "Probabilistic Machine Learning", "machine learning");
+
+        // Junk must be gone.
+        assertFalse(concepts.contains("from figure"),  "figure reference must be filtered");
+        assertFalse(concepts.contains("virginica table"), "table reference must be filtered");
+        assertFalse(concepts.contains("probabilistic machine learning"),
+            "the book title (running footer) must be excluded");
+        for (String c : concepts) {
+            assertFalse(c.contains("figure") || c.contains("table"),
+                "no reference noun should survive: " + c);
+        }
+        // A genuine, recurring concept survives and ranks first by frequency.
+        assertFalse(concepts.isEmpty());
+        assertEquals("central limit theorem", concepts.get(0),
+            "the recurring subject term should rank ahead of one-off phrases");
     }
 
     @Test

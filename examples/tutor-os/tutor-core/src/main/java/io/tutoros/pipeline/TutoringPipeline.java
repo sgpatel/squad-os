@@ -414,10 +414,22 @@ public class TutoringPipeline {
             }
             events.stageDone(sid, "tutor", null);
 
-            events.message(sid, java.util.Map.of(
-                "body",          tutorResponse,
-                "teachingStyle", "DIRECT"
-            ));
+            // ── Step 4: Visualisation ────────────────────────────────────
+            // Direct mode skips content fetch, so Trigger A (the
+            // requestVisualisation tool sentinel) can never fire here — but
+            // Trigger B (the user/Visualize-button message looking like a
+            // visualise request) still must. Without this the "Visualize"
+            // action silently produces no diagram in direct mode. There's no
+            // grounded text, so pass "" — maybeRunVisualisation sniffs the
+            // concept straight from the message (the FE sends the material
+            // after a "---" fence).
+            VisualAsset asset = maybeRunVisualisation(sid, message, "", session);
+
+            java.util.Map<String, Object> messagePayload = new java.util.LinkedHashMap<>();
+            messagePayload.put("body",          tutorResponse);
+            messagePayload.put("teachingStyle", "DIRECT");
+            if (asset != null) messagePayload.put("visualAsset", asset);
+            events.message(sid, messagePayload);
             events.done(sid);
 
             return PipelineResult.tutor(tutorResponse, "DIRECT", "");
@@ -818,6 +830,18 @@ public class TutoringPipeline {
     private static String sniffConceptFromMessage(String message) {
         if (message == null || message.isBlank()) return null;
         String m = message.trim();
+
+        // The FE "Visualize" actions send "<imperative> \n\n---\n\n <material>".
+        // The imperative ("visualize the most important concept …") is NOT the
+        // concept — the MATERIAL after the fence is. Prefer it so the agent
+        // picks a render type from "The Gaussian distribution …", not from the
+        // instruction wrapper (which would route everything to a default plot).
+        int fence = m.lastIndexOf("---");
+        if (fence >= 0) {
+            String after = m.substring(fence + 3).replaceFirst("^[-\\s]+", "").trim();
+            if (after.length() >= 12) m = after;
+        }
+
         String lower = m.toLowerCase();
         String[] prefixes = {
             "show me the structure of ", "show me the structure for ",
@@ -829,7 +853,7 @@ public class TutoringPipeline {
             "plot of ",                "plot the ",
             "graph of ",               "graph the ",
             "structure of ",
-            "visualise ", "visualize ",
+            "visualise ", "visualize ", "visualises ", "visualizes ",
             "render ", "sketch ", "illustrate "
         };
         for (String pfx : prefixes) {
@@ -846,8 +870,16 @@ public class TutoringPipeline {
                 if (!tail.isBlank()) return tail;
             }
         }
-        // No prefix matched — use the message as-is, trimmed to keep prompts tight.
-        return m.length() > 160 ? m.substring(0, 160) : m;
+        // No prefix matched (e.g. the material after a '---' fence) — use the
+        // first sentence as the concept so the agent gets a tight topic, not a
+        // wall of text. Cap length to keep the visual prompt focused.
+        int cut = -1;
+        for (char c : new char[] { '.', '?', '!', '\n' }) {
+            int k = m.indexOf(c);
+            if (k > 0 && (cut < 0 || k < cut)) cut = k;
+        }
+        String first = (cut > 0) ? m.substring(0, cut).trim() : m;
+        return first.length() > 160 ? first.substring(0, 160).trim() : first;
     }
 
     /**

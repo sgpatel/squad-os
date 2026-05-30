@@ -86,6 +86,18 @@ public class BookExtractionService {
     static final int MAX_CONCEPTS_PER_CHAPTER = 8;
 
     /**
+     * Max number of consecutive non-entry lines tolerated inside a Table
+     * of Contents block before we decide the TOC has ended. Running
+     * headers / footers ("viii BRIEF CONTENTS", a copyright line) show up
+     * as one or two stray lines between real entries, so a small window
+     * keeps the block contiguous without bleeding into body text.
+     */
+    private static final int TOC_GAP_LIMIT = 8;
+
+    /** Hard cap on lines scanned while parsing a TOC block. */
+    private static final int TOC_MAX_LINES = 800;
+
+    /**
      * Safety net for textbooks where heading detection succeeds at the
      * top level but misses sub-sections — e.g. Murphy's "Probabilistic
      * Machine Learning" where each chapter spans 50+ pages but the
@@ -133,6 +145,62 @@ public class BookExtractionService {
     /** Capitalised noun-phrase (2–4 words) used for concept extraction. */
     private static final Pattern CONCEPT_PATTERN = Pattern.compile(
         "\\b([A-Z][a-z]{3,}(?:\\s+[A-Z][a-z]{3,}){1,3})\\b");
+
+    // ── Table-of-Contents patterns (layer 0, most authoritative) ─────
+
+    /** A "Contents" / "Brief Contents" / "Table of Contents" heading line. */
+    private static final Pattern TOC_HEADING = Pattern.compile(
+        "(?i)^(brief contents|table of contents|contents)$");
+
+    /**
+     * A chapter line in a TOC: a 1–2 digit chapter number, a title, then
+     * a trailing printed page number. The title is non-greedy so the LAST
+     * run of digits is taken as the page. Dotted sub-section numbers
+     * ("2.1 …") never match because "2" must be followed by whitespace.
+     */
+    private static final Pattern TOC_CHAPTER = Pattern.compile(
+        "^(\\d{1,2})\\s+(\\p{L}.*?)\\s+(\\d{1,4})$");
+
+    /** A Part divider in a TOC: a Roman numeral, a title, a page. Skipped. */
+    private static final Pattern TOC_PART = Pattern.compile(
+        "^([IVXLCDM]{1,5})\\s+(\\p{L}.*?)\\s+(\\d{1,4})$");
+
+    /** An appendix line: a single (non-Roman) capital letter, title, page. */
+    private static final Pattern TOC_APPENDIX = Pattern.compile(
+        "^([A-Z])\\s+(\\p{L}.*?)\\s+(\\d{1,4})$");
+
+    /**
+     * Words that disqualify a candidate concept phrase if they appear
+     * anywhere in it. The capitalised-noun-phrase regex is structurally
+     * blind, so it happily grabs figure/table references ("From Figure",
+     * "Virginica Table"), structural headings ("Introduction Estimate …"),
+     * and figure-credit boilerplate that surrounds author names ("Used
+     * with kind permission of …"). Rejecting any phrase containing one of
+     * these keeps the "Anchored on" tags — and the mastery-graph keys they
+     * become — to actual subject-matter terms.
+     */
+    private static final Set<String> CONCEPT_STOPWORDS = Set.of(
+        // discourse glue that gets Title-cased at line/sentence starts
+        "the", "this", "that", "these", "those", "there",
+        "from", "using", "used", "suppose", "consider", "recall", "let",
+        "thus", "hence", "where", "when", "given", "above", "below",
+        "following", "here", "then", "with", "into", "over", "your",
+        // structural / reference nouns. NB: words that often form real
+        // concept names (theorem, lemma, algorithm, definition, …) are
+        // deliberately NOT here — "Central Limit Theorem" / "EM Algorithm"
+        // are concepts, whereas "Figure 2.3" / "Table 4" are pure refs.
+        "figure", "figures", "table", "tables", "section", "sections",
+        "chapter", "chapters", "equation", "equations", "example", "examples",
+        "appendix", "exercise", "exercises", "page", "pages",
+        "part", "volume", "edition", "introduction", "conclusion", "summary",
+        "left", "right", "top", "bottom", "middle", "row", "column",
+        // figure-credit boilerplate that brackets author names
+        "permission", "courtesy", "kind", "adapted", "reproduced",
+        "source", "credit", "author", "copyright", "press", "license");
+
+    /** A sub-section line ("2.1 …", "2.6.4 …") — present only in the detailed TOC. Skipped. */
+    private static final Pattern TOC_DOTTED = Pattern.compile(
+        "^\\d{1,2}\\.\\d.*");
 
     /** PDFBox sticks a form-feed between pages — used to compute page ranges. */
     private static final String PAGE_SEP = "\f";
@@ -220,19 +288,40 @@ public class BookExtractionService {
         }
         String text = full.toString();
 
-        // Run the three detection layers until one yields enough headings.
-        List<Heading> headings = detectHeadings(text);
-        if (headings.size() < MIN_DETECTED_CHAPTERS) {
-            book.chapters = fallbackBucketChapters(pages);
+        // ── Layer 0: Table of Contents (most authoritative) ──────────
+        // A well-formed textbook lists its real chapters in a "Contents"
+        // / "Brief Contents" block. Parsing that gives the true chapter
+        // titles and order — and crucially avoids the failure mode where
+        // the regex layers latch onto coarse "Part I … V" dividers (or
+        // prose that mentions "Part II") and shred a 300-page Part into
+        // arbitrary page windows. We keep these chapters whole (no
+        // oversize split) because their boundaries are real, not guessed.
+        List<Chapter> toc = chaptersFromToc(text, pages, pageEnds);
+        if (toc != null && toc.size() >= MIN_DETECTED_CHAPTERS) {
+            book.chapters = toc;
         } else {
-            book.chapters = chaptersFromHeadings(headings, text, pageEnds);
-            // Safety net: replace any detected chapter that spans more
-            // pages than CHAPTER_PAGE_SAFETY with page-bucket sub-segments.
-            // Catches the failure mode where top-level chapter detection
-            // works but sub-section detection misses, leaving the learner
-            // with one 290-page mega-chapter whose body excerpt is too
-            // generic for the LLM to ground on.
-            book.chapters = splitOversizedChapters(book.chapters, pages);
+            // Run the three detection layers until one yields enough headings.
+            List<Heading> headings = detectHeadings(text);
+            if (headings.size() < MIN_DETECTED_CHAPTERS) {
+                book.chapters = fallbackBucketChapters(pages);
+            } else {
+                book.chapters = chaptersFromHeadings(headings, text, pageEnds);
+                // Safety net: replace any detected chapter that spans more
+                // pages than CHAPTER_PAGE_SAFETY with page-bucket sub-segments.
+                // Catches the failure mode where top-level chapter detection
+                // works but sub-section detection misses, leaving the learner
+                // with one 290-page mega-chapter whose body excerpt is too
+                // generic for the LLM to ground on.
+                book.chapters = splitOversizedChapters(book.chapters, pages);
+            }
+        }
+
+        // Re-derive concept tags now that the book title/subject are known,
+        // so the running footer (the book's own title) and structural words
+        // ("From Figure", "Virginica Table") don't pollute the "Anchored on"
+        // tags or the mastery-graph keys they become.
+        for (Chapter c : book.chapters) {
+            c.setConcepts(extractConcepts(c.body, book.title, book.subject));
         }
         return book;
     }
@@ -291,6 +380,181 @@ public class BookExtractionService {
         for (int i = 0; i < out.size(); i++) out.get(i).number = i + 1;
         return out;
     }
+
+    // ── Layer 0: Table-of-Contents detection ─────────────────────────
+
+    /**
+     * Parse the book's Table of Contents into real chapters, then locate
+     * each chapter's start in the body so we get accurate page ranges.
+     *
+     * <p>Returns {@code null} (so the caller falls back to the regex
+     * layers) when there's no usable "Contents" block or fewer than
+     * {@link #MIN_DETECTED_CHAPTERS} entries are found.
+     *
+     * <p>Why this is the top layer: a TOC lists the <i>actual</i> chapters
+     * an author intended, in order, with titles. The lower regex layers
+     * can be fooled by Part dividers ("Part I Foundations") or running
+     * headers; the TOC cannot.
+     */
+    static List<Chapter> chaptersFromToc(String text, List<String> pages, int[] pageEnds) {
+        TocResult toc = parseToc(text);
+        if (toc == null || toc.entries.size() < MIN_DETECTED_CHAPTERS) return null;
+
+        List<TocEntry> entries = toc.entries;
+        // Locate each chapter's start offset in the body with a forward-only
+        // cursor so the matches stay in reading order and a title that also
+        // appears in earlier prose can't drag a chapter backwards.
+        String lower = text.toLowerCase();
+        int[] starts = new int[entries.size()];
+        int cursor = toc.endOffset;
+        for (int i = 0; i < entries.size(); i++) {
+            int off = locateChapterStart(lower, entries.get(i), cursor);
+            starts[i] = off;
+            cursor = off + 1;
+        }
+
+        List<Chapter> out = new ArrayList<>();
+        for (int i = 0; i < entries.size(); i++) {
+            int from = starts[i];
+            int to   = (i + 1 < entries.size()) ? starts[i + 1] : text.length();
+            if (to < from) to = from;
+            // Skip the heading/running-header line when carving the body.
+            int bodyStart = text.indexOf('\n', from);
+            if (bodyStart < 0 || bodyStart > to) bodyStart = from;
+            String body = text.substring(bodyStart, to).trim();
+
+            Chapter c = new Chapter();
+            c.number    = i + 1;
+            c.title     = tocTitleLabel(entries.get(i).num, entries.get(i).title);
+            c.body      = trimBody(body);
+            c.summary   = Chapter.defaultSummary(c.body);
+            c.pageStart = pageOf(from, pageEnds);
+            c.pageEnd   = pageOf(Math.max(from, to - 1), pageEnds);
+            c.setConcepts(extractConcepts(body));
+            out.add(c);
+        }
+        return out;
+    }
+
+    /**
+     * Scan from the first "Contents" heading and collect chapter entries.
+     * Part dividers (Roman numerals) and dotted sub-sections are skipped;
+     * appendix letters are kept. Stops at the next "Contents" heading, a
+     * chapter-number reset (the detailed TOC repeating the brief one), or
+     * a run of {@link #TOC_GAP_LIMIT} stray lines.
+     */
+    static TocResult parseToc(String text) {
+        // TOC_HEADING is anchored to a full line, so walk line by line to
+        // find the first "Contents" heading.
+        int regionStart = -1;
+        for (int scanPos = 0; scanPos <= text.length(); ) {
+            int nl = text.indexOf('\n', scanPos);
+            int end = nl < 0 ? text.length() : nl;
+            if (TOC_HEADING.matcher(text.substring(scanPos, end).trim()).matches()) {
+                regionStart = Math.min(end + 1, text.length());
+                break;
+            }
+            if (nl < 0) break;
+            scanPos = nl + 1;
+        }
+        if (regionStart < 0) return null;
+
+        List<TocEntry> entries = new ArrayList<>();
+        int lastNum = 0;
+        int gap = 0;
+        int lines = 0;
+        int endOffset = regionStart;
+        for (int pos = regionStart; pos <= text.length() && lines < TOC_MAX_LINES; ) {
+            int nl = text.indexOf('\n', pos);
+            int end = nl < 0 ? text.length() : nl;
+            String line = text.substring(pos, end).trim();
+            lines++;
+            boolean atEnd = nl < 0;
+            // Cursor for the NEXT iteration; we may `break` before using it.
+            int next = atEnd ? text.length() + 1 : nl + 1;
+
+            if (line.isEmpty()) { pos = next; continue; }
+
+            // A second "Contents" heading marks the detailed TOC — stop
+            // once we already have a brief block in hand.
+            if (!entries.isEmpty() && TOC_HEADING.matcher(line).matches()) break;
+
+            // Sub-section ("2.1 …") or Part divider ("I Foundations 31") —
+            // skip without counting as a gap so long runs of them inside a
+            // detailed TOC don't prematurely end the scan.
+            if (TOC_DOTTED.matcher(line).matches() || TOC_PART.matcher(line).matches()) {
+                gap = 0; endOffset = end; pos = next; continue;
+            }
+
+            Matcher ch = TOC_CHAPTER.matcher(line);
+            if (ch.matches()) {
+                int num = Integer.parseInt(ch.group(1));
+                // A non-increase means the detailed TOC has restarted at 1 —
+                // we've captured the first complete run, so stop.
+                if (!entries.isEmpty() && num <= lastNum) break;
+                entries.add(new TocEntry(ch.group(1), ch.group(2).trim(), parseIntSafe(ch.group(3))));
+                lastNum = num; gap = 0; endOffset = end; pos = next; continue;
+            }
+
+            Matcher app = TOC_APPENDIX.matcher(line);
+            if (app.matches()) {
+                entries.add(new TocEntry(app.group(1), app.group(2).trim(), parseIntSafe(app.group(3))));
+                gap = 0; endOffset = end; pos = next; continue;
+            }
+
+            // Unrecognised line — tolerate a few (running headers/footers).
+            gap++;
+            if (entries.size() >= MIN_DETECTED_CHAPTERS && gap >= TOC_GAP_LIMIT) break;
+            if (atEnd) break;
+            pos = next;
+        }
+        return new TocResult(entries, Math.min(endOffset, text.length()));
+    }
+
+    /**
+     * Find where a TOC chapter actually starts in the (lower-cased) body.
+     * Prefers the running-header form "chapter N. Title" / "appendix L.
+     * Title" — these repeat on every page of the chapter and never appear
+     * in the TOC itself — then falls back to the bare title. Returns
+     * {@code cursor} (contiguous fallback) when nothing matches, so
+     * chapters never overlap or run backwards.
+     */
+    private static int locateChapterStart(String lowerText, TocEntry e, int cursor) {
+        if (cursor < 0) cursor = 0;
+        boolean numeric = e.num.chars().allMatch(Character::isDigit);
+        String kind  = numeric ? "chapter " : "appendix ";
+        String numLc = e.num.toLowerCase();
+        String title = e.title.toLowerCase().replaceAll("\\s*\\*\\s*$", "").trim();
+
+        String[] candidates = {
+            kind + numLc + ". " + title,   // "chapter 2. probability: univariate models"
+            kind + numLc + ".",            // "chapter 2."  (header, title may differ slightly)
+            title                          // bare title (last resort)
+        };
+        for (String cand : candidates) {
+            if (cand.isBlank()) continue;
+            int idx = lowerText.indexOf(cand, cursor);
+            if (idx >= 0) return idx;
+        }
+        return cursor;
+    }
+
+    /** Render a learner-facing chapter title from a TOC number + raw title. */
+    private static String tocTitleLabel(String num, String rawTitle) {
+        String t = rawTitle.replaceAll("\\s*\\*\\s*$", "").replaceAll("\\s{2,}", " ").trim();
+        boolean numeric = num.chars().allMatch(Character::isDigit);
+        return (numeric ? "Chapter " : "Appendix ") + num + ": " + t;
+    }
+
+    private static int parseIntSafe(String s) {
+        try { return Integer.parseInt(s.trim()); } catch (RuntimeException e) { return 0; }
+    }
+
+    /** A parsed TOC chapter entry: number/letter, title, printed page. */
+    private record TocEntry(String num, String title, int page) {}
+
+    /** Parsed TOC block: ordered entries plus the offset where it ended. */
+    record TocResult(List<TocEntry> entries, int endOffset) {}
 
     /**
      * Three-layer detection. Each layer returns its full hit set; the
@@ -413,25 +677,61 @@ public class BookExtractionService {
      * narratively prominent terms surface first.
      */
     static List<String> extractConcepts(String body) {
+        return extractConcepts(body, null, null);
+    }
+
+    /**
+     * Concept extraction with the book's own title/subject excluded.
+     *
+     * <p>Selection criteria, in order:
+     * <ol>
+     *   <li>match the capitalised noun-phrase regex (2–4 Title-Case words);</li>
+     *   <li>reject if any word is a {@link #CONCEPT_STOPWORDS} (figure/table
+     *       references, structural headings, figure-credit boilerplate);</li>
+     *   <li>reject if the phrase is contained in the book title or subject
+     *       (kills the running footer, e.g. "probabilistic machine learning");</li>
+     *   <li>rank surviving phrases by frequency (recurring subject terms beat
+     *       one-off author names from figure credits), keeping first-occurrence
+     *       order for ties; take the top {@link #MAX_CONCEPTS_PER_CHAPTER}.</li>
+     * </ol>
+     */
+    static List<String> extractConcepts(String body, String title, String subject) {
         if (body == null || body.isBlank()) return Collections.emptyList();
-        LinkedHashSet<String> hits = new LinkedHashSet<>();
+
+        List<String> blockers = new ArrayList<>();
+        if (title != null && !title.isBlank())   blockers.add(title.toLowerCase());
+        if (subject != null && !subject.isBlank()) blockers.add(subject.toLowerCase());
+
+        // Count occurrences so recurring concepts outrank incidental ones.
+        // LinkedHashMap preserves first-occurrence order for the stable tie-break.
+        LinkedHashMap<String, Integer> counts = new LinkedHashMap<>();
         Matcher m = CONCEPT_PATTERN.matcher(body);
-        while (m.find() && hits.size() < MAX_CONCEPTS_PER_CHAPTER * 3) {
+        int scanned = 0;
+        while (m.find() && scanned < 8000) {
+            scanned++;
             String phrase = m.group(1).trim().toLowerCase();
-            // Filter out very common stop-phrases that the regex
-            // grabs because they're title-cased at line starts.
-            if (phrase.startsWith("the ") || phrase.startsWith("this ")
-             || phrase.startsWith("that ") || phrase.startsWith("these ")
-             || phrase.startsWith("those ") || phrase.startsWith("there ")) {
-                continue;
-            }
-            hits.add(phrase);
+            if (!isConceptCandidate(phrase, blockers)) continue;
+            counts.merge(phrase, 1, Integer::sum);
         }
-        List<String> out = new ArrayList<>(hits);
-        if (out.size() > MAX_CONCEPTS_PER_CHAPTER) {
-            return new ArrayList<>(out.subList(0, MAX_CONCEPTS_PER_CHAPTER));
+
+        List<String> ordered = new ArrayList<>(counts.keySet());
+        // Stable sort by descending frequency; ties keep insertion (first-occurrence) order.
+        ordered.sort((a, b) -> Integer.compare(counts.get(b), counts.get(a)));
+        if (ordered.size() > MAX_CONCEPTS_PER_CHAPTER) {
+            return new ArrayList<>(ordered.subList(0, MAX_CONCEPTS_PER_CHAPTER));
         }
-        return out;
+        return ordered;
+    }
+
+    /** True if {@code phrase} is a plausible subject concept (not glue/reference/title). */
+    private static boolean isConceptCandidate(String phrase, List<String> blockers) {
+        for (String w : phrase.split("\\s+")) {
+            if (CONCEPT_STOPWORDS.contains(w)) return false;
+        }
+        for (String b : blockers) {
+            if (b.contains(phrase)) return false;
+        }
+        return true;
     }
 
     /** Strip form-feed page separators that inflate token count later. */
