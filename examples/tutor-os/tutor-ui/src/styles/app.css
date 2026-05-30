@@ -1187,10 +1187,20 @@ button.concept-chip { font: inherit; }
 }
 
 /* ── Selectable text layer ───────────────────────────────────────
-   pdfjs spans are positioned absolutely to overlay the canvas
-   glyphs pixel-accurately. We render text transparent and let the
-   browser's native selection highlight do the work — same trick
-   the official pdfjs viewer uses. */
+   Mirrors the upstream pdfjs viewer CSS contract: spans are sized
+   relative to a `--scale-factor` custom property set by the renderer,
+   text colour is transparent so the canvas glyph shows through, and
+   the browser's native selection paints the highlight.
+
+   Why this exact shape:
+     • `font-size: calc(var(--total-scale-factor, 1) * 1px)` is what
+       pdfjs.TextLayer writes inline on each span. Without the var
+       defined, calc() returns 0 and selection collapses → "jittery".
+     • `transform-origin: 0% 0%` keeps the inline scale transforms
+       pinned to each span's top-left so rectangles line up.
+     • `.endOfContent` is a sentinel pdfjs injects to extend the
+       selectable area past the last glyph, so drag-selection past
+       the bottom line still highlights cleanly. */
 .reader__text-layer {
   position: absolute;
   inset: 0;
@@ -1199,14 +1209,33 @@ button.concept-chip { font: inherit; }
   line-height: 1;
   user-select: text;
   cursor: text;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+  --scale-factor: 1;
 }
-.reader__text-layer > span,
-.reader__text-layer > br {
+.reader__text-layer span,
+.reader__text-layer br {
   color: transparent;
   position: absolute;
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+}
+.reader__text-layer span.markedContent {
+  top: 0;
+  height: 0;
+}
+.reader__text-layer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0 0;
+  z-index: -1;
+  cursor: default;
+  user-select: none;
+}
+.reader__text-layer.selecting .endOfContent {
+  top: 0;
 }
 .reader__text-layer ::selection {
   background: color-mix(in oklab, var(--color-accent, #6366f1) 35%, transparent);
@@ -1252,11 +1281,10 @@ button.concept-chip { font: inherit; }
   padding: 0;
   mix-blend-mode: multiply;
   border-radius: 2px;
-  cursor: pointer;
-  pointer-events: auto;
-  transition: filter .12s ease;
+  /* Highlights are decorative — never intercept clicks, otherwise
+     they'd eat text-selection drags that cross over them. */
+  pointer-events: none;
 }
-.reader__manual-hl:hover { filter: brightness(0.92); }
 .reader__manual-hl--yellow { background: color-mix(in oklab, #fff176 78%, transparent); }
 .reader__manual-hl--green  { background: color-mix(in oklab, #a5d6a7 78%, transparent); }
 .reader__manual-hl--blue   { background: color-mix(in oklab, #90caf9 78%, transparent); }

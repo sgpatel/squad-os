@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, AlertCircle, Search,
   Sparkles, BookOpen, FileText, StickyNote, Highlighter, X,
-  MessageSquare,
+  MessageSquare, Eraser,
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 // Vite turns this into a static asset URL the browser can fetch on demand.
@@ -200,11 +200,18 @@ export function BookReaderPage() {
         }
 
         // Selectable text layer — built via pdfjs's TextLayer helper.
+        // pdfjs v4 positions spans via a `--scale-factor` CSS custom
+        // property on the container (not a fixed transform), so the
+        // container MUST carry that variable or the spans collapse to
+        // the upper-left corner and selection jitters as the browser
+        // tries to span a zero-size box. This is the single most-
+        // common "PDF.js selection is broken" failure mode.
         const textLayer = textLayerRef.current;
         if (textLayer) {
           while (textLayer.firstChild) textLayer.removeChild(textLayer.firstChild);
           textLayer.style.width  = `${viewport.width}px`;
           textLayer.style.height = `${viewport.height}px`;
+          textLayer.style.setProperty('--scale-factor', String(scale));
           const textContent = await page.getTextContent();
           const tl = new pdfjsLib.TextLayer({
             textContentSource: textContent,
@@ -409,6 +416,18 @@ export function BookReaderPage() {
               aria-pressed={c === color}
             />
           ))}
+          {pageHighlights.length > 0 && (
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm reader__clear-hl"
+              onClick={() => {
+                pageHighlights.forEach(h => highlights.remove(h.id));
+              }}
+              title="Clear highlights on this page"
+            >
+              <Eraser size={12} /> Clear ({pageHighlights.length})
+            </button>
+          )}
         </div>
       </header>
 
@@ -435,9 +454,8 @@ export function BookReaderPage() {
               {pageHighlights.flatMap(h => {
                 const k = renderScale / (h.scale || 1);
                 return h.boxes.map((b, i) => (
-                  <button
+                  <div
                     key={`${h.id}-${i}`}
-                    type="button"
                     className={`reader__manual-hl reader__manual-hl--${h.color}`}
                     style={{
                       left:   `${b.left   * k}px`,
@@ -445,8 +463,6 @@ export function BookReaderPage() {
                       width:  `${b.width  * k}px`,
                       height: `${b.height * k}px`,
                     }}
-                    title={`Click to remove highlight: "${h.text.slice(0, 60)}"`}
-                    onClick={(e) => { e.stopPropagation(); highlights.remove(h.id); }}
                   />
                 ));
               })}

@@ -188,6 +188,11 @@ public class BookCoachAgent {
                 around the whole reply, no preamble like "Here is…".
               - Start with the answer directly.
               - If you quote the selection, use blockquote (> ...) sparingly.
+              - For MATH, use KaTeX dollar delimiters:
+                  • inline math:  $E[X]$
+                  • block math:   $$E[X] = \\int_{-\\infty}^{\\infty} x\\,p(x)\\,dx$$
+                Do NOT use \\( \\) or \\[ \\] — only $ … $ and $$ … $$.
+                Put block math on its own line with blank lines above and below.
             """.formatted(
                 m, chapterTitle, selection, body, learnerLevel, instructions);
     }
