@@ -1150,24 +1150,67 @@ button.concept-chip { font: inherit; }
 .reader__stage {
   flex: 1 1 auto;
   overflow: auto;
-  padding: var(--space-4);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  /* Smooth-scroll for keyboard / programmatic scroll. Per-event
-     overrides (`behavior: 'smooth'`) still work; this just sets a
-     sensible default for any anchor or scrollTo without behavior. */
+  padding: var(--space-4) 0;
+  /* Position context for the floating selection toolbar (which is a
+     child of the stage's scroll content and uses absolute coords in
+     the scrolled plane). */
+  position: relative;
   scroll-behavior: smooth;
-  /* On macOS/iOS, momentum scrolling on the stage feels closer to
-     native reader apps. */
   -webkit-overflow-scrolling: touch;
-  /* Page-snap so PageDown / Space land at a clean offset rather
-     than mid-line — gentle (`proximity`) so plain wheel scroll
-     still feels free. */
-  scroll-snap-type: y proximity;
   overscroll-behavior: contain;
 }
-.reader__page { scroll-snap-align: start; }
+/* The vertical stack of pages — the single scrollable column. */
+.reader__doc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-4);
+  /* Page-snap so PageDown / Space land at a clean page boundary
+     rather than mid-line — gentle (`proximity`) so plain wheel
+     scroll still feels free. */
+  scroll-snap-type: y proximity;
+}
+.reader__page { scroll-snap-align: start; scroll-margin-top: var(--space-3); }
+.reader__page.is-active {
+  /* Subtle ring around the page the active-from-scroll detector
+     picked. Just enough to confirm what the page indicator says
+     without distracting from the prose. */
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.12),
+    0 0 0 2px color-mix(in oklab, var(--color-accent, #6366f1) 35%, transparent);
+}
+/* The imperative render slot — sized to match the page wrapper.
+   Absolutely positioned so it sits on the same plane as manual
+   highlights without consuming a separate row. */
+.reader__page-render {
+  position: absolute;
+  inset: 0;
+}
+/* Page number badge — top-right of every page so a learner who's
+   scrolling fast can scan the running pagination without looking up
+   to the header. Subtle by default; the active page emphasises it. */
+.reader__page-label {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-subtle);
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-bg) 85%, transparent);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+  opacity: 0.55;
+  transition: opacity .14s ease, color .14s ease;
+}
+.reader__page.is-active .reader__page-label {
+  opacity: 1;
+  color: var(--color-accent, #6366f1);
+}
 .reader__page-jump {
   display: inline-flex;
   align-items: center;
@@ -1392,6 +1435,16 @@ button.concept-chip { font: inherit; }
   height: 16px;
   background: var(--color-border);
   margin: 0 2px;
+}
+.reader__tool-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-accent, #6366f1) 14%, var(--color-bg));
+  color: var(--color-accent, #6366f1);
 }
 
 /* ── Inline AI explanation popover ───────────────────────────── */
