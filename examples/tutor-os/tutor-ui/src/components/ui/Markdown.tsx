@@ -17,16 +17,50 @@ import rehypeKatex from 'rehype-katex';
  * <p>remark-math only knows {@code $…$} / {@code $$…$$}. We do the
  * smallest, safest rewrite that turns the common dialects into dollar
  * delimiters without false-positives on prose parentheses.
+ *
+ * <h2>Critical: skip content already inside math regions</h2>
+ * The bare-paren rewrite below sees a string like {@code p(y|\theta)}
+ * and converts it to {@code $y|\theta$}. That's the right move when
+ * the LLM emitted a bare paren as math, but it's catastrophic when
+ * the source was {@code $p(y|\theta) = \sum…$} — we'd shred the
+ * existing inline math by sprinkling extra dollar signs inside it
+ * (`$p$y|\theta$ = \sum…$$$`), and remark-math would parse the
+ * fragments as alternating italics + broken math.
+ *
+ * <p>So we tokenise the source into math vs. non-math segments first
+ * and only rewrite the non-math chunks. The math segments survive
+ * untouched, exactly as the model emitted them.
  */
 function normaliseMath(src: string): string {
   if (!src) return src;
-  let out = src;
+
+  // Match $$…$$ blocks (greedy, can span lines) OR $…$ inline (no
+  // embedded newline, supports \$ as a literal). Block must come
+  // first in the alternation so $$x$$ isn't mis-parsed as $$ + x + $$
+  // (two empty inline matches).
+  const mathRe = /\$\$[\s\S]+?\$\$|\$(?:\\.|[^$\\\n])+?\$/g;
+
+  let out = '';
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = mathRe.exec(src)) !== null) {
+    if (m.index > last) out += rewriteNonMath(src.slice(last, m.index));
+    out += m[0]; // preserve existing math verbatim
+    last = m.index + m[0].length;
+  }
+  if (last < src.length) out += rewriteNonMath(src.slice(last));
+  return out;
+}
+
+/** Apply the delimiter-dialect rewrites — caller guarantees no $…$ inside. */
+function rewriteNonMath(s: string): string {
+  let out = s;
 
   // Escaped LaTeX delimiters are unambiguous — always math.
   //   \[ block \]   →  $$ block $$
   //   \( inline \)  →  $ inline $
-  out = out.replace(/\\\[([\s\S]+?)\\\]/g, (_m, inner) => `\n\n$$${inner.trim()}$$\n\n`);
-  out = out.replace(/\\\(([\s\S]+?)\\\)/g, (_m, inner) => `$${inner.trim()}$`);
+  out = out.replace(/\\\[([\s\S]+?)\\\]/g, (_m, inner: string) => `\n\n$$${inner.trim()}$$\n\n`);
+  out = out.replace(/\\\(([\s\S]+?)\\\)/g, (_m, inner: string) => `$${inner.trim()}$`);
 
   // Bracket-on-its-own-line block math: a line that is exactly
   // "[ … ]" AND contains a LaTeX command (\int, \sum, \frac, \alpha,
