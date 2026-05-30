@@ -70,13 +70,25 @@ function rewriteNonMath(s: string): string {
     (_m, inner: string) => `$$${inner.trim()}$$`,
   );
 
-  // Inline parens math: "( … )" containing a backslash-command is
-  // very likely inline math (e.g. "( E[X] )", "( \int … )"). Keep the
-  // body short (< 120 chars, no embedded newline) to avoid eating
-  // ordinary sentences with parenthetical asides.
+  // Inline parens math: a parenthesised group containing a backslash
+  // command is very likely inline math (e.g. "P(x_i | \theta)",
+  // "( E[X] = \int … )"). Two rules learned the hard way:
+  //
+  //   1. PULL IN the leading function identifier. A conditional like
+  //      "P(x_i | \theta)" must become "$P(x_i | \theta)$", NOT
+  //      "P$x_i | \theta$" — stranding the "P" outside the span both
+  //      looks wrong and (because it adds a lone, unbalanced "$")
+  //      desynchronises every dollar that follows, shredding the rest
+  //      of the line into character soup. We greedily absorb an
+  //      optional preceding identifier (P, p, E, f, or a \macro).
+  //   2. KEEP the parentheses inside the span. Dropping them loses the
+  //      grouping that made the expression read as a function call.
+  //
+  // Body kept short (< 120 chars, no embedded newline) so we don't eat
+  // ordinary prose with parenthetical asides.
   out = out.replace(
-    /\(\s*([^()\n]{1,120}?\\[a-zA-Z]+[^()\n]*?)\s*\)/g,
-    (_m, inner: string) => `$${inner.trim()}$`,
+    /(\\?[A-Za-z]\w*)?\(\s*([^()\n]{1,120}?\\[a-zA-Z]+[^()\n]*?)\s*\)/g,
+    (_m, fn: string | undefined, inner: string) => `$${fn ?? ''}(${inner.trim()})$`,
   );
 
   return out;

@@ -193,6 +193,11 @@ public class BookCoachAgent {
                   • block math:   $$E[X] = \\int_{-\\infty}^{\\infty} x\\,p(x)\\,dx$$
                 Do NOT use \\( \\) or \\[ \\] — only $ … $ and $$ … $$.
                 Put block math on its own line with blank lines above and below.
+                Keep each expression whole inside ONE matched pair of $…$ —
+                the function name and its parentheses go INSIDE the dollars
+                ($P(x_i \\mid \\theta)$, never P$(x_i \\mid \\theta)$ nor a stray
+                unmatched $). Use \\mid for a conditional bar, not a bare "|",
+                and never mix unicode math glyphs (θ, ∑, ∣) with LaTeX macros.
             """.formatted(
                 m, chapterTitle, selection, body, learnerLevel, instructions);
     }
@@ -283,9 +288,16 @@ public class BookCoachAgent {
 
               3. For math, use KaTeX dollar delimiters:
                    • inline math:  $\\theta$ , $E[X]$
-                   • block  math:  $$\\arg\\max_\\theta\\,p(D|\\theta)$$
+                   • block  math:  $$\\arg\\max_\\theta\\,p(D \\mid \\theta)$$
                  Block math goes on its OWN line with blank lines above
                  and below. Never use \\( \\) or \\[ \\] — only $ and $$.
+                 Keep EACH expression whole inside ONE matched pair of
+                 $…$: every $ must be closed, and the function name AND
+                 its parentheses live INSIDE the dollars — write
+                 $P(x_i \\mid \\theta)$, never P$(x_i \\mid \\theta)$ nor a
+                 stray unmatched $. Use \\mid for a conditional bar, not a
+                 bare "|". NEVER mix unicode math glyphs (θ, ∑, ∣, ≤, ×)
+                 with LaTeX — always the macro form (\\theta, \\sum, \\mid).
 
               4. Bold key terms with **double asterisks** the first time
                  they appear so the eye lands on them.
@@ -343,9 +355,16 @@ public class BookCoachAgent {
 
               3. For math, use KaTeX dollar delimiters:
                    • inline math:  $\\theta$ , $E[X]$
-                   • block  math:  $$L(\\theta) = \\sum_i \\log p(x_i|\\theta)$$
+                   • block  math:  $$L(\\theta) = \\sum_i \\log p(x_i \\mid \\theta)$$
                  Block math goes on its OWN line with blank lines above
                  and below. Never use \\( \\) or \\[ \\] — only $ and $$.
+                 Keep EACH expression whole inside ONE matched pair of
+                 $…$: every $ must be closed, and the function name AND
+                 its parentheses live INSIDE the dollars — write
+                 $P(x_i \\mid \\theta)$, never P$(x_i \\mid \\theta)$ nor a
+                 stray unmatched $. Use \\mid for a conditional bar, not a
+                 bare "|". NEVER mix unicode math glyphs (θ, ∑, ∣, ≤, ×)
+                 with LaTeX — always the macro form (\\theta, \\sum, \\mid).
 
               4. Number the steps with "1.", "2.", "3." on separate lines.
 
@@ -404,9 +423,16 @@ public class BookCoachAgent {
 
               3. For math, use KaTeX dollar delimiters:
                    • inline math:  $\\theta$
-                   • block  math:  $$\\mathrm{KL}(p\\|q) = \\int p\\log\\frac{p}{q}\\,dx$$
+                   • block  math:  $$\\mathrm{KL}(p \\| q) = \\int p\\log\\frac{p}{q}\\,dx$$
                  Block math goes on its OWN line with blank lines above
                  and below. Never use \\( \\) or \\[ \\] — only $ and $$.
+                 Keep EACH expression whole inside ONE matched pair of
+                 $…$: every $ must be closed, and the function name AND
+                 its parentheses live INSIDE the dollars — write
+                 $P(x_i \\mid \\theta)$, never P$(x_i \\mid \\theta)$ nor a
+                 stray unmatched $. Use \\mid for a conditional bar, not a
+                 bare "|". NEVER mix unicode math glyphs (θ, ∑, ∣, ≤, ×)
+                 with LaTeX — always the macro form (\\theta, \\sum, \\mid).
 
               4. Bold technical terms on first use.
 
