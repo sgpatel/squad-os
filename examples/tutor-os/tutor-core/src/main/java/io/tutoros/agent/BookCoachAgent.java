@@ -266,10 +266,34 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
+            CRITICAL FORMATTING for the body field — these rules are
+            the difference between a polished response and an unreadable
+            wall of text. Follow them exactly:
+
+              1. Structure the body with these THREE markdown headings,
+                 in order, each on its own line preceded by a blank line:
+                   ### Core Explanation
+                   ### Real-World Analogy
+                   ### Concrete Example
+                 Do NOT use inline labels like "Core Explanation:" — they
+                 render as one long paragraph. Use the ### heading form.
+
+              2. Put a BLANK LINE between every paragraph. Real newlines,
+                 not the characters backslash-n.
+
+              3. For math, use KaTeX dollar delimiters:
+                   • inline math:  $\\theta$ , $E[X]$
+                   • block  math:  $$\\arg\\max_\\theta\\,p(D|\\theta)$$
+                 Block math goes on its OWN line with blank lines above
+                 and below. Never use \\( \\) or \\[ \\] — only $ and $$.
+
+              4. Bold key terms with **double asterisks** the first time
+                 they appear so the eye lands on them.
+
             {
               "mode":        "basic",
               "concept":     "%s",
-              "body":        "<2–3 short paragraphs in markdown. Define the concept, name its parts, and pin down ONE concrete example FROM THE CHAPTER.>",
+              "body":        "<markdown body following the structure above>",
               "question":    "<one-sentence recall question asking the learner to restate the core idea in their own words>",
               "modelAnswer": "<the ideal short-answer response, 2–3 sentences. Used by the grader.>",
               "difficulty":  "EASY",
@@ -305,10 +329,30 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
+            CRITICAL FORMATTING for the body field:
+
+              1. Structure with these markdown headings, in order, each
+                 preceded by a blank line:
+                   ### Setup
+                   ### Worked Solution
+                   ### Why this works
+                 Use the ### heading form, not inline "Setup:" labels.
+
+              2. Put a BLANK LINE between every paragraph and between
+                 each numbered step. Real newlines, not backslash-n.
+
+              3. For math, use KaTeX dollar delimiters:
+                   • inline math:  $\\theta$ , $E[X]$
+                   • block  math:  $$L(\\theta) = \\sum_i \\log p(x_i|\\theta)$$
+                 Block math goes on its OWN line with blank lines above
+                 and below. Never use \\( \\) or \\[ \\] — only $ and $$.
+
+              4. Number the steps with "1.", "2.", "3." on separate lines.
+
             {
               "mode":        "intermediate",
               "concept":     "%s",
-              "body":        "<ONE worked example in markdown that applies %s to a problem. Show the steps. Use the chapter's notation.>",
+              "body":        "<markdown body following the structure above, applying %s to a worked problem with the chapter's notation>",
               "question":    "<a fresh problem solved with the same method (NOT identical to the worked example). Specific, not vague.>",
               "modelAnswer": "<the worked solution to the question, 4–6 lines, step-by-step>",
               "difficulty":  "MEDIUM",
@@ -346,10 +390,30 @@ public class BookCoachAgent {
             Every field is required; use an empty string "" if a field
             genuinely doesn't apply, never omit it.
 
+            CRITICAL FORMATTING for the body field:
+
+              1. Structure with these markdown headings, in order, each
+                 preceded by a blank line:
+                   ### The non-obvious bit
+                   ### Connection to other concepts
+                   ### When this breaks
+                 Use the ### heading form, not inline labels.
+
+              2. Put a BLANK LINE between every paragraph. Real newlines,
+                 not backslash-n.
+
+              3. For math, use KaTeX dollar delimiters:
+                   • inline math:  $\\theta$
+                   • block  math:  $$\\mathrm{KL}(p\\|q) = \\int p\\log\\frac{p}{q}\\,dx$$
+                 Block math goes on its OWN line with blank lines above
+                 and below. Never use \\( \\) or \\[ \\] — only $ and $$.
+
+              4. Bold technical terms on first use.
+
             {
               "mode":        "advanced",
               "concept":     "%s",
-              "body":        "<2 paragraphs surfacing a non-obvious aspect of %s — a limitation, an edge case, or a connection to another concept the learner has likely seen.>",
+              "body":        "<markdown body following the structure above, surfacing non-obvious aspects of %s>",
               "question":    "<an open-ended question asking the learner to either compare %s to a related concept (when does each apply?) or evaluate a non-trivial claim about it>",
               "modelAnswer": "<a 4–6 sentence model answer showing the reasoning a strong learner would produce>",
               "difficulty":  "HARD",
