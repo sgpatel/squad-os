@@ -1154,7 +1154,69 @@ button.concept-chip { font: inherit; }
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  /* Smooth-scroll for keyboard / programmatic scroll. Per-event
+     overrides (`behavior: 'smooth'`) still work; this just sets a
+     sensible default for any anchor or scrollTo without behavior. */
+  scroll-behavior: smooth;
+  /* On macOS/iOS, momentum scrolling on the stage feels closer to
+     native reader apps. */
+  -webkit-overflow-scrolling: touch;
+  /* Page-snap so PageDown / Space land at a clean offset rather
+     than mid-line — gentle (`proximity`) so plain wheel scroll
+     still feels free. */
+  scroll-snap-type: y proximity;
+  overscroll-behavior: contain;
 }
+.reader__page { scroll-snap-align: start; }
+.reader__page-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+.reader__page-input {
+  width: 4ch;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 4px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+.reader__page-input:focus {
+  outline: none;
+  border-color: var(--color-accent, #6366f1);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-accent, #6366f1) 25%, transparent);
+}
+.reader__page-of {
+  font-size: 11px;
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.reader__zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  border-radius: var(--radius-md, 8px);
+}
+.reader__zoom-level {
+  background: transparent;
+  border: 0;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  min-width: 5ch;
+}
+.reader__zoom-level:hover { background: var(--color-bg-subtle); }
 .reader__empty {
   display: flex;
   flex-direction: column;

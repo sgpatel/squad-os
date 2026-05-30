@@ -3,7 +3,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, RefreshCw, AlertCircle, Search,
   Sparkles, BookOpen, FileText, StickyNote, Highlighter, X,
-  MessageSquare, Eraser,
+  MessageSquare, Eraser, ZoomIn, ZoomOut, Maximize2,
+  ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 // Vite turns this into a static asset URL the browser can fetch on demand.
@@ -104,6 +105,17 @@ export function BookReaderPage() {
   // different zoom.
   const [renderScale, setRenderScale] = useState(1);
 
+  // User zoom multiplier applied on top of the container fit-width
+  // baseline. 1.0 = "auto" (filled-to-width), 1.5 = 150%, etc. We
+  // multiply rather than override so the page stays sensibly sized
+  // across viewports — a 200% zoom on a phone still differs from a
+  // 200% zoom on a desktop, just like the major PDF viewers behave.
+  const [zoom, setZoom] = useState(1);
+
+  // Editable page-number input. Tracked separately so the user can
+  // type "23" without the underlying pageNum jumping mid-keystroke.
+  const [pageInput, setPageInput] = useState<string>(String(initialPage));
+
   // Selection + AI panel state.
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const [aiPanel,   setAiPanel]   = useState<AiPanelState | null>(null);
@@ -172,9 +184,12 @@ export function BookReaderPage() {
         if (cancelled) return;
 
         const container = containerRef.current;
-        const targetWidth = container ? container.clientWidth - 16 : 800;
+        const targetWidth = container ? container.clientWidth - 32 : 800;
         const baseViewport = page.getViewport({ scale: 1 });
-        const scale = Math.min(2, Math.max(0.5, targetWidth / baseViewport.width));
+        const fitScale = Math.max(0.4, targetWidth / baseViewport.width);
+        // Apply the user-zoom multiplier; clamp to a sensible range so
+        // pathological values can't blow up canvas memory.
+        const scale = Math.min(4, Math.max(0.3, fitScale * zoom));
         const viewport = page.getViewport({ scale });
         setRenderScale(scale);
 
@@ -231,19 +246,95 @@ export function BookReaderPage() {
     };
     void draw();
     return () => { cancelled = true; };
-  }, [pageNum, highlight, loading, error]); // eslint-disable-line
+  }, [pageNum, highlight, loading, error, zoom]); // eslint-disable-line
 
-  // Keyboard shortcuts.
+  // Re-render on window resize so the fit-width baseline tracks the
+  // available viewport. Debounced to avoid hammering pdfjs while the
+  // user drags the window.
+  useEffect(() => {
+    let t: number | undefined;
+    const onResize = () => {
+      if (t) window.clearTimeout(t);
+      // Bumping zoom by an imperceptible delta forces the render
+      // effect to re-run with a fresh fitScale. Cleaner than threading
+      // a separate "re-measure" channel through the dependency list.
+      t = window.setTimeout(() => setZoom(z => z), 120);
+    };
+    window.addEventListener('resize', onResize);
+    return () => { window.removeEventListener('resize', onResize); if (t) window.clearTimeout(t); };
+  }, []);
+
+  // Smooth-scroll the stage back to the top whenever the page changes.
+  // Mimics native reader apps — the new page should start at the
+  // top, not stranded at the previous scroll offset.
+  useEffect(() => {
+    setPageInput(String(pageNum));
+    const stage = containerRef.current;
+    if (stage) stage.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [pageNum]);
+
+  // Keyboard shortcuts — the contract a power reader expects:
+  //   ←/→            prev / next page
+  //   PageUp/Down    same as ←/→
+  //   Home / End     first / last page
+  //   Space          smooth-scroll a viewport down; advance page at bottom
+  //   Shift+Space    smooth-scroll a viewport up; retreat page at top
+  //   + / =          zoom in   (= is the unshifted '+' on US layouts)
+  //   - / _          zoom out
+  //   0              reset zoom to fit-width
+  //   Esc            close selection toolbar / AI panel
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
-      if (e.key === 'Escape') { setSelection(null); setAiPanel(null); }
-      if (e.key === 'ArrowLeft')  setPageNum(p => Math.max(1, p - 1));
-      if (e.key === 'ArrowRight') setPageNum(p => Math.min(totalPages || 1, p + 1));
+      const stage = containerRef.current;
+      switch (e.key) {
+        case 'Escape':    setSelection(null); setAiPanel(null); break;
+        case 'ArrowLeft':
+        case 'PageUp':    e.preventDefault(); setPageNum(p => Math.max(1, p - 1)); break;
+        case 'ArrowRight':
+        case 'PageDown':  e.preventDefault(); setPageNum(p => Math.min(totalPages || 1, p + 1)); break;
+        case 'Home':      e.preventDefault(); setPageNum(1); break;
+        case 'End':       e.preventDefault(); setPageNum(totalPages || 1); break;
+        case '+':
+        case '=':         e.preventDefault(); setZoom(z => Math.min(3, +(z + 0.1).toFixed(2))); break;
+        case '-':
+        case '_':         e.preventDefault(); setZoom(z => Math.max(0.5, +(z - 0.1).toFixed(2))); break;
+        case '0':         e.preventDefault(); setZoom(1); break;
+        case ' ': {
+          if (!stage) break;
+          e.preventDefault();
+          const atBottom = stage.scrollTop + stage.clientHeight >= stage.scrollHeight - 4;
+          const atTop    = stage.scrollTop <= 4;
+          if (e.shiftKey) {
+            if (atTop) setPageNum(p => Math.max(1, p - 1));
+            else stage.scrollBy({ top: -stage.clientHeight * 0.9, behavior: 'smooth' });
+          } else {
+            if (atBottom) setPageNum(p => Math.min(totalPages || 1, p + 1));
+            else stage.scrollBy({ top: stage.clientHeight * 0.9, behavior: 'smooth' });
+          }
+          break;
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [totalPages]);
+
+  // Ctrl/Cmd + wheel = zoom (standard reader affordance). Plain wheel
+  // remains a scroll. preventDefault on the wheel event suppresses
+  // the browser's page-zoom so our in-app zoom takes over.
+  useEffect(() => {
+    const stage = containerRef.current;
+    if (!stage) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      const step = e.deltaY < 0 ? 0.08 : -0.08;
+      setZoom(z => Math.min(3, Math.max(0.5, +(z + step).toFixed(2))));
+    };
+    stage.addEventListener('wheel', onWheel, { passive: false });
+    return () => stage.removeEventListener('wheel', onWheel);
+  }, [loading, error]);
 
   // Capture text selections inside the text layer and surface them as
   // a {@code SelectionState} so the toolbar can position itself.
@@ -385,23 +476,105 @@ export function BookReaderPage() {
           <button
             type="button"
             className="btn btn--ghost btn--sm"
+            onClick={() => setPageNum(1)}
+            disabled={pageNum <= 1}
+            aria-label="First page"
+            title="First page (Home)"
+          >
+            <ChevronsLeft size={14} />
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
             onClick={() => setPageNum(p => Math.max(1, p - 1))}
             disabled={pageNum <= 1}
             aria-label="Previous page"
+            title="Previous page (←)"
           >
             <ChevronLeft size={14} />
           </button>
-          <span className="reader__page-indicator">
-            {totalPages > 0 ? (<>Page {pageNum} of {totalPages}</>) : '—'}
-          </span>
+          <form
+            className="reader__page-jump"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const n = Number(pageInput);
+              if (Number.isFinite(n) && n >= 1) {
+                setPageNum(Math.min(totalPages || n, Math.max(1, Math.floor(n))));
+              } else {
+                setPageInput(String(pageNum));
+              }
+            }}
+          >
+            <input
+              type="text"
+              inputMode="numeric"
+              className="reader__page-input"
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value.replace(/[^0-9]/g, ''))}
+              onFocus={(e) => e.currentTarget.select()}
+              onBlur={() => setPageInput(String(pageNum))}
+              aria-label="Page number"
+            />
+            <span className="reader__page-of">/ {totalPages || '—'}</span>
+          </form>
           <button
             type="button"
             className="btn btn--ghost btn--sm"
             onClick={() => setPageNum(p => Math.min(totalPages || 1, p + 1))}
             disabled={totalPages > 0 && pageNum >= totalPages}
             aria-label="Next page"
+            title="Next page (→)"
           >
             <ChevronRight size={14} />
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setPageNum(totalPages || 1)}
+            disabled={totalPages > 0 && pageNum >= totalPages}
+            aria-label="Last page"
+            title="Last page (End)"
+          >
+            <ChevronsRight size={14} />
+          </button>
+        </div>
+
+        {/* Zoom cluster — Ctrl/Cmd-wheel and +/−/0 also work. */}
+        <div className="reader__zoom" role="group" aria-label="Zoom">
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setZoom(z => Math.max(0.5, +(z - 0.1).toFixed(2)))}
+            aria-label="Zoom out"
+            title="Zoom out (−)"
+          >
+            <ZoomOut size={13} />
+          </button>
+          <button
+            type="button"
+            className="reader__zoom-level"
+            onClick={() => setZoom(1)}
+            title="Reset to fit width (0)"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setZoom(z => Math.min(3, +(z + 0.1).toFixed(2)))}
+            aria-label="Zoom in"
+            title="Zoom in (+)"
+          >
+            <ZoomIn size={13} />
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setZoom(1)}
+            aria-label="Fit width"
+            title="Fit width"
+          >
+            <Maximize2 size={13} />
           </button>
         </div>
         {/* Palette — sticks in the header so it's always available */}
